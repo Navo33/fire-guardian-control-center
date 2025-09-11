@@ -2,13 +2,30 @@
 
 A professional web-based platform for managing fire safety equipment, service requests, and maintenance records.
 
-## Project Structure
+## 🏗️ Project Structure
+
+This is a **monorepo** containing both frontend and backend applications:
 
 ```
 FireGuardian/
-├── frontend/          # Next.js React application
-├── backend/           # Express.js API server
-└── .github/           # GitHub configuration and documentation
+├── 📁 frontend/          # Next.js React Application (Port 3000)
+│   ├── src/app/
+│   │   ├── login/        # Authentication pages
+│   │   ├── dashboard/    # User dashboards
+│   │   └── layout.tsx    # App layout
+│   ├── package.json
+│   └── README.md
+├── 📁 backend/           # Express.js API Server (Port 5000)
+│   ├── src/
+│   │   ├── routes/       # API routes
+│   │   ├── middleware/   # Security & validation
+│   │   └── server.ts     # Main server file
+│   ├── package.json
+│   └── .env             # Environment variables
+├── 📁 .github/          # GitHub configuration
+│   └── copilot-instructions.md
+├── .gitignore           # Git ignore rules for entire project
+└── README.md            # This file
 ```
 
 ## Features
@@ -44,47 +61,37 @@ FireGuardian/
 - **Security**: Helmet, CORS, Rate limiting
 - **Validation**: Express Validator
 
-## Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+ 
 - npm or yarn
+- Git
 
-### Installation
-
-1. Clone the repository:
+### 1. Clone the Repository
 ```bash
-git clone <repository-url>
-cd FireGuardian
+git clone https://github.com/YOUR_USERNAME/fire-guardian-control-center.git
+cd fire-guardian-control-center
 ```
 
-2. Install frontend dependencies:
-```bash
-cd frontend
-npm install
-```
-
-3. Install backend dependencies:
-```bash
-cd ../backend
-npm install
-```
-
-### Running the Application
-
-1. Start the backend server:
+### 2. Setup Backend
 ```bash
 cd backend
-npm run dev
+npm install
+npm run dev  # Starts on http://localhost:5000
 ```
-The API will be available at `http://localhost:5000`
 
-2. Start the frontend development server:
+### 3. Setup Frontend (in a new terminal)
 ```bash
 cd frontend
-npm run dev
+npm install
+npm run dev  # Starts on http://localhost:3000
 ```
-The application will be available at `http://localhost:3000`
+
+### 4. Access the Application
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:5000
+- **Health Check**: http://localhost:5000/health
 
 ## Demo Credentials
 
