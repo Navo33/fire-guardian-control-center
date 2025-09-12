@@ -41,13 +41,13 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-primary-bg">
       {/* Header */}
-      <header className="bg-white shadow">
+      <header className="bg-card shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
-              <div className="h-8 w-8 bg-red-600 rounded-full flex items-center justify-center mr-3">
+              <div className="h-8 w-8 bg-fire-600 rounded-full flex items-center justify-center mr-3">
                 <svg
                   className="h-5 w-5 text-white"
                   fill="none"
@@ -62,17 +62,17 @@ export default function DashboardPage() {
                   />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">Fire Guardian</h1>
+              <h1 className="text-2xl font-bold text-primary-text">Fire Guardian</h1>
             </div>
             
             <div className="flex items-center space-x-4">
               <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                <p className="text-sm font-medium text-primary-text">{user.name}</p>
                 <p className="text-xs text-gray-500 capitalize">{user.role.replace('_', ' ')}</p>
               </div>
               <button
                 onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out"
+                className="bg-fire-600 hover:bg-fire-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-200 ease-in-out"
               >
                 Logout
               </button>
@@ -84,11 +84,11 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">
+          <h2 className="text-3xl font-bold text-primary-text">
             Welcome, {user.name}!
           </h2>
           <p className="mt-2 text-gray-600">
-            You are logged in as: <span className="font-medium capitalize">{user.role.replace('_', ' ')}</span>
+            You are logged in as: <span className="font-medium capitalize text-fire-600">{user.role.replace('_', ' ')}</span>
           </p>
         </div>
 
