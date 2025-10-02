@@ -41,9 +41,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-primary-bg">
+    <div className="h-full bg-primary-bg overflow-auto">
       {/* Header */}
-      <header className="bg-card shadow-sm border-b border-gray-200">
+      <header className="bg-card border-b-2 border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
@@ -95,7 +95,7 @@ export default function DashboardPage() {
         {/* Dashboard Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Card 1 */}
-          <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="bg-white overflow-hidden border-2 border-gray-200 rounded-lg">
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
@@ -128,7 +128,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 2 */}
-          <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="bg-white overflow-hidden border-2 border-gray-200 rounded-lg">
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
@@ -161,7 +161,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 3 */}
-          <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="bg-white overflow-hidden border-2 border-gray-200 rounded-lg">
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
@@ -196,7 +196,7 @@ export default function DashboardPage() {
 
         {/* Content Section */}
         <div className="mt-8">
-          <div className="bg-white shadow rounded-lg">
+          <div className="bg-white border-2 border-gray-200 rounded-lg">
             <div className="px-4 py-5 sm:p-6">
               <h3 className="text-lg leading-6 font-medium text-gray-900">
                 Getting Started

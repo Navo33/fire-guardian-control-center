@@ -1,8 +1,49 @@
+/* Open-style input for login page - now with pill shape */
+.open-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid #d1d5db;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0.75rem 0;
+  font-size: 1rem;
+  color: var(--primary-text);
+  transition: border-color 0.2s;
+}
+.open-input:focus {
+  outline: none;
+  border-bottom: 2px solid var(--primary-accent);
+}
+.open-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Pill-shaped input for all forms - matches login when enclosed */
+.pill-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 9999px; /* pill shape to match buttons */
+  background-color: white;
+  color: var(--primary-text);
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.pill-input::placeholder {
+  color: #9ca3af;
+}
+
+.pill-input:focus {
+  outline: none;
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px rgba(229, 57, 53, 0.2);
+}
 @import "tailwindcss";
 
 :root {
   /* The Clean Control Palette */
-  --primary-bg: #fff7f7;
+  --primary-bg: #fffdfd;
   --primary-text: #333333;
   --primary-accent: #E65100;
   --primary-accent-hover: #D84315;
@@ -20,6 +61,12 @@
   --border-color: #E4E7EB;
   --text-secondary: #7B8794;
   
+  /* Layout heights */
+  --top-nav-height: 4rem; /* 64px */
+  --footer-height: 2rem;  /* 32px for minimal footer */
+  --sidebar-height: calc(100vh - var(--top-nav-height)); /* Full screen minus top nav */
+  --main-content-height: calc(100vh - var(--top-nav-height) - var(--footer-height));
+  
   /* Legacy variables for compatibility */
   --background: var(--primary-bg);
   --foreground: var(--primary-text);
@@ -29,9 +76,26 @@ body {
   background: var(--primary-bg);
   color: var(--primary-text);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  min-height: 100vh;
-  font-feature-settings: 'cv11', 'ss01';
-  font-variation-settings: 'opsz' 32;
+}
+
+/* Responsive height utilities */
+.h-sidebar {
+  height: var(--sidebar-height);
+}
+
+.h-main-content {
+  height: var(--main-content-height);
+}
+
+.h-top-nav {
+  height: var(--top-nav-height);
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 1024px) {
+  :root {
+    --sidebar-height: calc(100vh - var(--top-nav-height)); /* Full screen minus top nav on mobile */
+  }
 }
 
 /* Custom scrollbar styling */
@@ -53,12 +117,13 @@ body {
 }
 
 /* Custom Components */
+
 .btn-primary {
   background-color: var(--danger);
   color: white;
   font-weight: 500;
   padding: 0.75rem 1.5rem;
-  border-radius: 0.5rem;
+  border-radius: 9999px; /* fully rounded pill shape */
   transition: all 0.2s ease;
   border: none;
   cursor: pointer;
@@ -81,12 +146,13 @@ body {
   cursor: not-allowed;
 }
 
+
 .btn-secondary {
   background-color: #f3f4f6;
   color: var(--primary-text);
   font-weight: 500;
   padding: 0.75rem 1.5rem;
-  border-radius: 0.5rem;
+  border-radius: 9999px; /* fully rounded pill shape */
   transition: all 0.2s ease;
   border: 1px solid #e5e7eb;
   cursor: pointer;
@@ -106,13 +172,15 @@ body {
 
 .input-field {
   width: 100%;
-  padding: 0.75rem 1rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.5rem;
-  background-color: white;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid #d1d5db;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0.75rem 0;
+  font-size: 1rem;
   color: var(--primary-text);
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: border-color 0.2s;
 }
 
 .input-field::placeholder {
@@ -121,15 +189,44 @@ body {
 
 .input-field:focus {
   outline: none;
-  border-color: var(--danger);
-  box-shadow: 0 0 0 2px rgba(229, 57, 53, 0.2);
+  border-bottom: 2px solid var(--danger);
+}
+
+/* Special handling for inputs with left icons */
+.input-field.pl-10 {
+  padding-left: 2.5rem;
+}
+
+/* Special styling for textarea elements - same open style */
+textarea.input-field {
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid #d1d5db;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0.75rem 0;
+  font-size: 1rem;
+  color: var(--primary-text);
+  transition: border-color 0.2s;
+  resize: vertical;
+  min-height: 2.5rem;
+}
+
+textarea.input-field:focus {
+  outline: none;
+  border-bottom: 2px solid var(--danger);
+  box-shadow: none;
+}
+
+textarea.input-field::placeholder {
+  color: #9ca3af;
 }
 
 .card {
   background-color: white;
   border-radius: 0.75rem;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 15px -3px rgba(59, 59, 59, 0.1), 0 4px 6px -2px rgba(59, 59, 59, 0.05);
+  border: 1px solid #faf9f9;
   padding: 1.5rem;
 }
 
@@ -152,4 +249,37 @@ body {
 
 .link-secondary:hover {
   color: var(--primary-text);
+}
+
+/* Modal Styles */
+.modal-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  overflow-y: auto;
+}
+
+.modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5); 
+  transition: opacity 0.3s ease;
+}
+
+.modal-content {
+  position: relative;
+  width: 100%;
+  max-width: 80rem; /* 5xl */
+  background-color: white;
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-height: 90vh;
+  overflow: hidden;
+  z-index: 10;
 }

@@ -33,12 +33,12 @@ export default function LoginPage() {
 
     try {
       const response = await axios.post('http://localhost:5000/api/auth/login', data);
-      
+      console.log('Login response:', response.data);
       if (response.data.success) {
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-        
-        switch (response.data.user.role) {
+        localStorage.setItem('token', response.data.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.data.user));
+
+        switch (response.data.data.user.role) {
           case 'super_admin':
             window.location.href = '/dashboard/super-admin';
             break;
@@ -62,15 +62,15 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-primary-bg flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full">
+    <div className="h-full flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8 bg-primary-bg">
+      <div className="max-w-xl w-full">
         {/* Login Card */}
-        <div className="card">
+        <div className="card" style={{ padding: '2.5rem' }}>
           <div className="px-8 py-10">
             {/* Header */}
-            <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-primary-text mb-2">Welcome Back</h1>
-              <p className="text-sm text-gray-600">Please sign in to your account</p>
+            <div className="mb-6">
+            <h1 className="text-3xl font-semibold text-left mb-1" style={{fontFamily: 'Segoe UI, Helvetica Neue, Arial, sans-serif', color: '#E53935'}}>Welcome Back</h1>
+            <p className="text-sm text-gray-600 text-left">Please sign in to your account</p>
             </div>
 
             {/* Login Form */}
@@ -88,7 +88,7 @@ export default function LoginPage() {
                   id="email"
                   type="email"
                   autoComplete="email"
-                  className={`input-field ${errors.email ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : ''}`}
+                  className={`input-field ${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
                   placeholder="Email"
                   {...register('email')}
                 />
@@ -104,7 +104,7 @@ export default function LoginPage() {
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
-                    className={`input-field pr-10 ${errors.password ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : ''}`}
+                    className={`input-field pr-10 ${errors.password ? 'border-red-500 focus:border-red-500' : ''}`}
                     placeholder="Password"
                     {...register('password')}
                   />
@@ -126,11 +126,11 @@ export default function LoginPage() {
               </div>
 
               {/* Login Button */}
-              <div className="pt-2">
+              <div className="pt-2 flex justify-end">
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary px-8 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
                     <div className="flex items-center justify-center">
@@ -163,13 +163,23 @@ export default function LoginPage() {
               </div>
 
               {/* Forgot Password Link */}
-              <div className="flex justify-end">
+              <div className="flex justify-end mb-6">
                 <a
                   href="#"
                   className="text-sm text-accent hover:text-accent-dark transition-colors"
                 >
                   Forgot password?
                 </a>
+              </div>
+
+              {/* Demo Credentials */}
+              <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h3 className="text-sm font-medium text-primary-text mb-2">Demo Credentials:</h3>
+                <div className="text-xs text-gray-600 space-y-1">
+                  <p><strong className="text-primary-text">Super Admin:</strong> admin@fireguardian.com / admin123</p>
+                  <p><strong className="text-primary-text">Vendor:</strong> vendor@fireguardian.com / vendor123</p>
+                  <p><strong className="text-primary-text">Client:</strong> client@fireguardian.com / client123</p>
+                </div>
               </div>
             </form>
           </div>
