@@ -24,7 +24,7 @@ interface SidebarProps {
 interface NavItem {
   name: string;
   href: string;
-  icon: React.ComponentType<any>;
+  icon: React.ComponentType<{ className?: string }>;
 }
 
 export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {

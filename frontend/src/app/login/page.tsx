@@ -52,9 +52,9 @@ export default function LoginPage() {
             window.location.href = '/dashboard';
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setLoginError(
-        error.response?.data?.message || 'Login failed. Please try again.'
+        (error as any).response?.data?.message || 'Login failed. Please try again.'
       );
     } finally {
       setIsLoading(false);
