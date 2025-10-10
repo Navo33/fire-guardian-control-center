@@ -59,9 +59,10 @@ interface AddVendorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  onSubmit?: (vendorData: any) => void;
 }
 
-export default function AddVendorModal({ isOpen, onClose, onSuccess }: AddVendorModalProps) {
+export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }: AddVendorModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,6 +118,18 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess }: AddVendor
     setError(null);
     
     try {
+      // If onSubmit prop is provided, use it instead of the default API call
+      if (onSubmit) {
+        await onSubmit(data);
+        reset();
+        onClose();
+        if (onSuccess) {
+          onSuccess();
+        }
+        return;
+      }
+
+      // Default API call behavior
       const response = await fetch('http://localhost:5000/api/vendors', {
         method: 'POST',
         headers: {
