@@ -6,6 +6,7 @@ import DashboardLayout from '../../../components/layout/DashboardLayout';
 import AddVendorModal from '../../../components/modals/AddVendorModal';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 import ErrorDisplay from '../../../components/ui/ErrorDisplay';
+import DebugLogger from '../../../utils/DebugLogger';
 import { 
   BuildingOfficeIcon, 
   ChartBarIcon,
@@ -58,33 +59,63 @@ export default function SuperAdminDashboard() {
   // Fetch dashboard data from API
   useEffect(() => {
     const fetchDashboardData = async () => {
+      const startTime = DebugLogger.startTimer();
+      DebugLogger.ui('SuperAdminDashboard', 'fetchDashboardData started');
+      
       try {
         setIsLoading(true);
         setError(null);
 
+        // Get auth token
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('No authentication token found');
+        }
+
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+
+        DebugLogger.log('Fetching dashboard data with auth token', { hasToken: !!token }, 'DASHBOARD');
+
         // Fetch stats
-        const statsResponse = await fetch('http://localhost:5000/api/dashboard/stats');
+        DebugLogger.api('GET', '/api/dashboard/stats (request)');
+        const statsResponse = await fetch('http://localhost:5000/api/dashboard/stats', { headers });
+        
         if (!statsResponse.ok) {
-          throw new Error('Failed to fetch dashboard stats');
+          throw new Error(`Failed to fetch dashboard stats: ${statsResponse.status} ${statsResponse.statusText}`);
         }
         const statsData = await statsResponse.json();
+        DebugLogger.api('GET', '/api/dashboard/stats', undefined, statsData, statsResponse.status);
         
         // Fetch recent vendors
-        const vendorsResponse = await fetch('http://localhost:5000/api/dashboard/recent-vendors');
+        DebugLogger.api('GET', '/api/dashboard/recent-vendors (request)');
+        const vendorsResponse = await fetch('http://localhost:5000/api/dashboard/recent-vendors', { headers });
+        
         if (!vendorsResponse.ok) {
-          throw new Error('Failed to fetch recent vendors');
+          throw new Error(`Failed to fetch recent vendors: ${vendorsResponse.status} ${vendorsResponse.statusText}`);
         }
         const vendorsData = await vendorsResponse.json();
+        DebugLogger.api('GET', '/api/dashboard/recent-vendors', undefined, vendorsData, vendorsResponse.status);
 
         if (statsData.success && vendorsData.success) {
+          DebugLogger.log('Dashboard data fetched successfully', {
+            statsKeys: Object.keys(statsData.data || {}),
+            vendorsCount: vendorsData.data?.length || 0
+          }, 'DASHBOARD');
+          
           setStats(statsData.data);
           setRecentVendors(vendorsData.data);
         } else {
-          throw new Error('API returned error response');
+          throw new Error(`API returned success=false. Stats: ${statsData.message}, Vendors: ${vendorsData.message}`);
         }
+
+        DebugLogger.performance('Dashboard data fetch', startTime);
       } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
+        DebugLogger.error('Dashboard data fetch failed', err, { errorMessage });
+        setError(errorMessage);
         
         // Fallback to mock data if API fails
         setStats({

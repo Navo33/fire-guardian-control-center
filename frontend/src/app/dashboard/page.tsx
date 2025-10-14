@@ -5,8 +5,9 @@ import { useEffect, useState } from 'react';
 interface User {
   id: number;
   email: string;
-  name: string;
-  role: string;
+  display_name: string;
+  user_type: string;
+  role_id?: number;
 }
 
 export default function DashboardPage() {
@@ -67,8 +68,8 @@ export default function DashboardPage() {
             
             <div className="flex items-center space-x-4">
               <div className="text-right">
-                <p className="text-sm font-medium text-primary-text">{user.name}</p>
-                <p className="text-xs text-gray-500 capitalize">{user.role.replace('_', ' ')}</p>
+                <p className="text-sm font-medium text-primary-text">{user.display_name || 'User'}</p>
+                <p className="text-xs text-gray-500 capitalize">{user.user_type?.replace('_', ' ') || 'Unknown'}</p>
               </div>
               <button
                 onClick={handleLogout}
@@ -85,10 +86,10 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-primary-text">
-            Welcome, {user.name}!
+            Welcome, {user.display_name || 'User'}!
           </h2>
           <p className="mt-2 text-gray-600">
-            You are logged in as: <span className="font-medium capitalize text-fire-600">{user.role.replace('_', ' ')}</span>
+            You are logged in as: <span className="font-medium capitalize text-fire-600">{user.user_type?.replace('_', ' ') || 'Unknown'}</span>
           </p>
         </div>
 
@@ -185,7 +186,7 @@ export default function DashboardPage() {
                       User Role
                     </dt>
                     <dd className="text-lg font-medium text-gray-900 capitalize">
-                      {user.role.replace('_', ' ')}
+                      {user.user_type?.replace('_', ' ') || 'Unknown'}
                     </dd>
                   </dl>
                 </div>

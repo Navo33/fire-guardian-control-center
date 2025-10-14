@@ -45,12 +45,23 @@ export default function VendorManagementPage() {
       setIsLoading(true);
       setError(null);
 
+      // Get auth token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
       const params = new URLSearchParams();
       if (searchTerm.trim()) params.append('search', searchTerm.trim());
       if (statusFilter !== 'All') params.append('status', statusFilter);
       if (categoryFilter !== 'All') params.append('category', categoryFilter);
 
-      const response = await fetch(`http://localhost:5000/api/vendors?${params.toString()}`);
+      const response = await fetch(`http://localhost:5000/api/vendors?${params.toString()}`, { headers });
       const result = await response.json();
 
       if (!response.ok) {
@@ -81,8 +92,20 @@ export default function VendorManagementPage() {
     if (!confirm('Are you sure you want to delete this vendor?')) return;
 
     try {
+      // Get auth token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
       const response = await fetch(`http://localhost:5000/api/vendors/${vendorId}`, {
         method: 'DELETE',
+        headers
       });
 
       const result = await response.json();

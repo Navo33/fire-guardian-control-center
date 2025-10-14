@@ -38,8 +38,8 @@ export default function LoginPage() {
         localStorage.setItem('token', response.data.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
 
-        switch (response.data.data.user.role) {
-          case 'super_admin':
+        switch (response.data.data.user.user_type) {
+          case 'admin':
             window.location.href = '/dashboard/super-admin';
             break;
           case 'vendor':

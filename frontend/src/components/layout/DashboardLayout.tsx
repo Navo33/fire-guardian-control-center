@@ -6,9 +6,9 @@ import Sidebar from './Sidebar';
 
 interface User {
   id: number;
-  name: string;
+  display_name: string;
   email: string;
-  role: string;
+  user_type: string;
 }
 
 interface DashboardLayoutProps {
@@ -53,7 +53,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <Sidebar 
-          userRole={user.role}
+          userRole={user.user_type}
           isOpen={isMobileMenuOpen}
           onClose={() => setIsMobileMenuOpen(false)}
         />

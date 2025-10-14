@@ -32,7 +32,7 @@ export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {
 
   const getNavItems = (): NavItem[] => {
     switch (userRole) {
-      case 'super_admin':
+      case 'admin':
         return [
           { name: 'Dashboard', href: '/dashboard/super-admin', icon: HomeIcon },
           { name: 'Vendor Management', href: '/dashboard/super-admin/vendors', icon: BuildingOfficeIcon },

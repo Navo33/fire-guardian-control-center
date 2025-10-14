@@ -130,9 +130,16 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
       }
 
       // Default API call behavior
+      // Get auth token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
       const response = await fetch('http://localhost:5000/api/vendors', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(data),
@@ -239,36 +246,6 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                     </select>
                     {errors.businessType && (
                       <p className="mt-1 text-sm text-red-600">{errors.businessType.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      License Number *
-                    </label>
-                    <input
-                      type="text"
-                      className={`input-field ${errors.licenseNumber ? 'border-red-500' : ''}`}
-                      placeholder="Fire safety license number"
-                      {...register('licenseNumber')}
-                    />
-                    {errors.licenseNumber && (
-                      <p className="mt-1 text-sm text-red-600">{errors.licenseNumber.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tax ID / EIN *
-                    </label>
-                    <input
-                      type="text"
-                      className={`input-field ${errors.taxId ? 'border-red-500' : ''}`}
-                      placeholder="Tax identification number"
-                      {...register('taxId')}
-                    />
-                    {errors.taxId && (
-                      <p className="mt-1 text-sm text-red-600">{errors.taxId.message}</p>
                     )}
                   </div>
                 </div>
@@ -454,120 +431,6 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                       )}
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Business Details Section */}
-              <div className="space-y-6">
-                <div className="flex items-center space-x-2">
-                  <GlobeAltIcon className="h-5 w-5 text-red-600" />
-                  <h3 className="text-lg font-medium text-gray-900">Business Details</h3>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Website
-                    </label>
-                    <input
-                      type="url"
-                      className={`input-field ${errors.website ? 'border-red-500' : ''}`}
-                      placeholder="https://www.company.com"
-                      {...register('website')}
-                    />
-                    {errors.website && (
-                      <p className="mt-1 text-sm text-red-600">{errors.website.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Years in Business *
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      className={`input-field ${errors.yearsInBusiness ? 'border-red-500' : ''}`}
-                      placeholder="5"
-                      {...register('yearsInBusiness', { valueAsNumber: true })}
-                    />
-                    {errors.yearsInBusiness && (
-                      <p className="mt-1 text-sm text-red-600">{errors.yearsInBusiness.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Employee Count *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      className={`input-field ${errors.employeeCount ? 'border-red-500' : ''}`}
-                      placeholder="25"
-                      {...register('employeeCount', { valueAsNumber: true })}
-                    />
-                    {errors.employeeCount && (
-                      <p className="mt-1 text-sm text-red-600">{errors.employeeCount.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Service Areas *
-                    </label>
-                    <input
-                      type="text"
-                      className={`input-field ${errors.serviceAreas ? 'border-red-500' : ''}`}
-                      placeholder="New York, New Jersey, Connecticut"
-                      {...register('serviceAreas')}
-                    />
-                    {errors.serviceAreas && (
-                      <p className="mt-1 text-sm text-red-600">{errors.serviceAreas.message}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Specializations Section */}
-              <div className="space-y-6">
-                <div className="flex items-center space-x-2">
-                  <ShieldCheckIcon className="h-5 w-5 text-red-600" />
-                  <h3 className="text-lg font-medium text-gray-900">Specializations & Certifications</h3>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Specializations * (Select all that apply)
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {specializationOptions.map((specialization) => (
-                      <label key={specialization} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="rounded-full border-gray-300 text-red-600 focus:ring-red-500"
-                          checked={watchSpecializations?.includes(specialization) || false}
-                          onChange={(e) => handleSpecializationChange(specialization, e.target.checked)}
-                        />
-                        <span className="text-sm text-gray-700">{specialization}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {errors.specializations && (
-                    <p className="mt-2 text-sm text-red-600">{errors.specializations.message}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Certifications & Licenses
-                  </label>
-                  <textarea
-                    rows={3}
-                    className="input-field resize-none"
-                    placeholder="List relevant certifications, licenses, and qualifications..."
-                    {...register('certifications')}
-                  />
                 </div>
               </div>
 

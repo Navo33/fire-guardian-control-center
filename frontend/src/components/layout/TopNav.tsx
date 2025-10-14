@@ -11,8 +11,8 @@ import {
 
 interface TopNavProps {
   user: {
-    name: string;
-    role: string;
+    display_name: string;
+    user_type: string;
   };
   onMenuToggle: () => void;
   isMobileMenuOpen: boolean;
@@ -25,16 +25,16 @@ export default function TopNav({ user, onMenuToggle, isMobileMenuOpen }: TopNavP
     window.location.href = '/login';
   };
 
-  const getRoleDisplay = (role: string) => {
-    switch (role) {
-      case 'super_admin':
+  const getRoleDisplay = (user_type: string) => {
+    switch (user_type) {
+      case 'admin':
         return 'Admin';
       case 'vendor':
         return 'Vendor';
       case 'client':
         return 'Client';
       default:
-        return role;
+        return user_type?.replace('_', ' ') || 'Unknown';
     }
   };
 
@@ -72,12 +72,12 @@ export default function TopNav({ user, onMenuToggle, isMobileMenuOpen }: TopNavP
             <div className="flex items-center space-x-3">
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center">
                 <span className="text-sm font-medium text-white">
-                  {user.name.charAt(0).toUpperCase()}
+                  {(user.display_name || 'U').charAt(0).toUpperCase()}
                 </span>
               </div>
               <div className="hidden sm:block">
-                <p className="text-sm font-medium text-gray-900" style={{fontFamily: 'Segoe UI, Helvetica Neue, Arial, sans-serif'}}>{user.name}</p>
-                <p className="text-xs text-gray-500">{getRoleDisplay(user.role)}</p>
+                <p className="text-sm font-medium text-gray-900" style={{fontFamily: 'Segoe UI, Helvetica Neue, Arial, sans-serif'}}>{user.display_name || 'User'}</p>
+                <p className="text-xs text-gray-500">{getRoleDisplay(user.user_type)}</p>
               </div>
             </div>
             <button
