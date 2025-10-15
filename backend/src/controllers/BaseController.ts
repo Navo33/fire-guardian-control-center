@@ -83,11 +83,24 @@ export abstract class BaseController {
    * Get client IP address
    */
   protected getClientIP(req: Request): string {
-    return (req.headers['x-forwarded-for'] as string) ||
-           (req.headers['x-real-ip'] as string) ||
-           req.connection.remoteAddress ||
-           req.socket.remoteAddress ||
-           'unknown';
+    // Get the IP from various headers, prioritizing x-forwarded-for
+    let ip = (req.headers['x-forwarded-for'] as string) ||
+             (req.headers['x-real-ip'] as string) ||
+             req.connection.remoteAddress ||
+             req.socket.remoteAddress ||
+             'unknown';
+
+    // x-forwarded-for can contain multiple IPs, take the first one
+    if (typeof ip === 'string' && ip.includes(',')) {
+      ip = ip.split(',')[0].trim();
+    }
+
+    // Ensure IP doesn't exceed database column limit (VARCHAR(255))
+    if (ip.length > 255) {
+      ip = ip.substring(0, 255);
+    }
+
+    return ip;
   }
 
   /**

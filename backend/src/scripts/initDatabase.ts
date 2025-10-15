@@ -10,7 +10,13 @@ export const initializeDatabase = async (): Promise<void> => {
     console.log('🔄 Initializing database...');
 
     await checkDatabasePermissions();
-    await createTablesInOrder();
+    
+    // Create migration tracking table first
+    await createMigrationTable();
+    
+    // Apply all migrations including table creation
+    await applyAllMigrations();
+    
     console.log('✅ Database schema created successfully');
 
     await seedInitialData();
@@ -23,6 +29,111 @@ export const initializeDatabase = async (): Promise<void> => {
 };
 
 /**
+ * Create migration tracking table
+ */
+const createMigrationTable = async (): Promise<void> => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id SERIAL PRIMARY KEY,
+        migration_name VARCHAR(255) UNIQUE NOT NULL,
+        applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        checksum VARCHAR(64),
+        execution_time_ms INT
+      )
+    `);
+    console.log('✅ Migration tracking table ready');
+  } catch (error) {
+    console.error('❌ Error creating migration table:', error);
+    throw error;
+  }
+};
+
+/**
+ * Check if a migration has been applied
+ */
+const isMigrationApplied = async (migrationName: string): Promise<boolean> => {
+  try {
+    const result = await pool.query(
+      'SELECT 1 FROM schema_migrations WHERE migration_name = $1',
+      [migrationName]
+    );
+    return result.rows.length > 0;
+  } catch (error) {
+    console.error(`Error checking migration ${migrationName}:`, error);
+    return false;
+  }
+};
+
+/**
+ * Record a successful migration
+ */
+const recordMigration = async (migrationName: string, executionTime: number): Promise<void> => {
+  try {
+    await pool.query(
+      'INSERT INTO schema_migrations (migration_name, execution_time_ms) VALUES ($1, $2) ON CONFLICT (migration_name) DO NOTHING',
+      [migrationName, executionTime]
+    );
+  } catch (error) {
+    console.error(`Error recording migration ${migrationName}:`, error);
+  }
+};
+
+/**
+ * Apply all migrations in correct order
+ */
+const applyAllMigrations = async (): Promise<void> => {
+  console.log('🔄 Applying database migrations...');
+  
+  const migrations = [
+    {
+      name: '001_create_initial_tables',
+      description: 'Create all initial database tables',
+      migration: async () => await createTablesInOrder()
+    },
+    {
+      name: '002_schema_optimizations', 
+      description: 'Apply schema optimizations for production',
+      migration: async () => await applySchemaOptimizations()
+    },
+    {
+      name: '003_create_indexes',
+      description: 'Create performance indexes',
+      migration: async () => await createIndexes()
+    },
+    {
+      name: '004_create_triggers_functions',
+      description: 'Create triggers and functions',
+      migration: async () => await createTriggersAndFunctions()
+    }
+  ];
+
+  for (const migration of migrations) {
+    const startTime = Date.now();
+    
+    if (await isMigrationApplied(migration.name)) {
+      console.log(`⚠️  Migration ${migration.name} already applied, skipping...`);
+      continue;
+    }
+
+    try {
+      console.log(`🔄 Applying migration: ${migration.name} - ${migration.description}`);
+      await migration.migration();
+      
+      const executionTime = Date.now() - startTime;
+      await recordMigration(migration.name, executionTime);
+      
+      console.log(`✅ Migration ${migration.name} completed in ${executionTime}ms`);
+    } catch (error) {
+      console.error(`❌ Migration ${migration.name} failed:`, error);
+      throw error;
+    }
+  }
+
+  console.log('✅ All migrations completed successfully');
+};
+
+/**
  * Create tables in the correct dependency order
  */
 const createTablesInOrder = async (): Promise<void> => {
@@ -30,38 +141,38 @@ const createTablesInOrder = async (): Promise<void> => {
     // 1. Users table (no dependencies)
     `CREATE TABLE IF NOT EXISTS "user" (
       id SERIAL PRIMARY KEY,
-      first_name VARCHAR(50),
-      last_name VARCHAR(50),
-      display_name VARCHAR(100) GENERATED ALWAYS AS (first_name || ' ' || last_name) STORED,
-      email VARCHAR(100) UNIQUE NOT NULL,
+      first_name VARCHAR(100),
+      last_name VARCHAR(100),
+      display_name VARCHAR(200) GENERATED ALWAYS AS (first_name || ' ' || last_name) STORED,
+      email VARCHAR(320) UNIQUE NOT NULL,
       password VARCHAR(255) NOT NULL,
-      user_type VARCHAR(10) NOT NULL CHECK (user_type IN ('admin','vendor','client')),
+      user_type VARCHAR(20) NOT NULL CHECK (user_type IN ('admin','vendor','client')),
       role_id INT,
       is_locked BOOLEAN DEFAULT FALSE,
       locked_until TIMESTAMP NULL,
       failed_login_attempts SMALLINT DEFAULT 0,
       last_login TIMESTAMP NULL,
-      last_login_ip VARCHAR(45) NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      deleted_at TIMESTAMP NULL
+      last_login_ip INET NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP WITH TIME ZONE NULL
     )`,
 
     // 2. Role table (no dependencies)
     `CREATE TABLE IF NOT EXISTS role (
       id SERIAL PRIMARY KEY,
-      role_name VARCHAR(50) UNIQUE NOT NULL,
+      role_name VARCHAR(100) UNIQUE NOT NULL,
       description TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 3. Permission table (no dependencies)
     `CREATE TABLE IF NOT EXISTS permission (
       id SERIAL PRIMARY KEY,
-      permission_name VARCHAR(50) UNIQUE NOT NULL,
+      permission_name VARCHAR(100) UNIQUE NOT NULL,
       description TEXT,
-      category VARCHAR(50) NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      category VARCHAR(100) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 4. Role permission junction table (depends on role and permission)
@@ -69,7 +180,7 @@ const createTablesInOrder = async (): Promise<void> => {
       role_id INT REFERENCES role(id) ON DELETE CASCADE,
       permission_id INT REFERENCES permission(id) ON DELETE CASCADE,
       granted_by INT REFERENCES "user"(id),
-      granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      granted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY(role_id, permission_id)
     )`,
 
@@ -77,119 +188,153 @@ const createTablesInOrder = async (): Promise<void> => {
     `CREATE TABLE IF NOT EXISTS vendor_company (
       id SERIAL PRIMARY KEY,
       vendor_id INT REFERENCES "user"(id) ON DELETE CASCADE,
-      company_name VARCHAR(200) NOT NULL,
-      business_type VARCHAR(50) NOT NULL,
-      license_number VARCHAR(100),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      company_name VARCHAR(500) NOT NULL,
+      business_type VARCHAR(100) NOT NULL,
+      license_number VARCHAR(200),
+      tax_id VARCHAR(100),
+      website VARCHAR(500),
+      established_year SMALLINT,
+      employee_count INT,
+      annual_revenue DECIMAL(15,2),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 6. Vendor contact table (depends on user)
     `CREATE TABLE IF NOT EXISTS vendor_contact (
       id SERIAL PRIMARY KEY,
       vendor_id INT REFERENCES "user"(id) ON DELETE CASCADE,
-      contact_person_name VARCHAR(100) NOT NULL,
-      contact_title VARCHAR(100),
-      primary_email VARCHAR(100) NOT NULL,
-      primary_phone VARCHAR(20) NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      contact_person_name VARCHAR(200) NOT NULL,
+      contact_title VARCHAR(150),
+      primary_email VARCHAR(320) NOT NULL,
+      primary_phone VARCHAR(50) NOT NULL,
+      secondary_phone VARCHAR(50),
+      fax VARCHAR(50),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 7. Vendor address table (depends on user)
     `CREATE TABLE IF NOT EXISTS vendor_address (
       id SERIAL PRIMARY KEY,
       vendor_id INT REFERENCES "user"(id) ON DELETE CASCADE,
+      address_type VARCHAR(50) DEFAULT 'business' CHECK (address_type IN ('business','billing','shipping')),
       street_address TEXT NOT NULL,
-      city VARCHAR(100) NOT NULL,
-      state VARCHAR(100) NOT NULL,
-      zip_code VARCHAR(20) NOT NULL,
-      country VARCHAR(100) NOT NULL DEFAULT 'Sri Lanka',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      city VARCHAR(200) NOT NULL,
+      state VARCHAR(200) NOT NULL,
+      zip_code VARCHAR(50) NOT NULL,
+      country VARCHAR(200) NOT NULL DEFAULT 'Sri Lanka',
+      latitude DECIMAL(10,8),
+      longitude DECIMAL(11,8),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 8. Client company table (depends on user)
     `CREATE TABLE IF NOT EXISTS client_company (
       id SERIAL PRIMARY KEY,
       client_id INT REFERENCES "user"(id) ON DELETE CASCADE,
-      company_name VARCHAR(200) NOT NULL,
-      business_type VARCHAR(50) NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      company_name VARCHAR(500) NOT NULL,
+      business_type VARCHAR(100) NOT NULL,
+      industry VARCHAR(100),
+      tax_id VARCHAR(100),
+      website VARCHAR(500),
+      employee_count INT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 9. Client contact table (depends on user)
     `CREATE TABLE IF NOT EXISTS client_contact (
       id SERIAL PRIMARY KEY,
       client_id INT REFERENCES "user"(id) ON DELETE CASCADE,
-      contact_person_name VARCHAR(100) NOT NULL,
-      contact_title VARCHAR(100),
-      primary_email VARCHAR(100) NOT NULL,
-      primary_phone VARCHAR(20) NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      contact_person_name VARCHAR(200) NOT NULL,
+      contact_title VARCHAR(150),
+      primary_email VARCHAR(320) NOT NULL,
+      primary_phone VARCHAR(50) NOT NULL,
+      secondary_phone VARCHAR(50),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 10. Client address table (depends on user)
     `CREATE TABLE IF NOT EXISTS client_address (
       id SERIAL PRIMARY KEY,
       client_id INT REFERENCES "user"(id) ON DELETE CASCADE,
+      address_type VARCHAR(50) DEFAULT 'business' CHECK (address_type IN ('business','billing','facility')),
       street_address TEXT NOT NULL,
-      city VARCHAR(100) NOT NULL,
-      state VARCHAR(100) NOT NULL,
-      zip_code VARCHAR(20) NOT NULL,
-      country VARCHAR(100) NOT NULL DEFAULT 'Sri Lanka',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      city VARCHAR(200) NOT NULL,
+      state VARCHAR(200) NOT NULL,
+      zip_code VARCHAR(50) NOT NULL,
+      country VARCHAR(200) NOT NULL DEFAULT 'Sri Lanka',
+      latitude DECIMAL(10,8),
+      longitude DECIMAL(11,8),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 11. Specialization table (no dependencies)
     `CREATE TABLE IF NOT EXISTS specialization (
       id SERIAL PRIMARY KEY,
-      name VARCHAR(100) UNIQUE NOT NULL,
+      name VARCHAR(200) UNIQUE NOT NULL,
       description TEXT,
-      category VARCHAR(50),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      category VARCHAR(100),
+      certification_required BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 12. Vendor specializations junction table (depends on user and specialization)
     `CREATE TABLE IF NOT EXISTS vendor_specialization (
       vendor_id INT REFERENCES "user"(id) ON DELETE CASCADE,
       specialization_id INT REFERENCES specialization(id) ON DELETE CASCADE,
-      added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      certification_number VARCHAR(200),
+      certification_expiry DATE,
+      added_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY(vendor_id, specialization_id)
     )`,
 
     // 13. Equipment table (no dependencies)
     `CREATE TABLE IF NOT EXISTS equipment (
       id SERIAL PRIMARY KEY,
-      equipment_code VARCHAR(50) UNIQUE,
-      equipment_name VARCHAR(100) NOT NULL,
+      equipment_code VARCHAR(100) UNIQUE,
+      equipment_name VARCHAR(300) NOT NULL,
       description TEXT,
-      equipment_type VARCHAR(50) NOT NULL,
-      manufacturer VARCHAR(100),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      deleted_at TIMESTAMP NULL
+      equipment_type VARCHAR(100) NOT NULL,
+      manufacturer VARCHAR(200),
+      model VARCHAR(200),
+      specifications JSONB,
+      weight_kg DECIMAL(8,2),
+      dimensions VARCHAR(100),
+      warranty_years SMALLINT,
+      price DECIMAL(12,2),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP WITH TIME ZONE NULL
     )`,
 
     // 14. Equipment instance table (depends on equipment, user)
     `CREATE TABLE IF NOT EXISTS equipment_instance (
       id SERIAL PRIMARY KEY,
       equipment_id INT REFERENCES equipment(id),
-      serial_number VARCHAR(100) UNIQUE,
+      serial_number VARCHAR(200) UNIQUE,
+      asset_tag VARCHAR(100),
       vendor_id INT REFERENCES "user"(id),
-      status VARCHAR(20) NOT NULL DEFAULT 'available' CHECK (status IN ('available','assigned','maintenance','retired')),
+      status VARCHAR(30) NOT NULL DEFAULT 'available' CHECK (status IN ('available','assigned','maintenance','out_of_service','retired')),
+      condition_rating SMALLINT DEFAULT 5 CHECK (condition_rating BETWEEN 1 AND 5),
       assigned_to INT REFERENCES "user"(id) NULL,
-      assigned_at TIMESTAMP NULL,
+      assigned_at TIMESTAMP WITH TIME ZONE NULL,
+      purchase_date DATE,
+      warranty_expiry DATE,
       expiry_date DATE,
       last_maintenance_date DATE,
+      next_maintenance_date DATE,
       maintenance_interval_days INT DEFAULT 365,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      deleted_at TIMESTAMP NULL
+      location TEXT,
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMP WITH TIME ZONE NULL
     )`,
 
     // 15. Equipment assignment table (depends on user)
@@ -197,70 +342,96 @@ const createTablesInOrder = async (): Promise<void> => {
       id SERIAL PRIMARY KEY,
       client_id INT REFERENCES "user"(id),
       vendor_id INT REFERENCES "user"(id),
-      assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','cancelled')),
+      assignment_number VARCHAR(100) UNIQUE,
+      assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      status VARCHAR(30) NOT NULL DEFAULT 'active' CHECK (status IN ('pending','active','completed','cancelled','expired')),
+      priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low','normal','high','urgent')),
       notes TEXT,
       start_date DATE,
       end_date DATE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      total_cost DECIMAL(12,2),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 16. Assignment item junction table (depends on equipment_assignment and equipment_instance)
     `CREATE TABLE IF NOT EXISTS assignment_item (
-      assignment_id INT REFERENCES equipment_assignment(id),
+      assignment_id INT REFERENCES equipment_assignment(id) ON DELETE CASCADE,
       equipment_instance_id INT REFERENCES equipment_instance(id),
+      quantity INT DEFAULT 1,
+      unit_cost DECIMAL(10,2),
+      total_cost DECIMAL(12,2),
+      notes TEXT,
       PRIMARY KEY(assignment_id, equipment_instance_id)
     )`,
 
     // 17. Maintenance ticket table (depends on user, equipment_instance)
     `CREATE TABLE IF NOT EXISTS maintenance_ticket (
       id SERIAL PRIMARY KEY,
+      ticket_number VARCHAR(100) UNIQUE,
       equipment_instance_id INT REFERENCES equipment_instance(id),
       client_id INT REFERENCES "user"(id),
       vendor_id INT REFERENCES "user"(id),
-      ticket_status VARCHAR(20) NOT NULL DEFAULT 'open' CHECK (ticket_status IN ('open','in_progress','completed','cancelled')),
+      assigned_technician INT REFERENCES "user"(id),
+      ticket_status VARCHAR(30) NOT NULL DEFAULT 'open' CHECK (ticket_status IN ('open','assigned','in_progress','pending_parts','completed','cancelled','rejected')),
       issue_description TEXT NOT NULL,
-      priority VARCHAR(10) DEFAULT 'normal' CHECK (priority IN ('low','normal','high','urgent')),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      resolved_at TIMESTAMP NULL
+      resolution_description TEXT,
+      priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low','normal','high','urgent','critical')),
+      category VARCHAR(100),
+      estimated_hours DECIMAL(5,2),
+      actual_hours DECIMAL(5,2),
+      cost DECIMAL(10,2),
+      scheduled_date TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TIMESTAMP WITH TIME ZONE NULL,
+      closed_at TIMESTAMP WITH TIME ZONE NULL
     )`,
 
     // 18. Notification table (depends on user)
     `CREATE TABLE IF NOT EXISTS notification (
       id SERIAL PRIMARY KEY,
       user_id INT REFERENCES "user"(id) ON DELETE CASCADE,
-      title VARCHAR(255) NOT NULL,
+      title VARCHAR(500) NOT NULL,
       message TEXT NOT NULL,
-      type VARCHAR(10) DEFAULT 'info' CHECK (type IN ('info','warning','error','success')),
-      priority VARCHAR(10) DEFAULT 'normal' CHECK (priority IN ('low','normal','high')),
+      type VARCHAR(20) DEFAULT 'info' CHECK (type IN ('info','warning','error','success','reminder')),
+      priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low','normal','high','urgent')),
+      category VARCHAR(100),
       is_read BOOLEAN DEFAULT FALSE,
-      read_at TIMESTAMP NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      expires_at TIMESTAMP NULL
+      is_archived BOOLEAN DEFAULT FALSE,
+      read_at TIMESTAMP WITH TIME ZONE NULL,
+      action_url VARCHAR(1000),
+      metadata JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      expires_at TIMESTAMP WITH TIME ZONE NULL
     )`,
 
     // 19. Audit log table (depends on user)
     `CREATE TABLE IF NOT EXISTS audit_log (
       id SERIAL PRIMARY KEY,
-      table_name VARCHAR(50) NOT NULL,
+      table_name VARCHAR(100) NOT NULL,
       record_id JSONB NOT NULL,
-      action_type VARCHAR(10) NOT NULL CHECK (action_type IN ('INSERT','UPDATE','DELETE','LOGIN','LOGOUT')),
+      action_type VARCHAR(20) NOT NULL CHECK (action_type IN ('INSERT','UPDATE','DELETE','LOGIN','LOGOUT','EXPORT','IMPORT')),
       changes JSONB NULL,
       metadata JSONB NULL,
+      ip_address INET,
+      user_agent TEXT,
+      session_id VARCHAR(200),
       changed_by INT REFERENCES "user"(id),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`,
 
     // 20. Password reset table (depends on user)
     `CREATE TABLE IF NOT EXISTS password_reset (
       id SERIAL PRIMARY KEY,
       user_id INT REFERENCES "user"(id) ON DELETE CASCADE,
-      reset_token VARCHAR(255) UNIQUE NOT NULL,
-      expires_at TIMESTAMP NOT NULL,
+      reset_token VARCHAR(500) UNIQUE NOT NULL,
+      ip_address INET,
+      user_agent TEXT,
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
       used BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      used_at TIMESTAMP WITH TIME ZONE NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )`
   ];
 
@@ -278,8 +449,151 @@ const createTablesInOrder = async (): Promise<void> => {
     }
   }
 
-  await createIndexes();
-  await createTriggersAndFunctions();
+  console.log('✅ Initial tables created');
+};
+
+/**
+ * Apply schema optimizations for existing databases
+ */
+const applySchemaOptimizations = async (): Promise<void> => {
+  console.log('🔄 Applying database migrations...');
+  
+  try {
+    // Migration 1: Fix IP address column type
+    try {
+      await pool.query(`
+        DO $$ 
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'user' 
+            AND column_name = 'last_login_ip' 
+            AND data_type = 'character varying'
+          ) THEN
+            ALTER TABLE "user" ALTER COLUMN last_login_ip TYPE INET USING last_login_ip::INET;
+            RAISE NOTICE 'Migrated last_login_ip to INET type';
+          END IF;
+        END $$;
+      `);
+    } catch (e) {
+      console.log('⚠️  Migration 1: IP address column already correct or no conversion needed');
+    }
+
+    // Migration 2: Extend user name fields
+    try {
+      await pool.query(`
+        DO $$ 
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'user' 
+            AND column_name = 'first_name' 
+            AND character_maximum_length < 100
+          ) THEN
+            ALTER TABLE "user" ALTER COLUMN first_name TYPE VARCHAR(100);
+            ALTER TABLE "user" ALTER COLUMN last_name TYPE VARCHAR(100);
+            ALTER TABLE "user" ALTER COLUMN display_name TYPE VARCHAR(200);
+            RAISE NOTICE 'Extended user name field lengths';
+          END IF;
+        END $$;
+      `);
+    } catch (e) {
+      console.log('⚠️  Migration 2: User name fields already extended');
+    }
+
+    // Migration 3: Extend email field
+    try {
+      await pool.query(`
+        DO $$ 
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'user' 
+            AND column_name = 'email' 
+            AND character_maximum_length < 320
+          ) THEN
+            ALTER TABLE "user" ALTER COLUMN email TYPE VARCHAR(320);
+            RAISE NOTICE 'Extended email field to 320 characters';
+          END IF;
+        END $$;
+      `);
+    } catch (e) {
+      console.log('⚠️  Migration 3: Email field already extended');
+    }
+
+    // Migration 4: Add timezone support to timestamps
+    try {
+      await pool.query(`
+        DO $$ 
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'user' 
+            AND column_name = 'created_at' 
+            AND data_type = 'timestamp without time zone'
+          ) THEN
+            ALTER TABLE "user" ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE;
+            ALTER TABLE "user" ALTER COLUMN updated_at TYPE TIMESTAMP WITH TIME ZONE;
+            ALTER TABLE "user" ALTER COLUMN deleted_at TYPE TIMESTAMP WITH TIME ZONE;
+            RAISE NOTICE 'Added timezone support to user table timestamps';
+          END IF;
+        END $$;
+      `);
+    } catch (e) {
+      console.log('⚠️  Migration 4: Timezone support already added');
+    }
+
+    // Migration 5: Extend vendor company fields
+    try {
+      await pool.query(`
+        DO $$ 
+        BEGIN
+          -- Extend existing columns
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vendor_company' AND column_name = 'company_name' AND character_maximum_length < 500) THEN
+            ALTER TABLE vendor_company ALTER COLUMN company_name TYPE VARCHAR(500);
+          END IF;
+          
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vendor_company' AND column_name = 'business_type' AND character_maximum_length < 100) THEN
+            ALTER TABLE vendor_company ALTER COLUMN business_type TYPE VARCHAR(100);
+          END IF;
+          
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vendor_company' AND column_name = 'license_number' AND character_maximum_length < 200) THEN
+            ALTER TABLE vendor_company ALTER COLUMN license_number TYPE VARCHAR(200);
+          END IF;
+          
+          -- Add new columns if they don't exist
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vendor_company' AND column_name = 'tax_id') THEN
+            ALTER TABLE vendor_company ADD COLUMN tax_id VARCHAR(100);
+          END IF;
+          
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vendor_company' AND column_name = 'website') THEN
+            ALTER TABLE vendor_company ADD COLUMN website VARCHAR(500);
+          END IF;
+          
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vendor_company' AND column_name = 'established_year') THEN
+            ALTER TABLE vendor_company ADD COLUMN established_year SMALLINT;
+          END IF;
+          
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vendor_company' AND column_name = 'employee_count') THEN
+            ALTER TABLE vendor_company ADD COLUMN employee_count INT;
+          END IF;
+          
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vendor_company' AND column_name = 'annual_revenue') THEN
+            ALTER TABLE vendor_company ADD COLUMN annual_revenue DECIMAL(15,2);
+          END IF;
+          
+          RAISE NOTICE 'Enhanced vendor company table';
+        END $$;
+      `);
+    } catch (e) {
+      console.log('⚠️  Migration 5: Vendor company fields already enhanced');
+    }
+
+    console.log('✅ Database migrations completed successfully');
+  } catch (error) {
+    console.error('❌ Migration failed:', error);
+    // Don't throw error for migrations - they might have already been applied
+  }
 };
 
 /**
@@ -287,32 +601,95 @@ const createTablesInOrder = async (): Promise<void> => {
  */
 const createIndexes = async (): Promise<void> => {
   const indexQueries = [
+    // User table indexes
     'CREATE INDEX IF NOT EXISTS idx_user_email ON "user"(email)',
     'CREATE INDEX IF NOT EXISTS idx_user_type ON "user"(user_type)',
     'CREATE INDEX IF NOT EXISTS idx_user_deleted_at ON "user"(deleted_at)',
     'CREATE INDEX IF NOT EXISTS idx_user_is_locked ON "user"(is_locked)',
+    'CREATE INDEX IF NOT EXISTS idx_user_last_login ON "user"(last_login)',
+    'CREATE INDEX IF NOT EXISTS idx_user_created_at ON "user"(created_at)',
+    
+    // Company and contact indexes
     'CREATE INDEX IF NOT EXISTS idx_vendor_company_vendor_id ON vendor_company(vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_vendor_company_name ON vendor_company(company_name)',
+    'CREATE INDEX IF NOT EXISTS idx_vendor_company_business_type ON vendor_company(business_type)',
     'CREATE INDEX IF NOT EXISTS idx_vendor_contact_vendor_id ON vendor_contact(vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_vendor_contact_email ON vendor_contact(primary_email)',
     'CREATE INDEX IF NOT EXISTS idx_vendor_address_vendor_id ON vendor_address(vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_vendor_address_type ON vendor_address(address_type)',
+    
     'CREATE INDEX IF NOT EXISTS idx_client_company_client_id ON client_company(client_id)',
+    'CREATE INDEX IF NOT EXISTS idx_client_company_name ON client_company(company_name)',
     'CREATE INDEX IF NOT EXISTS idx_client_contact_client_id ON client_contact(client_id)',
+    'CREATE INDEX IF NOT EXISTS idx_client_contact_email ON client_contact(primary_email)',
     'CREATE INDEX IF NOT EXISTS idx_client_address_client_id ON client_address(client_id)',
+    
+    // Specialization indexes
     'CREATE INDEX IF NOT EXISTS idx_vendor_specialization_vendor_id ON vendor_specialization(vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_specialization_name ON specialization(name)',
+    'CREATE INDEX IF NOT EXISTS idx_specialization_category ON specialization(category)',
+    
+    // Equipment indexes
     'CREATE INDEX IF NOT EXISTS idx_equipment_code ON equipment(equipment_code)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_name ON equipment(equipment_name)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_type ON equipment(equipment_type)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_manufacturer ON equipment(manufacturer)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_deleted_at ON equipment(deleted_at)',
+    
+    // Equipment instance indexes
     'CREATE INDEX IF NOT EXISTS idx_equipment_instance_serial ON equipment_instance(serial_number)',
     'CREATE INDEX IF NOT EXISTS idx_equipment_instance_status ON equipment_instance(status)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_instance_vendor_id ON equipment_instance(vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_instance_assigned_to ON equipment_instance(assigned_to)',
     'CREATE INDEX IF NOT EXISTS idx_equipment_instance_expiry ON equipment_instance(expiry_date)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_instance_warranty_expiry ON equipment_instance(warranty_expiry)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_instance_next_maintenance ON equipment_instance(next_maintenance_date)',
+    
+    // Assignment indexes
     'CREATE INDEX IF NOT EXISTS idx_equipment_assignment_client_id ON equipment_assignment(client_id)',
     'CREATE INDEX IF NOT EXISTS idx_equipment_assignment_vendor_id ON equipment_assignment(vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_assignment_status ON equipment_assignment(status)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_assignment_priority ON equipment_assignment(priority)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_assignment_number ON equipment_assignment(assignment_number)',
+    
+    // Maintenance ticket indexes
     'CREATE INDEX IF NOT EXISTS idx_maintenance_ticket_equipment_id ON maintenance_ticket(equipment_instance_id)',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_ticket_client_id ON maintenance_ticket(client_id)',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_ticket_vendor_id ON maintenance_ticket(vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_ticket_technician ON maintenance_ticket(assigned_technician)',
     'CREATE INDEX IF NOT EXISTS idx_maintenance_ticket_status ON maintenance_ticket(ticket_status)',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_ticket_priority ON maintenance_ticket(priority)',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_ticket_category ON maintenance_ticket(category)',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_ticket_number ON maintenance_ticket(ticket_number)',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_ticket_scheduled_date ON maintenance_ticket(scheduled_date)',
+    
+    // Notification indexes
+    'CREATE INDEX IF NOT EXISTS idx_notification_user_id ON notification(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_notification_is_read ON notification(is_read)',
+    'CREATE INDEX IF NOT EXISTS idx_notification_type ON notification(type)',
+    'CREATE INDEX IF NOT EXISTS idx_notification_priority ON notification(priority)',
+    'CREATE INDEX IF NOT EXISTS idx_notification_created_at ON notification(created_at)',
+    'CREATE INDEX IF NOT EXISTS idx_notification_expires_at ON notification(expires_at)',
+    
+    // Audit log indexes
     'CREATE INDEX IF NOT EXISTS idx_audit_log_table_name ON audit_log(table_name)',
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_action_type ON audit_log(action_type)',
     'CREATE INDEX IF NOT EXISTS idx_audit_log_changed_by ON audit_log(changed_by)',
     'CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)',
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_ip_address ON audit_log(ip_address)',
+    
+    // Password reset indexes
     'CREATE INDEX IF NOT EXISTS idx_password_reset_token ON password_reset(reset_token)',
+    'CREATE INDEX IF NOT EXISTS idx_password_reset_user_id ON password_reset(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_password_reset_expires_at ON password_reset(expires_at)',
-    'CREATE INDEX IF NOT EXISTS idx_notification_user_id ON notification(user_id)',
-    'CREATE INDEX IF NOT EXISTS idx_notification_is_read ON notification(is_read)'
+    'CREATE INDEX IF NOT EXISTS idx_password_reset_used ON password_reset(used)',
+    
+    // Role and permission indexes
+    'CREATE INDEX IF NOT EXISTS idx_role_name ON role(role_name)',
+    'CREATE INDEX IF NOT EXISTS idx_permission_name ON permission(permission_name)',
+    'CREATE INDEX IF NOT EXISTS idx_permission_category ON permission(category)',
+    'CREATE INDEX IF NOT EXISTS idx_role_permission_role_id ON role_permission(role_id)',
+    'CREATE INDEX IF NOT EXISTS idx_role_permission_permission_id ON role_permission(permission_id)'
   ];
 
   for (const query of indexQueries) {
@@ -649,6 +1026,111 @@ const createTriggersAndFunctions = async (): Promise<void> => {
   }
 
   console.log('✅ Database triggers and functions created');
+};
+
+/**
+ * Run only database migrations (for deployment scenarios)
+ */
+export const runMigrations = async (): Promise<void> => {
+  try {
+    console.log('🚀 Running database migrations for deployment...');
+    
+    await checkDatabasePermissions();
+    await createMigrationTable();
+    await applyAllMigrations();
+    
+    console.log('✅ Database migrations completed successfully');
+  } catch (error) {
+    console.error('❌ Error running migrations:', error);
+    throw error;
+  }
+};
+
+/**
+ * Check database readiness for deployment
+ */
+export const checkDeploymentReadiness = async (): Promise<{
+  isReady: boolean;
+  pendingMigrations: string[];
+  lastMigration?: string;
+  migrationCount: number;
+}> => {
+  try {
+    // Check if migration table exists
+    const migrationTableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'schema_migrations'
+      );
+    `);
+
+    if (!migrationTableExists.rows[0].exists) {
+      return {
+        isReady: false,
+        pendingMigrations: ['001_create_initial_tables', '002_schema_optimizations', '003_create_indexes', '004_create_triggers_functions'],
+        migrationCount: 0
+      };
+    }
+
+    // Get applied migrations
+    const appliedMigrations = await pool.query(`
+      SELECT migration_name, applied_at 
+      FROM schema_migrations 
+      ORDER BY applied_at DESC
+    `);
+
+    const appliedNames = appliedMigrations.rows.map(row => row.migration_name);
+    const allMigrations = ['001_create_initial_tables', '002_schema_optimizations', '003_create_indexes', '004_create_triggers_functions'];
+    const pendingMigrations = allMigrations.filter(migration => !appliedNames.includes(migration));
+
+    return {
+      isReady: pendingMigrations.length === 0,
+      pendingMigrations,
+      lastMigration: appliedMigrations.rows[0]?.migration_name,
+      migrationCount: appliedMigrations.rows.length
+    };
+  } catch (error) {
+    console.error('❌ Error checking deployment readiness:', error);
+    return {
+      isReady: false,
+      pendingMigrations: ['Unknown - database connection failed'],
+      migrationCount: 0
+    };
+  }
+};
+
+/**
+ * Create a database backup before deployment
+ */
+export const createPreDeploymentBackup = async (): Promise<string> => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupName = `pre_deployment_backup_${timestamp}`;
+  
+  try {
+    console.log(`🔄 Creating pre-deployment backup: ${backupName}`);
+    
+    // Log backup attempt in audit log
+    await pool.query(`
+      INSERT INTO audit_log (
+        table_name, 
+        record_id, 
+        action_type, 
+        metadata
+      ) VALUES (
+        'system', 
+        '{"backup_name": "${backupName}"}', 
+        'EXPORT', 
+        '{"type": "pre_deployment_backup", "timestamp": "${new Date().toISOString()}"}'
+      )
+    `);
+    
+    console.log(`✅ Pre-deployment backup logged: ${backupName}`);
+    return backupName;
+  } catch (error) {
+    console.error('❌ Error creating pre-deployment backup:', error);
+    throw error;
+  }
 };
 
 /**
