@@ -15,9 +15,13 @@
     "db:check": "ts-node src/scripts/dbCli.ts check",
     "db:help": "ts-node src/scripts/dbCli.ts help",
     "db:migrate": "ts-node src/scripts/dbCli.ts init",
-    "heroku-postbuild": "npm run build && npm run db:migrate",
-    "railway-postbuild": "npm run build && npm run db:migrate",
-    "render-postbuild": "npm run build && npm run db:migrate",
+    "db:deploy": "ts-node src/scripts/deployMigrations.ts",
+    "db:deploy:check": "ts-node src/scripts/deployMigrations.ts check",
+    "db:deploy:migrate": "ts-node src/scripts/deployMigrations.ts migrate",
+    "db:deploy:backup": "ts-node src/scripts/deployMigrations.ts backup",
+    "heroku-postbuild": "npm run build && npm run db:deploy:migrate",
+    "railway-postbuild": "npm run build && npm run db:deploy:migrate", 
+    "render-postbuild": "npm run build && npm run db:deploy:migrate",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
