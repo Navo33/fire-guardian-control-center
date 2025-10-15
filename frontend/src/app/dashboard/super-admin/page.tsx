@@ -7,6 +7,7 @@ import AddVendorModal from '../../../components/modals/AddVendorModal';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 import ErrorDisplay from '../../../components/ui/ErrorDisplay';
 import DebugLogger from '../../../utils/DebugLogger';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../../config/api';
 import { 
   BuildingOfficeIcon, 
   ChartBarIcon,
@@ -86,16 +87,13 @@ export default function SuperAdminDashboard() {
           throw new Error('No authentication token found');
         }
 
-        const headers = {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        };
+        const headers = getAuthHeaders();
 
         DebugLogger.log('Fetching dashboard data with auth token', { hasToken: !!token }, 'DASHBOARD');
 
         // Fetch stats
-        DebugLogger.api('GET', '/api/dashboard/stats (request)');
-        const statsResponse = await fetch('http://localhost:5000/api/dashboard/stats', { headers });
+        logApiCall('GET', API_ENDPOINTS.DASHBOARD.STATS);
+        const statsResponse = await fetch(API_ENDPOINTS.DASHBOARD.STATS, { headers });
         
         if (!statsResponse.ok) {
           throw new Error(`Failed to fetch dashboard stats: ${statsResponse.status} ${statsResponse.statusText}`);
@@ -104,8 +102,8 @@ export default function SuperAdminDashboard() {
         DebugLogger.api('GET', '/api/dashboard/stats', undefined, statsData, statsResponse.status);
         
         // Fetch recent vendors
-        DebugLogger.api('GET', '/api/dashboard/recent-vendors (request)');
-        const vendorsResponse = await fetch('http://localhost:5000/api/dashboard/recent-vendors', { headers });
+        logApiCall('GET', API_ENDPOINTS.DASHBOARD.RECENT_VENDORS);
+        const vendorsResponse = await fetch(API_ENDPOINTS.DASHBOARD.RECENT_VENDORS, { headers });
         
         if (!vendorsResponse.ok) {
           throw new Error(`Failed to fetch recent vendors: ${vendorsResponse.status} ${vendorsResponse.statusText}`);

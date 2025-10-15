@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
-import dotenv from 'dotenv';
-import { initializeDatabase, resetDatabase, isDatabaseInitialized } from './initDatabase';
-#!/usr/bin/env node
-
 /**
  * Database Management CLI
  * Provides easy commands to initialize, reset, and manage the database
  */
 
+import dotenv from 'dotenv';
 import { initializeDatabase, resetDatabase, isDatabaseInitialized } from './initDatabase';
-import { closePool } from '../config/database';
+import { closePool, testConnection } from '../config/database';
+
+// Load environment variables
+dotenv.config();
 
 const command = process.argv[2];
 
@@ -23,13 +23,13 @@ Usage: npm run db <command>
 Commands:
   init     Initialize database with schema and seed data
   reset    Drop all tables and recreate with fresh data
-  check    Check if database is initialized
+  status   Check database connection and initialization status
   help     Show this help message
 
 Examples:
   npm run db init
   npm run db reset
-  npm run db check
+  npm run db status
   
 Features:
   ✅ Complete database schema with vendor tables
@@ -49,83 +49,6 @@ Features:
    Vendors: VendorPass123! (see reset output for emails)
    Clients: ClientPass123! (see reset output for emails)
 `);
-};
-
-const runCommand = async () => {
-  try {
-    switch (command) {
-      case 'init':
-        console.log('🚀 Initializing database...');
-        await initializeDatabase();
-        break;
-
-      case 'reset':
-        console.log('⚠️  This will DELETE ALL DATA and recreate the database!');
-        console.log('🔄 Resetting database in 3 seconds... (Ctrl+C to cancel)');
-        
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        await resetDatabase();
-        break;
-
-      case 'check':
-        const isInitialized = await isDatabaseInitialized();
-        if (isInitialized) {
-          console.log('✅ Database is initialized and ready');
-        } else {
-          console.log('❌ Database is not initialized. Run: npm run db init');
-        }
-        break;
-
-      case 'help':
-      case '--help':
-      case '-h':
-        showHelp();
-        break;
-
-      default:
-        console.log('❌ Unknown command:', command);
-        showHelp();
-        process.exit(1);
-    }
-
-    await closePool();
-    console.log('🎉 Operation completed successfully!');
-    process.exit(0);
-
-  } catch (error) {
-    console.error('❌ Error:', error instanceof Error ? error.message : error);
-    await closePool();
-    process.exit(1);
-  }
-};
-
-// Run if called directly
-if (require.main === module) {
-  runCommand();
-}
-
-// Load environment variables
-dotenv.config();
-
-const command = process.argv[2];
-
-const showHelp = () => {
-  console.log(`
-🔥 Fire Guardian Database CLI
-
-Usage: npm run db <command>
-
-Commands:
-  init     Initialize database with schema and seed data
-  reset    Drop all tables and reinitialize (WARNING: destroys all data)
-  status   Check database connection and initialization status
-  help     Show this help message
-
-Examples:
-  npm run db init
-  npm run db reset
-  npm run db status
-  `);
 };
 
 const checkStatus = async () => {
@@ -151,45 +74,44 @@ const checkStatus = async () => {
     } else {
       console.log('⚠️  Database needs initialization. Run: npm run db init');
     }
-
+    
   } catch (error) {
-    console.error('❌ Error checking database status:', error);
+    console.error('❌ Error checking database status:', error instanceof Error ? error.message : error);
   }
 };
 
-const main = async () => {
+const runCommand = async () => {
   try {
     switch (command) {
       case 'init':
+        console.log('🚀 Initializing database...');
         await initializeDatabase();
+        console.log('✅ Database initialized successfully!');
         break;
         
       case 'reset':
-        console.log('⚠️  WARNING: This will destroy all data in the database!');
-        console.log('Press Ctrl+C to cancel, or wait 5 seconds to continue...');
-        
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log('⚠️  Resetting database (this will destroy all existing data)...');
         await resetDatabase();
+        console.log('✅ Database reset completed successfully!');
         break;
         
       case 'status':
+      case 'check':
         await checkStatus();
         break;
         
       case 'help':
-      case '-h':
-      case '--help':
+      case undefined:
         showHelp();
         break;
         
       default:
-        console.log('❌ Unknown command:', command);
+        console.log(`❌ Unknown command: ${command}`);
         showHelp();
         process.exit(1);
     }
-    
   } catch (error) {
-    console.error('❌ Command failed:', error);
+    console.error('❌ Command failed:', error instanceof Error ? error.message : error);
     process.exit(1);
   } finally {
     await closePool();
@@ -197,5 +119,7 @@ const main = async () => {
   }
 };
 
-// Run the CLI
-main();
+// Run the command if this script is executed directly
+if (require.main === module) {
+  runCommand();
+}

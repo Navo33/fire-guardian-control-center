@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../config/api';
 import {
   XMarkIcon,
   BuildingOfficeIcon,
@@ -151,12 +152,12 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch('http://localhost:5000/api/vendors', {
+      const headers = getAuthHeaders();
+
+      logApiCall('POST', API_ENDPOINTS.VENDORS.CREATE, data);
+      const response = await fetch(API_ENDPOINTS.VENDORS.CREATE, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(data),
       });
 

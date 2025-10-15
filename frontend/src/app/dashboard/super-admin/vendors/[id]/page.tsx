@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import DashboardLayout from '../../../../../components/layout/DashboardLayout';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../../../../config/api';
 import {
   ArrowLeftIcon,
   BuildingOfficeIcon,
@@ -110,13 +111,12 @@ export default function VendorDetailsPage() {
           throw new Error('No authentication token found');
         }
 
-        const headers = {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        };
+        const headers = getAuthHeaders();
 
         // Fetch vendor details
-        const vendorResponse = await fetch(`http://localhost:5000/api/vendors/${vendorId}`, { headers });
+        const url = API_ENDPOINTS.VENDORS.BY_ID(vendorId);
+        logApiCall('GET', url);
+        const vendorResponse = await fetch(url, { headers });
         const vendorResult = await vendorResponse.json();
 
         if (!vendorResponse.ok) {

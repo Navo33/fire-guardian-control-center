@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import axios from 'axios';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { API_ENDPOINTS, logApiCall } from '../../config/api';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -32,7 +33,8 @@ export default function LoginPage() {
     setLoginError('');
 
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/login', data);
+      logApiCall('POST', API_ENDPOINTS.AUTH.LOGIN, data);
+      const response = await axios.post(API_ENDPOINTS.AUTH.LOGIN, data);
       console.log('Login response:', response.data);
       if (response.data.success) {
         localStorage.setItem('token', response.data.data.token);

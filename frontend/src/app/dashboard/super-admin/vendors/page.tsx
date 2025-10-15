@@ -6,6 +6,7 @@ import DashboardLayout from '../../../../components/layout/DashboardLayout';
 import AddVendorModal from '../../../../components/modals/AddVendorModal';
 import LoadingSpinner from '../../../../components/ui/LoadingSpinner';
 import ErrorDisplay from '../../../../components/ui/ErrorDisplay';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall, buildApiUrl } from '../../../../config/api';
 import { 
   BuildingOfficeIcon,
   MagnifyingGlassIcon,
@@ -65,17 +66,16 @@ export default function VendorManagementPage() {
         throw new Error('No authentication token found');
       }
 
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
+      const headers = getAuthHeaders();
 
-      const params = new URLSearchParams();
-      if (searchTerm.trim()) params.append('search', searchTerm.trim());
-      if (statusFilter !== 'All') params.append('status', statusFilter);
-      if (specializationFilter !== 'All') params.append('specialization', specializationFilter);
+      const params: Record<string, string> = {};
+      if (searchTerm.trim()) params.search = searchTerm.trim();
+      if (statusFilter !== 'All') params.status = statusFilter;
+      if (specializationFilter !== 'All') params.specialization = specializationFilter;
 
-      const response = await fetch(`http://localhost:5000/api/vendors?${params.toString()}`, { headers });
+      const url = buildApiUrl(API_ENDPOINTS.VENDORS.LIST, params);
+      logApiCall('GET', url);
+      const response = await fetch(url, { headers });
       const result = await response.json();
 
       if (!response.ok) {
@@ -97,12 +97,10 @@ export default function VendorManagementPage() {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
+      const headers = getAuthHeaders();
 
-      const response = await fetch('http://localhost:5000/api/vendors/specializations', { headers });
+      logApiCall('GET', API_ENDPOINTS.VENDORS.SPECIALIZATIONS);
+      const response = await fetch(API_ENDPOINTS.VENDORS.SPECIALIZATIONS, { headers });
       const result = await response.json();
 
       if (response.ok && result.success) {
@@ -119,12 +117,10 @@ export default function VendorManagementPage() {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
+      const headers = getAuthHeaders();
 
-      const response = await fetch('http://localhost:5000/api/users/vendors/stats', { headers });
+      logApiCall('GET', API_ENDPOINTS.VENDORS.STATS);
+      const response = await fetch(API_ENDPOINTS.VENDORS.STATS, { headers });
       const result = await response.json();
 
       if (response.ok && result.success) {
@@ -162,12 +158,11 @@ export default function VendorManagementPage() {
         throw new Error('No authentication token found');
       }
 
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.VENDORS.BY_ID(vendorId);
 
-      const response = await fetch(`http://localhost:5000/api/vendors/${vendorId}`, {
+      logApiCall('DELETE', url);
+      const response = await fetch(url, {
         method: 'DELETE',
         headers
       });

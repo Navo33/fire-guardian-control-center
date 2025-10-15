@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import { 
   UserGroupIcon,
   MagnifyingGlassIcon,
-  FunnelIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
   LockOpenIcon,
@@ -48,7 +48,6 @@ export default function UserManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [userTypeFilter, setUserTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,12 +65,10 @@ export default function UserManagementPage() {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch('http://localhost:5000/api/users', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const headers = getAuthHeaders();
+
+      logApiCall('GET', API_ENDPOINTS.USERS.LIST);
+      const response = await fetch(API_ENDPOINTS.USERS.LIST, { headers });
 
       const result = await response.json();
 
@@ -94,12 +91,10 @@ export default function UserManagementPage() {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('http://localhost:5000/api/users/stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const headers = getAuthHeaders();
+
+      logApiCall('GET', API_ENDPOINTS.USERS.STATS);
+      const response = await fetch(API_ENDPOINTS.USERS.STATS, { headers });
 
       const result = await response.json();
 
@@ -119,12 +114,13 @@ export default function UserManagementPage() {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`http://localhost:5000/api/users/${userId}/status`, {
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.USERS.UPDATE_STATUS(userId);
+
+      logApiCall('PUT', url);
+      const response = await fetch(url, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers,
         body: JSON.stringify({
           isLocked: !currentLockStatus
         })
@@ -157,12 +153,13 @@ export default function UserManagementPage() {
         throw new Error('No authentication token found');
       }
 
-      const response = await fetch(`http://localhost:5000/api/users/${userId}`, {
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.USERS.BY_ID(userId);
+
+      logApiCall('DELETE', url);
+      const response = await fetch(url, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        headers
       });
 
       const result = await response.json();

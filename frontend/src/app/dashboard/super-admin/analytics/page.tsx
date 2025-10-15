@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall, buildApiUrl } from '@/config/api';
 import { 
   ChartBarIcon, 
   UserGroupIcon, 
@@ -202,12 +203,11 @@ export default function SystemAnalyticsPage() {
         filters.selectedClients.forEach(id => queryParams.append('clientIds', id.toString()));
       }
 
-      const response = await fetch(`http://localhost:5000/api/analytics/system?${queryParams}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const headers = getAuthHeaders();
+      const url = `${API_ENDPOINTS.ANALYTICS.SYSTEM}?${queryParams}`;
+
+      logApiCall('GET', url);
+      const response = await fetch(url, { headers });
 
       console.log('Fetch response:', response);
 
