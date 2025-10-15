@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 
 // Import database configuration
 import { testConnection, closePool } from './config/database';
+import { initializeDatabase as initDb } from './scripts/initDatabase';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/validation';
@@ -25,12 +26,28 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Test database connection on startup
+// Test database connection and initialize on startup
 const initializeDatabase = async () => {
+  console.log('🔄 Starting database initialization...');
+  
   const isConnected = await testConnection();
   if (!isConnected) {
     console.error('❌ Failed to connect to database. Exiting...');
     process.exit(1);
+  }
+  
+  console.log('✅ Database connection successful');
+  
+  // Initialize database schema and seed data
+  try {
+    await initDb();
+    console.log('✅ Database initialization completed');
+  } catch (error) {
+    console.error('❌ Database initialization failed:', error);
+    // Don't exit on initialization failure in production - database might already be set up
+    if (process.env.NODE_ENV === 'development') {
+      process.exit(1);
+    }
   }
 };
 
@@ -60,7 +77,10 @@ app.use(limiter);
 // CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
   'http://localhost:3000',
-  'http://127.0.0.1:3000'
+  'http://127.0.0.1:3000',
+  'https://fire-guardian-control-center.vercel.app',
+  'https://fire-guardian-control-center-git-dev-navo33.vercel.app',
+  'https://fire-guardian-control-center-git-main-navo33.vercel.app'
 ];
 
 const corsOptions = {
@@ -68,9 +88,15 @@ const corsOptions = {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
+    // Allow all Vercel preview deployments
+    if (origin.includes('fire-guardian-control-center') && origin.includes('vercel.app')) {
+      return callback(null, true);
+    }
+    
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log(`❌ CORS blocked origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
