@@ -26,37 +26,55 @@ import {
 } from '@heroicons/react/24/outline';
 
 interface VendorDetails {
+  // User details
   id: number;
-  name: string;
+  first_name: string;
+  last_name: string;
+  display_name: string;
   email: string;
-  phone: string;
-  secondaryPhone?: string;
-  location: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  country: string;
-  website?: string;
-  businessType: string;
-  licenseNumber: string;
-  taxId: string;
-  contactPerson: string;
-  contactTitle: string;
-  yearsInBusiness: number;
-  employeeCount: number;
-  serviceAreas: string;
+  user_type: string;
+  is_locked: boolean;
+  last_login: string | null;
+  created_at: string;
+  
+  // Company details
+  company?: {
+    company_name: string;
+    business_type: string;
+    license_number: string;
+  };
+  
+  // Contact details
+  contact?: {
+    contact_person_name: string;
+    contact_title: string;
+    primary_email: string;
+    primary_phone: string;
+  };
+  
+  // Address details
+  address?: {
+    street_address: string;
+    city: string;
+    state: string;
+    zip_code: string;
+    country: string;
+  };
+  
+  // Specializations
   specializations: string[];
-  certifications?: string;
-  status: 'Active' | 'Inactive' | 'Pending';
-  joinDate: string;
-  lastActivity: string;
-  compliance: number;
-  totalClients: number;
-  totalEquipment: number;
-  completedJobs: number;
-  avgResponseTime: string;
-  notes?: string;
+  
+  // Counts and metrics
+  equipment_count: number;
+  assignments_count: number;
+  
+  // Computed fields for display
+  name?: string;
+  phone?: string;
+  location?: string;
+  status?: string;
+  joinDate?: string;
+  lastActivity?: string;
 }
 
 interface Equipment {
@@ -82,81 +100,66 @@ export default function VendorDetailsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Mock vendor data - in real app, fetch from API
-    const mockVendor: VendorDetails = {
-      id: vendorId,
-      name: 'SafeGuard Fire Systems',
-      email: 'contact@safeguardfire.com',
-      phone: '+1 (555) 123-4567',
-      secondaryPhone: '+1 (555) 123-4568',
-      location: 'New York, NY',
-      address: '123 Fire Safety Blvd, Suite 100',
-      city: 'New York',
-      state: 'NY',
-      zipCode: '10001',
-      country: 'United States',
-      website: 'https://www.safeguardfire.com',
-      businessType: 'Corporation',
-      licenseNumber: 'FS-2024-001',
-      taxId: '12-3456789',
-      contactPerson: 'John Smith',
-      contactTitle: 'Operations Manager',
-      yearsInBusiness: 15,
-      employeeCount: 45,
-      serviceAreas: 'New York, New Jersey, Connecticut',
-      specializations: ['Fire Extinguishers', 'Sprinkler Systems', 'Fire Alarms'],
-      certifications: 'NFPA Certified, State Licensed Fire Safety Inspector, EPA Certified',
-      status: 'Active',
-      joinDate: '2024-01-15',
-      lastActivity: '2 hours ago',
-      compliance: 98,
-      totalClients: 23,
-      totalEquipment: 156,
-      completedJobs: 89,
-      avgResponseTime: '4.2 hours',
-      notes: 'Preferred vendor with excellent track record. Specializes in commercial buildings and has emergency response capability.'
+    const fetchVendorData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Get auth token
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('No authentication token found');
+        }
+
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+
+        // Fetch vendor details
+        const vendorResponse = await fetch(`http://localhost:5000/api/vendors/${vendorId}`, { headers });
+        const vendorResult = await vendorResponse.json();
+
+        if (!vendorResponse.ok) {
+          throw new Error(vendorResult.message || 'Failed to fetch vendor details');
+        }
+
+        if (vendorResult.success && vendorResult.data) {
+          const vendorData = vendorResult.data;
+          
+          // Transform data to include computed fields for display
+          const transformedVendor: VendorDetails = {
+            ...vendorData,
+            name: vendorData.company?.company_name || vendorData.display_name || `${vendorData.first_name} ${vendorData.last_name}`,
+            phone: vendorData.contact?.primary_phone || '',
+            location: vendorData.address ? `${vendorData.address.city}, ${vendorData.address.state}` : '',
+            status: vendorData.is_locked ? 'Inactive' : 'Active',
+            joinDate: new Date(vendorData.created_at).toLocaleDateString(),
+            lastActivity: vendorData.last_login ? new Date(vendorData.last_login).toLocaleDateString() : 'Never'
+          };
+          
+          setVendor(transformedVendor);
+        } else {
+          throw new Error('Vendor not found');
+        }
+
+        // For now, set empty equipment array - we can implement equipment fetching later
+        setEquipment([]);
+
+      } catch (err) {
+        console.error('Error fetching vendor data:', err);
+        // Optionally redirect to vendors list or show error message
+        router.push('/dashboard/super-admin/vendors');
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    const mockEquipment: Equipment[] = [
-      {
-        id: 1,
-        type: 'Fire Extinguisher',
-        model: 'Amerex B500',
-        location: 'Building A - Floor 2',
-        clientName: 'Tech Corp Inc.',
-        lastInspection: '2024-08-15',
-        nextInspection: '2025-08-15',
-        status: 'Good',
-        compliance: 100
-      },
-      {
-        id: 2,
-        type: 'Sprinkler System',
-        model: 'Viking VK302',
-        location: 'Main Warehouse',
-        clientName: 'Logistics Plus',
-        lastInspection: '2024-09-10',
-        nextInspection: '2025-03-10',
-        status: 'Good',
-        compliance: 95
-      },
-      {
-        id: 3,
-        type: 'Fire Alarm Panel',
-        model: 'Simplex 4100ES',
-        location: 'Reception Area',
-        clientName: 'Office Complex LLC',
-        lastInspection: '2024-07-20',
-        nextInspection: '2024-10-20',
-        status: 'Needs Attention',
-        compliance: 85
-      }
-    ];
-
-    setVendor(mockVendor);
-    setEquipment(mockEquipment);
-    setIsLoading(false);
-  }, [vendorId]);
+    if (vendorId && !isNaN(vendorId)) {
+      fetchVendorData();
+    } else {
+      router.push('/dashboard/super-admin/vendors');
+    }
+  }, [vendorId, router]);
 
   const handleDeleteVendor = () => {
     if (confirm('Are you sure you want to delete this vendor? This action cannot be undone.')) {
@@ -232,11 +235,11 @@ export default function VendorDetailsPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{vendor.name}</h1>
               <div className="flex items-center space-x-4 mt-1">
-                <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(vendor.status)}`}>
-                  {vendor.status}
+                <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(vendor.status || 'Active')}`}>
+                  {vendor.status || 'Active'}
                 </span>
                 <span className="text-sm text-gray-500">
-                  Member since {new Date(vendor.joinDate).toLocaleDateString()}
+                  Member since {vendor.joinDate || 'N/A'}
                 </span>
               </div>
             </div>
@@ -280,8 +283,8 @@ export default function VendorDetailsPage() {
                 <UserIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Clients</p>
-                <p className="text-2xl font-bold text-gray-900">{vendor.totalClients}</p>
+                <p className="text-sm font-medium text-gray-600">Total Assignments</p>
+                <p className="text-2xl font-bold text-gray-900">{vendor.assignments_count}</p>
               </div>
             </div>
           </div>
@@ -293,7 +296,7 @@ export default function VendorDetailsPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Equipment</p>
-                <p className="text-2xl font-bold text-gray-900">{vendor.totalEquipment}</p>
+                <p className="text-2xl font-bold text-gray-900">{vendor.equipment_count}</p>
               </div>
             </div>
           </div>
@@ -304,8 +307,8 @@ export default function VendorDetailsPage() {
                 <CheckCircleIcon className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Completed Jobs</p>
-                <p className="text-2xl font-bold text-gray-900">{vendor.completedJobs}</p>
+                <p className="text-sm font-medium text-gray-600">Specializations</p>
+                <p className="text-2xl font-bold text-gray-900">{vendor.specializations.length}</p>
               </div>
             </div>
           </div>
@@ -316,8 +319,8 @@ export default function VendorDetailsPage() {
                 <ChartBarIcon className="h-6 w-6 text-orange-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Compliance</p>
-                <p className="text-2xl font-bold text-gray-900">{vendor.compliance}%</p>
+                <p className="text-sm font-medium text-gray-600">Status</p>
+                <p className="text-2xl font-bold text-gray-900">{vendor.status || 'Active'}</p>
               </div>
             </div>
           </div>
@@ -361,39 +364,31 @@ export default function VendorDetailsPage() {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Contact Person</label>
-                        <p className="text-sm text-gray-900">{vendor.contactPerson}</p>
-                        <p className="text-xs text-gray-500">{vendor.contactTitle}</p>
+                        <p className="text-sm text-gray-900">{vendor.contact?.contact_person_name || 'N/A'}</p>
+                        <p className="text-xs text-gray-500">{vendor.contact?.contact_title || ''}</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Primary Email</label>
-                        <p className="text-sm text-gray-900">{vendor.email}</p>
+                        <p className="text-sm text-gray-900">{vendor.contact?.primary_email || vendor.email}</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Primary Phone</label>
-                        <p className="text-sm text-gray-900">{vendor.phone}</p>
+                        <p className="text-sm text-gray-900">{vendor.phone || 'N/A'}</p>
                       </div>
-                      {vendor.secondaryPhone && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Secondary Phone</label>
-                          <p className="text-sm text-gray-900">{vendor.secondaryPhone}</p>
-                        </div>
-                      )}
                     </div>
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Address</label>
-                        <p className="text-sm text-gray-900">{vendor.address}</p>
-                        <p className="text-sm text-gray-900">{vendor.city}, {vendor.state} {vendor.zipCode}</p>
-                        <p className="text-sm text-gray-900">{vendor.country}</p>
+                        {vendor.address ? (
+                          <>
+                            <p className="text-sm text-gray-900">{vendor.address.street_address}</p>
+                            <p className="text-sm text-gray-900">{vendor.address.city}, {vendor.address.state} {vendor.address.zip_code}</p>
+                            <p className="text-sm text-gray-900">{vendor.address.country}</p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-gray-900">N/A</p>
+                        )}
                       </div>
-                      {vendor.website && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Website</label>
-                          <a href={vendor.website} target="_blank" rel="noopener noreferrer" className="text-sm text-red-600 hover:text-red-700">
-                            {vendor.website}
-                          </a>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -406,28 +401,28 @@ export default function VendorDetailsPage() {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
+                      <label className="block text-sm font-medium text-gray-700">Company Name</label>
+                      <p className="text-sm text-gray-900">{vendor.company?.company_name || 'N/A'}</p>
+                    </div>
+                    <div>
                       <label className="block text-sm font-medium text-gray-700">Business Type</label>
-                      <p className="text-sm text-gray-900">{vendor.businessType}</p>
+                      <p className="text-sm text-gray-900">{vendor.company?.business_type || 'N/A'}</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">License Number</label>
-                      <p className="text-sm text-gray-900">{vendor.licenseNumber}</p>
+                      <p className="text-sm text-gray-900">{vendor.company?.license_number || 'N/A'}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Tax ID</label>
-                      <p className="text-sm text-gray-900">{vendor.taxId}</p>
+                      <label className="block text-sm font-medium text-gray-700">Email</label>
+                      <p className="text-sm text-gray-900">{vendor.email}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Years in Business</label>
-                      <p className="text-sm text-gray-900">{vendor.yearsInBusiness} years</p>
+                      <label className="block text-sm font-medium text-gray-700">Account Status</label>
+                      <p className="text-sm text-gray-900">{vendor.is_locked ? 'Locked' : 'Active'}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Employee Count</label>
-                      <p className="text-sm text-gray-900">{vendor.employeeCount} employees</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Average Response Time</label>
-                      <p className="text-sm text-gray-900">{vendor.avgResponseTime}</p>
+                      <label className="block text-sm font-medium text-gray-700">Last Login</label>
+                      <p className="text-sm text-gray-900">{vendor.lastActivity || 'Never'}</p>
                     </div>
                   </div>
                 </div>
@@ -436,42 +431,25 @@ export default function VendorDetailsPage() {
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                     <ShieldCheckIcon className="h-5 w-5 text-red-600 mr-2" />
-                    Services & Specializations
+                    Specializations
                   </h3>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Service Areas</label>
-                      <p className="text-sm text-gray-900">{vendor.serviceAreas}</p>
-                    </div>
-                    <div>
                       <label className="block text-sm font-medium text-gray-700">Specializations</label>
                       <div className="flex flex-wrap gap-2 mt-1">
-                        {vendor.specializations.map((spec, index) => (
-                          <span key={index} className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-red-50 text-red-800 border border-red-200">
-                            {spec}
-                          </span>
-                        ))}
+                        {vendor.specializations && vendor.specializations.length > 0 ? (
+                          vendor.specializations.map((spec, index) => (
+                            <span key={index} className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-red-50 text-red-800 border border-red-200">
+                              {spec}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-sm text-gray-500">No specializations specified</span>
+                        )}
                       </div>
                     </div>
-                    {vendor.certifications && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Certifications</label>
-                        <p className="text-sm text-gray-900">{vendor.certifications}</p>
-                      </div>
-                    )}
                   </div>
                 </div>
-
-                {/* Additional Notes */}
-                {vendor.notes && (
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                      <DocumentTextIcon className="h-5 w-5 text-red-600 mr-2" />
-                      Additional Notes
-                    </h3>
-                    <p className="text-sm text-gray-900 bg-gray-50 rounded-xl p-4">{vendor.notes}</p>
-                  </div>
-                )}
               </div>
             )}
 

@@ -13,10 +13,17 @@ const vendorController = new VendorController();
 router.use(authenticateToken);
 
 /**
+ * @route   GET /api/vendors/specializations
+ * @desc    Get all available specializations for filter dropdown
+ * @access  Private (super_admin only)
+ */
+router.get('/specializations', vendorController.getSpecializations);
+
+/**
  * @route   GET /api/vendors
  * @desc    Get paginated list of vendors with optional filters
  * @access  Private (super_admin, vendor)
- * @query   page, limit, sort, order, search, status
+ * @query   page, limit, sort, order, search, status, specialization
  */
 router.get('/', vendorController.getVendors);
 

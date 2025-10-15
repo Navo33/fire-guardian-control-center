@@ -100,7 +100,7 @@ export interface EquipmentInstance {
   status: 'available' | 'assigned' | 'maintenance' | 'retired';
   assigned_to?: number;
   assigned_at?: Date;
-  due_date?: Date;
+  expiry_date?: Date;
   created_at: Date;
   deleted_at?: Date;
 }
@@ -201,13 +201,6 @@ export interface VendorCompany {
   company_name: string;
   business_type: string;
   license_number?: string;
-  tax_id?: string;
-  website?: string;
-  years_in_business?: number;
-  employee_count?: number;
-  service_areas?: string;
-  certifications?: string;
-  notes?: string;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -218,9 +211,7 @@ export interface VendorContact {
   contact_person_name: string;
   contact_title?: string;
   primary_email: string;
-  secondary_email?: string;
   primary_phone: string;
-  secondary_phone?: string;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -233,7 +224,6 @@ export interface VendorAddress {
   state: string;
   zip_code: string;
   country: string;
-  is_primary?: boolean;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -253,39 +243,32 @@ export interface VendorSpecialization {
 }
 
 export interface CreateVendorRequest {
-  // Company Information
+  // User Information (for the user table)
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  
+  // Company Information (for vendor_company table)
   companyName: string;
   businessType: string;
   licenseNumber?: string;
-  taxId?: string;
   
-  // Contact Information
+  // Contact Information (for vendor_contact table)
   contactPersonName: string;
   contactTitle?: string;
   primaryEmail: string;
-  secondaryEmail?: string;
   primaryPhone: string;
-  secondaryPhone?: string;
   
-  // Address Information
+  // Address Information (for vendor_address table)
   streetAddress: string;
   city: string;
   state: string;
   zipCode: string;
-  country: string;
+  country?: string; // defaults to 'Sri Lanka'
   
-  // Business Details
-  website?: string;
-  yearsInBusiness?: number;
-  employeeCount?: number;
-  serviceAreas?: string;
-  
-  // Specializations
+  // Specializations (for vendor_specialization table)
   specializations: string[];
-  certifications?: string;
-  
-  // Additional Information
-  notes?: string;
 }
 
 export interface DetailedVendor extends User {

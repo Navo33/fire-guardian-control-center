@@ -1,4 +1,5 @@
 import { pool } from '../config/database';
+import bcrypt from 'bcryptjs';
 import { User, CreateVendorRequest, DetailedVendor, VendorCompany, VendorContact, VendorAddress } from '../types';
 import { PaginationQuery } from '../types/api';
 import { DebugLogger } from '../utils/DebugLogger';
@@ -6,6 +7,7 @@ import { DebugLogger } from '../utils/DebugLogger';
 export interface VendorFilters {
   status?: string;
   search?: string;
+  specialization?: string;
 }
 
 export interface VendorUpdateData {
@@ -37,19 +39,34 @@ export class VendorRepository {
     if (filters.search) {
       paramCount++;
       whereClause += ` AND (
-        first_name ILIKE $${paramCount} OR 
-        last_name ILIKE $${paramCount} OR 
-        display_name ILIKE $${paramCount} OR 
-        email ILIKE $${paramCount}
+        u.first_name ILIKE $${paramCount} OR 
+        u.last_name ILIKE $${paramCount} OR 
+        u.display_name ILIKE $${paramCount} OR 
+        u.email ILIKE $${paramCount} OR
+        vc.company_name ILIKE $${paramCount} OR
+        va.city ILIKE $${paramCount} OR
+        va.state ILIKE $${paramCount}
       )`;
       queryParams.push(`%${filters.search}%`);
     }
 
-    // Add status filter (for future use - active/inactive vendors)
+    // Add status filter
     if (filters.status) {
       paramCount++;
-      whereClause += ` AND is_locked = $${paramCount}`;
+      whereClause += ` AND u.is_locked = $${paramCount}`;
       queryParams.push(filters.status === 'inactive');
+    }
+
+    // Add specialization filter
+    if (filters.specialization) {
+      paramCount++;
+      whereClause += ` AND u.id IN (
+        SELECT vs.vendor_id 
+        FROM vendor_specialization vs 
+        JOIN specialization s ON vs.specialization_id = s.id 
+        WHERE s.name ILIKE $${paramCount}
+      )`;
+      queryParams.push(`%${filters.specialization}%`);
     }
 
     // Add sorting
@@ -60,13 +77,34 @@ export class VendorRepository {
 
     const query = `
       SELECT 
-        id, first_name, last_name, display_name, email, 
-        user_type, is_locked, last_login, created_at,
-        (SELECT COUNT(*) FROM vendor_location WHERE vendor_id = "user".id) as locations_count,
-        (SELECT COUNT(*) FROM equipment_instance ei 
-         JOIN vendor_location vl ON vl.id = ei.vendor_location_id 
-         WHERE vl.vendor_id = "user".id AND ei.deleted_at IS NULL) as equipment_count
-      FROM "user" 
+        u.id, u.first_name, u.last_name, u.display_name, u.email, 
+        u.user_type, u.is_locked, u.last_login, u.created_at,
+        
+        -- Company details
+        vc.company_name, vc.business_type, vc.license_number,
+        
+        -- Contact details
+        vcon.contact_person_name, vcon.contact_title, vcon.primary_email, vcon.primary_phone,
+        
+        -- Address details
+        va.street_address, va.city, va.state, va.zip_code, va.country,
+        
+        -- Equipment count
+        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = u.id AND deleted_at IS NULL) as equipment_count,
+        
+        -- Client assignments count  
+        (SELECT COUNT(DISTINCT client_id) FROM equipment_assignment WHERE vendor_id = u.id) as client_count,
+        
+        -- Specializations (comma-separated)
+        (SELECT STRING_AGG(s.name, ', ') 
+         FROM vendor_specialization vs 
+         JOIN specialization s ON s.id = vs.specialization_id 
+         WHERE vs.vendor_id = u.id) as specializations
+         
+      FROM "user" u
+      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
+      LEFT JOIN vendor_contact vcon ON vcon.vendor_id = u.id
+      LEFT JOIN vendor_address va ON va.vendor_id = u.id
       ${whereClause}
       ORDER BY ${orderBy} ${orderDirection}
       LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
@@ -83,8 +121,19 @@ export class VendorRepository {
 
       return result.rows.map(row => ({
         ...row,
-        locations_count: parseInt(row.locations_count) || 0,
-        equipment_count: parseInt(row.equipment_count) || 0
+        equipment_count: parseInt(row.equipment_count) || 0,
+        client_count: parseInt(row.client_count) || 0,
+        // Add computed fields that frontend expects
+        name: row.company_name || row.display_name || `${row.first_name} ${row.last_name}`,
+        phone: row.primary_phone || '',
+        location: row.city && row.state ? `${row.city}, ${row.state}` : '',
+        category: row.specializations || 'General',
+        status: row.is_locked ? 'Inactive' : 'Active',
+        joinDate: new Date(row.created_at).toLocaleDateString(),
+        lastActivity: row.last_login ? new Date(row.last_login).toLocaleDateString() : 'Never',
+        compliance: Math.floor(Math.random() * 30) + 70, // Temporary mock data
+        clients: parseInt(row.client_count) || 0,
+        equipment: parseInt(row.equipment_count) || 0
       }));
     } catch (error) {
       DebugLogger.error('Error getting vendors', error);
@@ -104,10 +153,13 @@ export class VendorRepository {
     if (filters.search) {
       paramCount++;
       whereClause += ` AND (
-        first_name ILIKE $${paramCount} OR 
-        last_name ILIKE $${paramCount} OR 
-        display_name ILIKE $${paramCount} OR 
-        email ILIKE $${paramCount}
+        u.first_name ILIKE $${paramCount} OR 
+        u.last_name ILIKE $${paramCount} OR 
+        u.display_name ILIKE $${paramCount} OR 
+        u.email ILIKE $${paramCount} OR
+        vc.company_name ILIKE $${paramCount} OR
+        va.city ILIKE $${paramCount} OR
+        va.state ILIKE $${paramCount}
       )`;
       queryParams.push(`%${filters.search}%`);
     }
@@ -115,11 +167,29 @@ export class VendorRepository {
     // Add status filter
     if (filters.status) {
       paramCount++;
-      whereClause += ` AND is_locked = $${paramCount}`;
+      whereClause += ` AND u.is_locked = $${paramCount}`;
       queryParams.push(filters.status === 'inactive');
     }
 
-    const query = `SELECT COUNT(*) FROM "user" ${whereClause}`;
+    // Add specialization filter
+    if (filters.specialization) {
+      paramCount++;
+      whereClause += ` AND u.id IN (
+        SELECT vs.vendor_id 
+        FROM vendor_specialization vs 
+        JOIN specialization s ON vs.specialization_id = s.id 
+        WHERE s.name ILIKE $${paramCount}
+      )`;
+      queryParams.push(`%${filters.specialization}%`);
+    }
+
+    const query = `
+      SELECT COUNT(DISTINCT u.id) 
+      FROM "user" u
+      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
+      LEFT JOIN vendor_address va ON va.vendor_id = u.id
+      ${whereClause}
+    `;
 
     DebugLogger.database('GET_VENDORS_COUNT', query, queryParams);
 
@@ -146,29 +216,23 @@ export class VendorRepository {
         u.user_type, u.is_locked, u.last_login, u.created_at,
         
         -- Company details
-        vc.company_name, vc.business_type, vc.license_number, vc.tax_id,
-        vc.website, vc.years_in_business, vc.employee_count, vc.service_areas,
-        vc.certifications, vc.notes as company_notes,
+        vc.company_name, vc.business_type, vc.license_number,
         
         -- Contact details
         vcon.contact_person_name, vcon.contact_title, vcon.primary_email as contact_primary_email,
-        vcon.secondary_email, vcon.primary_phone, vcon.secondary_phone,
+        vcon.primary_phone,
         
         -- Address details
         va.street_address, va.city, va.state, va.zip_code, va.country,
         
         -- Aggregated counts
-        (SELECT COUNT(*) FROM vendor_location WHERE vendor_id = u.id) as locations_count,
-        (SELECT COUNT(*) FROM equipment_instance ei 
-         JOIN vendor_location vl ON vl.id = ei.vendor_location_id 
-         WHERE vl.vendor_id = u.id AND ei.deleted_at IS NULL) as equipment_count,
-        (SELECT COUNT(*) FROM equipment_assignment ea 
-         WHERE ea.assigned_by = u.id) as assignments_count
+        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = u.id AND deleted_at IS NULL) as equipment_count,
+        (SELECT COUNT(*) FROM equipment_assignment ea WHERE ea.vendor_id = u.id) as assignments_count
          
       FROM "user" u
       LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
       LEFT JOIN vendor_contact vcon ON vcon.vendor_id = u.id
-      LEFT JOIN vendor_address va ON va.vendor_id = u.id AND va.is_primary = true
+      LEFT JOIN vendor_address va ON va.vendor_id = u.id
       WHERE u.id = $1 AND u.user_type = 'vendor' AND u.deleted_at IS NULL
     `;
 
@@ -212,14 +276,7 @@ export class VendorRepository {
           vendor_id: row.id,
           company_name: row.company_name,
           business_type: row.business_type,
-          license_number: row.license_number,
-          tax_id: row.tax_id,
-          website: row.website,
-          years_in_business: row.years_in_business,
-          employee_count: row.employee_count,
-          service_areas: row.service_areas,
-          certifications: row.certifications,
-          notes: row.company_notes
+          license_number: row.license_number
         } : undefined,
         
         contact: row.contact_person_name ? {
@@ -227,9 +284,7 @@ export class VendorRepository {
           contact_person_name: row.contact_person_name,
           contact_title: row.contact_title,
           primary_email: row.contact_primary_email,
-          secondary_email: row.secondary_email,
-          primary_phone: row.primary_phone,
-          secondary_phone: row.secondary_phone
+          primary_phone: row.primary_phone
         } : undefined,
         
         address: row.street_address ? {
@@ -238,14 +293,12 @@ export class VendorRepository {
           city: row.city,
           state: row.state,
           zip_code: row.zip_code,
-          country: row.country,
-          is_primary: true
+          country: row.country
         } : undefined,
         
         specializations: specializations,
         
         // Add the counts as additional properties
-        locations_count: parseInt(row.locations_count) || 0,
         equipment_count: parseInt(row.equipment_count) || 0,
         assignments_count: parseInt(row.assignments_count) || 0
       };
@@ -270,24 +323,20 @@ export class VendorRepository {
 
       // Step 1: Create the base user record
       const userQuery = `
-        INSERT INTO "user" (first_name, last_name, email, password, user_type)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO "user" (first_name, last_name, email, password, user_type, role_id)
+        VALUES ($1, $2, $3, $4, $5, (SELECT id FROM role WHERE role_name = 'vendor'))
         RETURNING id, first_name, last_name, display_name, email, user_type, is_locked, created_at
       `;
       
-      // Extract first and last name from contact person name
-      const nameParts = vendorData.contactPersonName.trim().split(' ');
-      const firstName = nameParts[0];
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-      
-      // Generate a temporary password (should be changed on first login)
-      const tempPassword = Math.random().toString(36).slice(-10);
+      // Hash the password
+      const saltRounds = parseInt(process.env.BCRYPT_ROUNDS || '12');
+      const hashedPassword = await bcrypt.hash(vendorData.password, saltRounds);
       
       const userValues = [
-        firstName,
-        lastName,
-        vendorData.primaryEmail,
-        tempPassword, // This should be properly hashed in production
+        vendorData.firstName,
+        vendorData.lastName,
+        vendorData.email,
+        hashedPassword,
         'vendor'
       ];
 
@@ -298,10 +347,9 @@ export class VendorRepository {
       // Step 2: Create vendor company record
       const companyQuery = `
         INSERT INTO vendor_company (
-          vendor_id, company_name, business_type, license_number, tax_id,
-          website, years_in_business, employee_count, service_areas, certifications, notes
+          vendor_id, company_name, business_type, license_number
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4)
         RETURNING *
       `;
 
@@ -309,14 +357,7 @@ export class VendorRepository {
         newUser.id,
         vendorData.companyName,
         vendorData.businessType,
-        vendorData.licenseNumber || null,
-        vendorData.taxId || null,
-        vendorData.website || null,
-        vendorData.yearsInBusiness || 0,
-        vendorData.employeeCount || 1,
-        vendorData.serviceAreas || null,
-        vendorData.certifications || null,
-        vendorData.notes || null
+        vendorData.licenseNumber || null
       ];
 
       DebugLogger.database('CREATE_VENDOR_COMPANY', companyQuery, companyValues);
@@ -325,10 +366,9 @@ export class VendorRepository {
       // Step 3: Create vendor contact record
       const contactQuery = `
         INSERT INTO vendor_contact (
-          vendor_id, contact_person_name, contact_title, primary_email, secondary_email,
-          primary_phone, secondary_phone
+          vendor_id, contact_person_name, contact_title, primary_email, primary_phone
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
       `;
 
@@ -337,9 +377,7 @@ export class VendorRepository {
         vendorData.contactPersonName,
         vendorData.contactTitle || null,
         vendorData.primaryEmail,
-        vendorData.secondaryEmail || null,
-        vendorData.primaryPhone,
-        vendorData.secondaryPhone || null
+        vendorData.primaryPhone
       ];
 
       DebugLogger.database('CREATE_VENDOR_CONTACT', contactQuery, contactValues);
@@ -348,9 +386,9 @@ export class VendorRepository {
       // Step 4: Create vendor address record
       const addressQuery = `
         INSERT INTO vendor_address (
-          vendor_id, street_address, city, state, zip_code, country, is_primary
+          vendor_id, street_address, city, state, zip_code, country
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
       `;
 
@@ -360,8 +398,7 @@ export class VendorRepository {
         vendorData.city,
         vendorData.state,
         vendorData.zipCode,
-        vendorData.country || 'Sri Lanka',
-        true
+        vendorData.country || 'Sri Lanka'
       ];
 
       DebugLogger.database('CREATE_VENDOR_ADDRESS', addressQuery, addressValues);
@@ -570,5 +607,24 @@ export class VendorRepository {
     DebugLogger.log('Vendor stats generated', { vendorId, stats }, 'VENDOR_STATS');
 
     return stats;
+  }
+
+  /**
+   * Get all available specializations for filter dropdown
+   */
+  static async getSpecializations(): Promise<{ id: number; name: string; }[]> {
+    const query = `
+      SELECT id, name 
+      FROM specialization 
+      ORDER BY name ASC
+    `;
+    
+    try {
+      const result = await pool.query(query);
+      return result.rows;
+    } catch (error) {
+      console.error('Error getting specializations:', error);
+      throw error;
+    }
   }
 }

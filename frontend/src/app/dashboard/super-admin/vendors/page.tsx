@@ -11,7 +11,10 @@ import {
   MagnifyingGlassIcon,
   FunnelIcon,
   PlusIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  UserGroupIcon,
+  WrenchScrewdriverIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline';
 
 interface Vendor {
@@ -29,13 +32,24 @@ interface Vendor {
   category: string;
 }
 
+interface VendorStats {
+  totalVendors: number;
+  activeVendors: number;
+  inactiveVendors: number;
+  totalClients: number;
+  totalEquipment: number;
+  recentlyJoined: number;
+}
+
 export default function VendorManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [specializationFilter, setSpecializationFilter] = useState('All');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [specializations, setSpecializations] = useState<{id: number; name: string}[]>([]);
+  const [vendorStats, setVendorStats] = useState<VendorStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -59,7 +73,7 @@ export default function VendorManagementPage() {
       const params = new URLSearchParams();
       if (searchTerm.trim()) params.append('search', searchTerm.trim());
       if (statusFilter !== 'All') params.append('status', statusFilter);
-      if (categoryFilter !== 'All') params.append('category', categoryFilter);
+      if (specializationFilter !== 'All') params.append('specialization', specializationFilter);
 
       const response = await fetch(`http://localhost:5000/api/vendors?${params.toString()}`, { headers });
       const result = await response.json();
@@ -77,10 +91,60 @@ export default function VendorManagementPage() {
     }
   };
 
+  // Fetch specializations for dropdown
+  const fetchSpecializations = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      const response = await fetch('http://localhost:5000/api/vendors/specializations', { headers });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setSpecializations(result.data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching specializations:', err);
+    }
+  };
+
+  // Fetch vendor statistics
+  const fetchVendorStats = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      const response = await fetch('http://localhost:5000/api/users/vendors/stats', { headers });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setVendorStats(result.data);
+      }
+    } catch (err) {
+      console.error('Error fetching vendor stats:', err);
+    }
+  };
+
   // Fetch vendors on component mount and when filters change
   useEffect(() => {
     fetchVendors();
-  }, [searchTerm, statusFilter, categoryFilter]);
+  }, [searchTerm, statusFilter, specializationFilter]);
+
+  // Fetch specializations on component mount
+  useEffect(() => {
+    fetchSpecializations();
+    fetchVendorStats();
+  }, []);
 
   // Handle successful vendor creation
   const handleVendorCreated = () => {
@@ -140,9 +204,14 @@ export default function VendorManagementPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Vendor Management</h1>
-            <p className="text-gray-600 mt-1">Manage and monitor all fire safety vendors</p>
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <BuildingOfficeIcon className="h-8 w-8 text-gray-900" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Vendor Management</h1>
+              <p className="text-gray-600 mt-1">Manage and monitor all fire safety vendors</p>
+            </div>
           </div>
           <button 
             onClick={() => setIsAddModalOpen(true)}
@@ -152,6 +221,59 @@ export default function VendorManagementPage() {
             <span>Add New Vendor</span>
           </button>
         </div>
+
+        {/* Stats Cards */}
+        {vendorStats && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <BuildingOfficeIcon className="h-8 w-8 text-blue-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Vendors</p>
+                  <p className="text-2xl font-bold text-gray-900">{vendorStats.totalVendors}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <CheckIcon className="h-8 w-8 text-green-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Active Vendors</p>
+                  <p className="text-2xl font-bold text-gray-900">{vendorStats.activeVendors}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <UserGroupIcon className="h-8 w-8 text-purple-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Clients</p>
+                  <p className="text-2xl font-bold text-gray-900">{vendorStats.totalClients}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <WrenchScrewdriverIcon className="h-8 w-8 text-orange-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Equipment</p>
+                  <p className="text-2xl font-bold text-gray-900">{vendorStats.totalEquipment}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Search and Filters */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6">
@@ -186,15 +308,16 @@ export default function VendorManagementPage() {
 
               <div className="relative">
                 <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="input-field appearance-none pr-8 min-w-[140px]"
+                  value={specializationFilter}
+                  onChange={(e) => setSpecializationFilter(e.target.value)}
+                  className="input-field appearance-none pr-8 min-w-[160px]"
                 >
-                  <option value="All">All Categories</option>
-                  <option value="Fire Extinguishers">Fire Extinguishers</option>
-                  <option value="Sprinkler Systems">Sprinkler Systems</option>
-                  <option value="Emergency Lighting">Emergency Lighting</option>
-                  <option value="Fire Alarms">Fire Alarms</option>
+                  <option value="All">All Specializations</option>
+                  {specializations.map((spec) => (
+                    <option key={spec.id} value={spec.name}>
+                      {spec.name}
+                    </option>
+                  ))}
                 </select>
                 <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
               </div>

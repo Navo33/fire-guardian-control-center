@@ -18,19 +18,24 @@ import {
 
 // Vendor form validation schema
 const vendorSchema = z.object({
+  // User Information
+  firstName: z.string().min(2, 'First name must be at least 2 characters'),
+  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
+  email: z.string().email('Please enter a valid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters')
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, 
+    'Password must contain uppercase, lowercase, number and special character'),
+  
   // Company Information
   companyName: z.string().min(2, 'Company name must be at least 2 characters'),
   businessType: z.string().min(1, 'Please select a business type'),
-  licenseNumber: z.string().min(1, 'License number is required'),
-  taxId: z.string().min(1, 'Tax ID is required'),
+  licenseNumber: z.string().optional(),
   
   // Contact Information
   contactPersonName: z.string().min(2, 'Contact person name is required'),
-  contactTitle: z.string().min(1, 'Contact title is required'),
+  contactTitle: z.string().optional(),
   primaryEmail: z.string().email('Please enter a valid email address'),
-  secondaryEmail: z.string().email('Please enter a valid email').optional().or(z.literal('')),
   primaryPhone: z.string().min(10, 'Please enter a valid phone number'),
-  secondaryPhone: z.string().optional(),
   
   // Address Information
   streetAddress: z.string().min(5, 'Street address is required'),
@@ -39,18 +44,8 @@ const vendorSchema = z.object({
   zipCode: z.string().min(5, 'Valid ZIP code is required'),
   country: z.string().min(2, 'Country is required'),
   
-  // Business Details
-  website: z.string().url('Please enter a valid website URL').optional().or(z.literal('')),
-  yearsInBusiness: z.number().min(0, 'Years in business must be 0 or more'),
-  employeeCount: z.number().min(1, 'Employee count must be at least 1'),
-  serviceAreas: z.string().min(1, 'Service areas are required'),
-  
   // Specializations
   specializations: z.array(z.string()).min(1, 'Please select at least one specialization'),
-  certifications: z.string().optional(),
-  
-  // Additional Information
-  notes: z.string().optional(),
 });
 
 type VendorFormData = z.infer<typeof vendorSchema>;
@@ -78,17 +73,37 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
     defaultValues: {
       specializations: [],
       country: 'Sri Lanka',
+      primaryEmail: '', // Will be set to same as email when email changes
     },
   });
 
   const watchSpecializations = watch('specializations');
+  const watchEmail = watch('email');
+
+  // Sync primaryEmail with email
+  React.useEffect(() => {
+    if (watchEmail) {
+      setValue('primaryEmail', watchEmail);
+    }
+  }, [watchEmail, setValue]);
 
   const businessTypes = [
-    'Corporation',
+    'Private Limited',
     'LLC',
     'Partnership',
-    'Sole Proprietorship',
-    'Non-Profit'
+    'Sole Proprietorship'
+  ];
+
+  const sriLankanProvinces = [
+    'Western Province',
+    'Central Province',
+    'Southern Province',
+    'Northern Province',
+    'Eastern Province',
+    'North Western Province',
+    'North Central Province',
+    'Uva Province',
+    'Sabaragamuwa Province'
   ];
 
   const specializationOptions = [
@@ -208,6 +223,77 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
           {/* Form Content */}
           <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
             <form onSubmit={handleSubmit(onFormSubmit)} className="p-6 space-y-8">
+              
+              {/* User Information Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <UserIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">User Information</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      First Name *
+                    </label>
+                    <input
+                      type="text"
+                      className={`input-field ${errors.firstName ? 'border-red-500' : ''}`}
+                      placeholder="Enter first name"
+                      {...register('firstName')}
+                    />
+                    {errors.firstName && (
+                      <p className="mt-1 text-sm text-red-600">{errors.firstName.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Last Name *
+                    </label>
+                    <input
+                      type="text"
+                      className={`input-field ${errors.lastName ? 'border-red-500' : ''}`}
+                      placeholder="Enter last name"
+                      {...register('lastName')}
+                    />
+                    {errors.lastName && (
+                      <p className="mt-1 text-sm text-red-600">{errors.lastName.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email *
+                    </label>
+                    <input
+                      type="email"
+                      className={`input-field ${errors.email ? 'border-red-500' : ''}`}
+                      placeholder="Enter email address"
+                      {...register('email')}
+                    />
+                    {errors.email && (
+                      <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Password *
+                    </label>
+                    <input
+                      type="password"
+                      className={`input-field ${errors.password ? 'border-red-500' : ''}`}
+                      placeholder="Enter password"
+                      {...register('password')}
+                    />
+                    {errors.password && (
+                      <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Company Information Section */}
               <div className="space-y-6">
                 <div className="flex items-center space-x-2">
@@ -248,13 +334,28 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                       <p className="mt-1 text-sm text-red-600">{errors.businessType.message}</p>
                     )}
                   </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      License Number (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      className={`input-field ${errors.licenseNumber ? 'border-red-500' : ''}`}
+                      placeholder="Enter license number"
+                      {...register('licenseNumber')}
+                    />
+                    {errors.licenseNumber && (
+                      <p className="mt-1 text-sm text-red-600">{errors.licenseNumber.message}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* Contact Information Section */}
               <div className="space-y-6">
                 <div className="flex items-center space-x-2">
-                  <UserIcon className="h-5 w-5 text-red-600" />
+                  <PhoneIcon className="h-5 w-5 text-red-600" />
                   <h3 className="text-lg font-medium text-gray-900">Contact Information</h3>
                 </div>
                 
@@ -276,7 +377,7 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Title *
+                      Contact Title (Optional)
                     </label>
                     <input
                       type="text"
@@ -295,28 +396,12 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                     </label>
                     <input
                       type="email"
-                      className={`input-field ${errors.primaryEmail ? 'border-red-500' : ''}`}
-                      placeholder="contact@company.com"
+                      className="input-field bg-gray-50"
+                      placeholder="Auto-filled from user email"
                       {...register('primaryEmail')}
+                      readOnly
                     />
-                    {errors.primaryEmail && (
-                      <p className="mt-1 text-sm text-red-600">{errors.primaryEmail.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Secondary Email
-                    </label>
-                    <input
-                      type="email"
-                      className={`input-field ${errors.secondaryEmail ? 'border-red-500' : ''}`}
-                      placeholder="backup@company.com"
-                      {...register('secondaryEmail')}
-                    />
-                    {errors.secondaryEmail && (
-                      <p className="mt-1 text-sm text-red-600">{errors.secondaryEmail.message}</p>
-                    )}
+                    <p className="mt-1 text-xs text-gray-500">This will be the same as the user email above</p>
                   </div>
 
                   <div>
@@ -326,24 +411,12 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                     <input
                       type="tel"
                       className={`input-field ${errors.primaryPhone ? 'border-red-500' : ''}`}
-                      placeholder="+1 (555) 123-4567"
+                      placeholder="+94 XX XXX XXXX"
                       {...register('primaryPhone')}
                     />
                     {errors.primaryPhone && (
                       <p className="mt-1 text-sm text-red-600">{errors.primaryPhone.message}</p>
                     )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Secondary Phone
-                    </label>
-                    <input
-                      type="tel"
-                      className="input-field"
-                      placeholder="+1 (555) 987-6543"
-                      {...register('secondaryPhone')}
-                    />
                   </div>
                 </div>
               </div>
@@ -379,7 +452,7 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                       <input
                         type="text"
                         className={`input-field ${errors.city ? 'border-red-500' : ''}`}
-                        placeholder="New York"
+                        placeholder="Colombo"
                         {...register('city')}
                       />
                       {errors.city && (
@@ -389,14 +462,17 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        State *
+                        Province *
                       </label>
-                      <input
-                        type="text"
+                      <select
                         className={`input-field ${errors.state ? 'border-red-500' : ''}`}
-                        placeholder="NY"
                         {...register('state')}
-                      />
+                      >
+                        <option value="">Select province</option>
+                        {sriLankanProvinces.map(province => (
+                          <option key={province} value={province}>{province}</option>
+                        ))}
+                      </select>
                       {errors.state && (
                         <p className="mt-1 text-sm text-red-600">{errors.state.message}</p>
                       )}
@@ -409,7 +485,7 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                       <input
                         type="text"
                         className={`input-field ${errors.zipCode ? 'border-red-500' : ''}`}
-                        placeholder="10001"
+                        placeholder="00100"
                         {...register('zipCode')}
                       />
                       {errors.zipCode && (
@@ -423,29 +499,49 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                       </label>
                       <input
                         type="text"
-                        className={`input-field ${errors.country ? 'border-red-500' : ''}`}
+                        className="input-field bg-gray-50"
                         {...register('country')}
+                        readOnly
                       />
-                      {errors.country && (
-                        <p className="mt-1 text-sm text-red-600">{errors.country.message}</p>
-                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Additional Notes Section */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Additional Notes
-                  </label>
-                  <textarea
-                    rows={4}
-                    className="input-field resize-none"
-                    placeholder="Any additional information about this vendor..."
-                    {...register('notes')}
-                  />
+              {/* Specializations Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <ShieldCheckIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">Specializations</h3>
+                </div>
+                
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    Select the areas of expertise for this vendor (at least one required):
+                  </p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {specializationOptions.map((specialization) => (
+                      <label
+                        key={specialization}
+                        className="flex items-center p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500 focus:ring-2"
+                          checked={watchSpecializations?.includes(specialization) || false}
+                          onChange={(e) => handleSpecializationChange(specialization, e.target.checked)}
+                        />
+                        <span className="ml-3 text-sm font-medium text-gray-700">
+                          {specialization}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  
+                  {errors.specializations && (
+                    <p className="text-sm text-red-600">{errors.specializations.message}</p>
+                  )}
                 </div>
               </div>
 

@@ -16,6 +16,8 @@ import { DebugLogger } from './utils/DebugLogger';
 import authRoutes from './routes/auth';
 import dashboardRoutes from './routes/dashboard';
 import vendorRoutes from './routes/vendors';
+import analyticsRoutes from './routes/analytics';
+import usersRoutes from './routes/users';
 
 // Load environment variables
 dotenv.config();
@@ -126,6 +128,8 @@ app.get('/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

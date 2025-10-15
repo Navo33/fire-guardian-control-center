@@ -34,12 +34,26 @@ interface DashboardStats {
 interface RecentVendor {
   id: number;
   name: string;
+  email: string;
+  phone: string;
+  location: string;
+  category: string;
   clients: number;
   equipment: number;
   status: string;
   joinDate: string;
   lastActivity: string;
   compliance: number;
+  // Additional fields from backend
+  display_name?: string;
+  company_name?: string;
+  primary_phone?: string;
+  city?: string;
+  state?: string;
+  equipment_count?: number;
+  client_count?: number;
+  specializations?: string;
+  is_locked?: boolean;
 }
 
 export default function SuperAdminDashboard() {
@@ -127,10 +141,62 @@ export default function SuperAdminDashboard() {
           overdueMaintenances: 7
         });
         setRecentVendors([
-          { id: 1, name: 'SafeGuard Fire Systems', clients: 23, equipment: 156, status: 'Active', joinDate: '2024-01-15', lastActivity: '2 hours ago', compliance: 98 },
-          { id: 2, name: 'ProFire Solutions', clients: 18, equipment: 98, status: 'Active', joinDate: '2024-02-20', lastActivity: '1 day ago', compliance: 95 },
-          { id: 3, name: 'FireTech Services', clients: 31, equipment: 201, status: 'Pending', joinDate: '2024-03-10', lastActivity: '3 days ago', compliance: 89 },
-          { id: 4, name: 'Emergency Safety Co.', clients: 15, equipment: 87, status: 'Active', joinDate: '2024-03-25', lastActivity: '5 hours ago', compliance: 92 },
+          { 
+            id: 1, 
+            name: 'SafeGuard Fire Systems', 
+            email: 'contact@safeguard.com',
+            phone: '+94 77 123 4567',
+            location: 'Colombo, Western',
+            category: 'Fire Protection',
+            clients: 23, 
+            equipment: 156, 
+            status: 'Active', 
+            joinDate: '2024-01-15', 
+            lastActivity: '2 hours ago', 
+            compliance: 98 
+          },
+          { 
+            id: 2, 
+            name: 'ProFire Solutions', 
+            email: 'info@profire.com',
+            phone: '+94 77 234 5678',
+            location: 'Kandy, Central',
+            category: 'Emergency Services',
+            clients: 18, 
+            equipment: 98, 
+            status: 'Active', 
+            joinDate: '2024-02-20', 
+            lastActivity: '1 day ago', 
+            compliance: 95 
+          },
+          { 
+            id: 3, 
+            name: 'FireTech Services', 
+            email: 'hello@firetech.com',
+            phone: '+94 77 345 6789',
+            location: 'Galle, Southern',
+            category: 'Safety Equipment',
+            clients: 31, 
+            equipment: 201, 
+            status: 'Pending', 
+            joinDate: '2024-03-10', 
+            lastActivity: '3 days ago', 
+            compliance: 89 
+          },
+          { 
+            id: 4, 
+            name: 'Emergency Safety Co.', 
+            email: 'support@emergency.com',
+            phone: '+94 77 456 7890',
+            location: 'Jaffna, Northern',
+            category: 'General',
+            clients: 15, 
+            equipment: 87, 
+            status: 'Active', 
+            joinDate: '2024-03-25', 
+            lastActivity: '5 hours ago', 
+            compliance: 92 
+          },
         ]);
       } finally {
         setIsLoading(false);
@@ -151,9 +217,14 @@ export default function SuperAdminDashboard() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600 mt-1">Monitor vendor activity and platform overview</p>
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <ChartBarIcon className="h-8 w-8 text-gray-900" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+              <p className="text-gray-600 mt-1">Monitor vendor activity and platform overview</p>
+            </div>
           </div>
           <button 
             onClick={() => setIsAddModalOpen(true)}
@@ -254,19 +325,16 @@ export default function SuperAdminDashboard() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Vendor Name
+                    Vendor Info
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Clients & Equipment
+                    Contact Info
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Compliance
+                    Performance
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Last Activity
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Actions
@@ -277,34 +345,47 @@ export default function SuperAdminDashboard() {
                 {recentVendors.map((vendor, index) => (
                   <tr key={vendor.id} className={`hover:bg-gray-50 transition-colors ${index !== recentVendors.length - 1 ? 'border-b border-gray-100' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{vendor.name}</div>
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-xl bg-gray-50 flex items-center justify-center">
+                            <BuildingOfficeIcon className="h-5 w-5 text-red-600" />
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{vendor.name}</div>
+                          <div className="text-sm text-gray-500">{vendor.category}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{vendor.email}</div>
+                      <div className="text-sm text-gray-500">{vendor.phone}</div>
+                      <div className="text-sm text-gray-500">{vendor.location}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{vendor.clients} clients</div>
-                      <div className="text-sm text-gray-500">{vendor.equipment} equipment units</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-1 bg-gray-200 rounded-full h-2 mr-3 max-w-[100px]">
+                      <div className="text-sm text-gray-500">{vendor.equipment} equipment</div>
+                      <div className="flex items-center mt-1">
+                        <div className="flex-1 bg-gray-200 rounded-full h-2 mr-2 max-w-[80px]">
                           <div 
                             className="h-2 rounded-full bg-red-500"
                             style={{ width: `${vendor.compliance}%` }}
                           ></div>
                         </div>
-                        <span className="text-sm font-medium text-gray-900">{vendor.compliance}%</span>
+                        <span className="text-xs text-gray-600">{vendor.compliance}%</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         vendor.status === 'Active' 
                           ? 'bg-green-100 text-green-800' 
+                          : vendor.status === 'Inactive'
+                          ? 'bg-red-100 text-red-800'
                           : 'bg-orange-100 text-orange-800'
                       }`}>
                         {vendor.status}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{vendor.lastActivity}</div>
+                      <div className="text-xs text-gray-500 mt-1">{vendor.lastActivity}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                       <button className="text-red-600 hover:text-red-800 transition-colors">

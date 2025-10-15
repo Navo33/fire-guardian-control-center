@@ -59,8 +59,8 @@ export class DashboardRepository {
           (SELECT COUNT(*) FROM equipment_instance WHERE status = 'assigned') as equipment_assigned,
           (SELECT COUNT(*) FROM equipment_instance WHERE status = 'maintenance') as equipment_maintenance,
           (SELECT COUNT(*) FROM notification WHERE is_read = false AND created_at >= CURRENT_DATE - INTERVAL '7 days') as critical_alerts,
-          (SELECT COUNT(*) FROM equipment_instance WHERE due_date <= CURRENT_DATE + INTERVAL '7 days' AND due_date IS NOT NULL) as pending_inspections,
-          (SELECT COUNT(*) FROM equipment_instance WHERE due_date < CURRENT_DATE AND due_date IS NOT NULL) as overdue_maintenances
+          (SELECT COUNT(*) FROM equipment_instance WHERE expiry_date <= CURRENT_DATE + INTERVAL '7 days' AND expiry_date IS NOT NULL) as pending_inspections,
+          (SELECT COUNT(*) FROM equipment_instance WHERE expiry_date < CURRENT_DATE AND expiry_date IS NOT NULL) as overdue_maintenances
       `;
 
       DebugLogger.database('Admin Stats Query', currentStatsQuery);

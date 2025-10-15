@@ -32,22 +32,24 @@ export class VendorController extends BaseController {
 
     try {
       const pagination = this.getPagination(req);
-      const { status, search } = req.query;
+      const { status, search, specialization } = req.query;
 
       DebugLogger.log('Getting vendors with pagination', {
         pagination,
-        filters: { status, search }
+        filters: { status, search, specialization }
       });
 
       // Get vendors with pagination
       const [vendors, total] = await Promise.all([
         VendorRepository.getVendors(pagination, { 
           status: status as string, 
-          search: search as string 
+          search: search as string,
+          specialization: specialization as string
         }),
         VendorRepository.getVendorsCount({ 
           status: status as string, 
-          search: search as string 
+          search: search as string,
+          specialization: specialization as string
         })
       ]);
 
@@ -133,7 +135,7 @@ export class VendorController extends BaseController {
   createVendor = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     DebugLogger.log('VendorController.createVendor called', { 
       userId: req.user?.userId,
-      email: req.body.primaryEmail 
+      email: req.body.email 
     });
 
     // Validate request
@@ -148,14 +150,14 @@ export class VendorController extends BaseController {
 
       DebugLogger.log('Creating new vendor with detailed information', { 
         companyName: vendorData.companyName,
-        primaryEmail: vendorData.primaryEmail,
+        email: vendorData.email,
         contactPersonName: vendorData.contactPersonName
       });
 
       // Check if vendor already exists
-      const existingUser = await UserRepository.findByEmail(vendorData.primaryEmail);
+      const existingUser = await UserRepository.findByEmail(vendorData.email);
       if (existingUser) {
-        DebugLogger.log('Vendor already exists', { email: vendorData.primaryEmail }, 'WARNING');
+        DebugLogger.log('Vendor already exists', { email: vendorData.email }, 'WARNING');
         return ApiResponseUtil.conflict(res, 'User with this email already exists');
       }
 
@@ -390,10 +392,47 @@ export class VendorController extends BaseController {
       return ApiResponseUtil.internalError(res);
     }
   });
+
+  /**
+   * GET /api/vendors/specializations
+   * Get all available specializations for dropdown (admin only)
+   */
+  getSpecializations = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    DebugLogger.log('VendorController.getSpecializations called', { 
+      userId: req.user?.userId 
+    });
+
+    // Check permissions
+    if (!this.requireRole(req, res, ['admin'])) return;
+
+    try {
+      const specializations = await VendorRepository.getSpecializations();
+
+      DebugLogger.log('Specializations retrieved successfully', { 
+        count: specializations.length 
+      });
+
+      ApiResponseUtil.success(res, specializations, 'Specializations retrieved successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error retrieving specializations', error);
+      console.error('Error retrieving specializations:', error);
+      return ApiResponseUtil.internalError(res);
+    }
+  });
 }
 
 // Validation schemas for vendor operations
 export const createVendorValidation = [
+  // User Information
+  body('firstName')
+    .notEmpty()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('First name is required and must be between 1 and 50 characters'),
+  body('lastName')
+    .notEmpty()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('Last name is required and must be between 1 and 50 characters'),
   body('email')
     .isEmail()
     .normalizeEmail()
@@ -402,14 +441,68 @@ export const createVendorValidation = [
     .isLength({ min: 8 })
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
     .withMessage('Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
-  body('first_name')
+  
+  // Company Information
+  body('companyName')
     .notEmpty()
-    .isLength({ min: 1, max: 50 })
-    .withMessage('First name is required and must be between 1 and 50 characters'),
-  body('last_name')
+    .isLength({ min: 2, max: 200 })
+    .withMessage('Company name is required and must be between 2 and 200 characters'),
+  body('businessType')
     .notEmpty()
-    .isLength({ min: 1, max: 50 })
-    .withMessage('Last name is required and must be between 1 and 50 characters')
+    .isIn(['Private Limited', 'LLC', 'Partnership', 'Sole Proprietorship'])
+    .withMessage('Please select a valid business type'),
+  body('licenseNumber')
+    .optional()
+    .isLength({ max: 100 })
+    .withMessage('License number must be less than 100 characters'),
+  
+  // Contact Information
+  body('contactPersonName')
+    .notEmpty()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Contact person name is required and must be between 2 and 100 characters'),
+  body('contactTitle')
+    .optional()
+    .isLength({ max: 100 })
+    .withMessage('Contact title must be less than 100 characters'),
+  body('primaryEmail')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid primary email address'),
+  body('primaryPhone')
+    .notEmpty()
+    .matches(/^\+94\s?\d{2}\s?\d{3}\s?\d{4}$/)
+    .withMessage('Please provide a valid Sri Lankan phone number (format: +94 XX XXX XXXX)'),
+  
+  // Address Information
+  body('streetAddress')
+    .notEmpty()
+    .isLength({ min: 5, max: 255 })
+    .withMessage('Street address is required and must be between 5 and 255 characters'),
+  body('city')
+    .notEmpty()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('City is required and must be between 2 and 100 characters'),
+  body('state')
+    .notEmpty()
+    .isIn(['Western Province', 'Central Province', 'Southern Province', 'Northern Province', 'Eastern Province', 'North Western Province', 'North Central Province', 'Uva Province', 'Sabaragamuwa Province'])
+    .withMessage('Please select a valid Sri Lankan province'),
+  body('zipCode')
+    .notEmpty()
+    .matches(/^\d{5}$/)
+    .withMessage('Please provide a valid 5-digit ZIP code'),
+  body('country')
+    .optional()
+    .equals('Sri Lanka')
+    .withMessage('Country must be Sri Lanka'),
+  
+  // Specializations
+  body('specializations')
+    .isArray({ min: 1 })
+    .withMessage('Please select at least one specialization'),
+  body('specializations.*')
+    .isIn(['Fire Extinguishers', 'Sprinkler Systems', 'Fire Alarms', 'Emergency Lighting', 'Fire Suppression Systems', 'Exit Signs', 'Fire Safety Inspections', 'Fire Safety Training'])
+    .withMessage('Please select valid specializations')
 ];
 
 export const updateVendorValidation = [

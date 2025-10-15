@@ -253,22 +253,68 @@ export class UserRepository {
   }
 
   /**
-   * Get recent vendors
+   * Get recent vendors with comprehensive data for dashboard (same structure as VendorRepository.getVendors)
    */
-  static async getRecentVendors(limit: number = 5): Promise<User[]> {
+  static async getRecentVendors(limit: number = 5): Promise<any[]> {
     const query = `
       SELECT 
-        id, first_name, last_name, display_name, email, 
-        user_type, created_at
-      FROM "user" 
-      WHERE user_type = 'vendor' AND deleted_at IS NULL
-      ORDER BY created_at DESC
+        u.id, u.first_name, u.last_name, u.display_name, u.email, 
+        u.user_type, u.is_locked, u.last_login, u.created_at,
+        
+        -- Company details
+        vc.company_name, vc.business_type, vc.license_number,
+        
+        -- Contact details
+        vcon.contact_person_name, vcon.contact_title, vcon.primary_email, vcon.primary_phone,
+        
+        -- Address details
+        va.street_address, va.city, va.state, va.zip_code, va.country,
+        
+        -- Equipment count
+        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = u.id AND deleted_at IS NULL) as equipment_count,
+        
+        -- Client assignments count  
+        (SELECT COUNT(DISTINCT client_id) FROM equipment_assignment WHERE vendor_id = u.id) as client_count,
+        
+        -- Specializations (comma-separated)
+        (SELECT STRING_AGG(s.name, ', ') 
+         FROM vendor_specialization vs 
+         JOIN specialization s ON s.id = vs.specialization_id 
+         WHERE vs.vendor_id = u.id) as specializations,
+         
+        -- Last activity (most recent from audit log)
+        (SELECT MAX(created_at) FROM audit_log WHERE changed_by = u.id) as last_activity
+         
+      FROM "user" u
+      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
+      LEFT JOIN vendor_contact vcon ON vcon.vendor_id = u.id
+      LEFT JOIN vendor_address va ON va.vendor_id = u.id
+      WHERE u.user_type = 'vendor' AND u.deleted_at IS NULL
+      ORDER BY u.created_at DESC
       LIMIT $1
     `;
     
     try {
       const result = await pool.query(query, [limit]);
-      return result.rows;
+      
+      // Map to same structure as VendorRepository.getVendors
+      return result.rows.map(row => ({
+        ...row,
+        equipment_count: parseInt(row.equipment_count) || 0,
+        client_count: parseInt(row.client_count) || 0,
+        // Add computed fields that frontend expects
+        name: row.company_name || row.display_name || `${row.first_name} ${row.last_name}`,
+        phone: row.primary_phone || '',
+        location: row.city && row.state ? `${row.city}, ${row.state}` : '',
+        category: row.specializations || 'General',
+        status: row.is_locked ? 'Inactive' : 'Active',
+        joinDate: new Date(row.created_at).toLocaleDateString(),
+        lastActivity: row.last_activity ? new Date(row.last_activity).toLocaleDateString() : 
+                     row.last_login ? new Date(row.last_login).toLocaleDateString() : 'Never',
+        compliance: Math.floor(Math.random() * 30) + 70, // Temporary mock data
+        clients: parseInt(row.client_count) || 0,
+        equipment: parseInt(row.equipment_count) || 0
+      }));
     } catch (error) {
       console.error('Error getting recent vendors:', error);
       throw error;
@@ -293,6 +339,163 @@ export class UserRepository {
       return result.rows;
     } catch (error) {
       console.error('Error getting vendors:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all users with detailed information for management
+   */
+  static async getAllUsers(): Promise<any[]> {
+    const query = `
+      SELECT 
+        u.id,
+        u.first_name,
+        u.last_name,
+        u.display_name,
+        u.email,
+        u.user_type,
+        u.is_locked,
+        u.last_login,
+        u.created_at,
+        r.role_name as role_name,
+        CASE 
+          WHEN u.user_type = 'vendor' THEN (
+            SELECT COUNT(*) FROM vendor_company vc WHERE vc.vendor_id = u.id
+          )
+          WHEN u.user_type = 'client' THEN (
+            SELECT COUNT(*) FROM client_company cc WHERE cc.client_id = u.id
+          )
+          ELSE 0
+        END as companies_count,
+        CASE 
+          WHEN u.user_type = 'vendor' THEN (
+            SELECT COUNT(*) FROM equipment_instance ei 
+            WHERE ei.vendor_id = u.id AND ei.deleted_at IS NULL
+          )
+          ELSE 0
+        END as equipment_count,
+        CASE 
+          WHEN u.last_login > NOW() - INTERVAL '30 days' THEN 'Active'
+          WHEN u.is_locked THEN 'Locked'
+          ELSE 'Inactive'
+        END as status
+      FROM "user" u
+      LEFT JOIN "role" r ON u.role_id = r.id
+      WHERE u.deleted_at IS NULL
+      ORDER BY u.created_at DESC
+    `;
+    
+    try {
+      const result = await pool.query(query);
+      return result.rows;
+    } catch (error) {
+      console.error('Error getting all users:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user statistics for insights
+   */
+  static async getUserStats(): Promise<{
+    totalUsers: number;
+    activeUsers: number;
+    lockedUsers: number;
+    vendorUsers: number;
+    clientUsers: number;
+    adminUsers: number;
+    recentlyJoined: number;
+  }> {
+    const query = `
+      SELECT 
+        COUNT(*) as total_users,
+        COUNT(CASE WHEN last_login > NOW() - INTERVAL '30 days' THEN 1 END) as active_users,
+        COUNT(CASE WHEN is_locked = true THEN 1 END) as locked_users,
+        COUNT(CASE WHEN user_type = 'vendor' THEN 1 END) as vendor_users,
+        COUNT(CASE WHEN user_type = 'client' THEN 1 END) as client_users,
+        COUNT(CASE WHEN user_type = 'admin' THEN 1 END) as admin_users,
+        COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as recently_joined
+      FROM "user"
+      WHERE deleted_at IS NULL
+    `;
+    
+    try {
+      const result = await pool.query(query);
+      const row = result.rows[0];
+      return {
+        totalUsers: parseInt(row.total_users),
+        activeUsers: parseInt(row.active_users),
+        lockedUsers: parseInt(row.locked_users),
+        vendorUsers: parseInt(row.vendor_users),
+        clientUsers: parseInt(row.client_users),
+        adminUsers: parseInt(row.admin_users),
+        recentlyJoined: parseInt(row.recently_joined)
+      };
+    } catch (error) {
+      console.error('Error getting user stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user status (lock/unlock)
+   */
+  static async updateUserStatus(userId: number, isLocked: boolean): Promise<void> {
+    const query = `
+      UPDATE "user" 
+      SET is_locked = $1, locked_until = $2, failed_login_attempts = 0
+      WHERE id = $3 AND deleted_at IS NULL
+    `;
+    
+    const lockedUntil = isLocked ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null; // 24 hours if locked
+    
+    try {
+      await pool.query(query, [isLocked, lockedUntil, userId]);
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get vendor statistics for insights
+   */
+  static async getVendorStats(): Promise<{
+    totalVendors: number;
+    activeVendors: number;
+    inactiveVendors: number;
+    totalClients: number;
+    totalEquipment: number;
+    recentlyJoined: number;
+  }> {
+    const query = `
+      SELECT 
+        COUNT(DISTINCT u.id) as total_vendors,
+        COUNT(DISTINCT CASE WHEN u.last_login > NOW() - INTERVAL '30 days' THEN u.id END) as active_vendors,
+        COUNT(DISTINCT CASE WHEN u.last_login <= NOW() - INTERVAL '30 days' OR u.last_login IS NULL THEN u.id END) as inactive_vendors,
+        (SELECT COUNT(DISTINCT id) FROM "user" WHERE user_type = 'client' AND deleted_at IS NULL) as total_clients,
+        COUNT(DISTINCT ei.id) as total_equipment,
+        COUNT(DISTINCT CASE WHEN u.created_at > NOW() - INTERVAL '7 days' THEN u.id END) as recently_joined
+      FROM "user" u
+      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
+      LEFT JOIN equipment_instance ei ON ei.vendor_id = u.id AND ei.deleted_at IS NULL
+      WHERE u.user_type = 'vendor' AND u.deleted_at IS NULL
+    `;
+    
+    try {
+      const result = await pool.query(query);
+      const row = result.rows[0];
+      return {
+        totalVendors: parseInt(row.total_vendors),
+        activeVendors: parseInt(row.active_vendors),
+        inactiveVendors: parseInt(row.inactive_vendors),
+        totalClients: parseInt(row.total_clients),
+        totalEquipment: parseInt(row.total_equipment),
+        recentlyJoined: parseInt(row.recently_joined)
+      };
+    } catch (error) {
+      console.error('Error getting vendor stats:', error);
       throw error;
     }
   }
