@@ -178,9 +178,12 @@ export default function LoginPage() {
               <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h3 className="text-sm font-medium text-primary-text mb-2">Demo Credentials:</h3>
                 <div className="text-xs text-gray-600 space-y-1">
-                  <p><strong className="text-primary-text">Super Admin:</strong> admin@fireguardian.com / admin123</p>
-                  <p><strong className="text-primary-text">Vendor:</strong> vendor@fireguardian.com / vendor123</p>
-                  <p><strong className="text-primary-text">Client:</strong> client@fireguardian.com / client123</p>
+                  <p><strong className="text-primary-text">Admin:</strong> admin@fireguardian.lk / AdminPass2025!</p>
+                  <p><strong className="text-primary-text">Vendors:</strong></p>
+                  <p className="ml-4">• lakmal@safefire.lk / VendorPass2025!</p>
+                  <p className="ml-4">• nimali@proguard.lk / VendorPass2025!</p>
+                  <p className="ml-4">• ruwan@fireshield.lk / VendorPass2025!</p>
+                  <p><strong className="text-primary-text">Clients:</strong> Any client email / ClientPass2025!</p>
                 </div>
               </div>
             </form>
