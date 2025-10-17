@@ -392,10 +392,20 @@ export default function ProfilePage() {
                   <input
                     type="tel"
                     value={profileForm.phone}
-                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                    onChange={(e) => {
+                      let value = e.target.value;
+                      // Auto-format: ensure it starts with +94
+                      if (value && !value.startsWith('+')) {
+                        value = '+94' + value;
+                      }
+                      setProfileForm({ ...profileForm, phone: value });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="+94771234567"
+                    pattern="^\+94\d{9}$"
+                    title="Please enter a valid Sri Lankan phone number (e.g., +94771234567)"
                   />
+                  <p className="mt-1 text-xs text-gray-500">Format: +94XXXXXXXXX (9 digits after +94)</p>
                 </div>
               </div>
 
