@@ -348,7 +348,7 @@ textarea.input-field::placeholder {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 50;
+  z-index: 9999; /* Higher z-index to cover everything including navbar and sidebar */
   overflow-y: auto;
 }
 
@@ -358,8 +358,9 @@ textarea.input-field::placeholder {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5); 
-  transition: opacity 0.3s ease;
+  backdrop-filter: blur(8px); /* Blur effect */
+  background-color: rgba(0, 0, 0, 0.3); /* Lighter dark overlay with blur */
+  transition: opacity 0.3s ease, backdrop-filter 0.3s ease;
 }
 
 .modal-content {
