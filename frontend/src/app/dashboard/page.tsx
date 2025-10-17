@@ -1,221 +1,633 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import DashboardLayout from '../../components/layout/DashboardLayout';
+import AddVendorModal from '../../components/modals/AddVendorModal';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import DebugLogger from '../../utils/DebugLogger';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../config/api';
+import { 
+  BuildingOfficeIcon, 
+  ChartBarIcon,
+  UserGroupIcon,
+  FireIcon,
+  PlusIcon,
+  ExclamationTriangleIcon,
+  ClockIcon,
+  ShieldCheckIcon,
+  WrenchScrewdriverIcon,
+  ClipboardDocumentListIcon
+} from '@heroicons/react/24/outline';
 
 interface User {
   id: number;
   email: string;
   display_name: string;
-  user_type: string;
+  user_type: 'admin' | 'vendor' | 'client';
   role_id?: number;
 }
 
+interface DashboardStats {
+  activeVendors: number;
+  totalClients: number;
+  criticalAlerts: number;
+  totalEquipment: number;
+  pendingInspections?: number;
+  overdueMaintenances?: number;
+}
+
+interface RecentVendor {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  location: string;
+  category: string;
+  clients: number;
+  equipment: number;
+  status: string;
+  joinDate: string;
+  lastActivity: string;
+  compliance: number;
+  display_name?: string;
+  company_name?: string;
+  primary_phone?: string;
+  city?: string;
+  state?: string;
+  equipment_count?: number;
+  client_count?: number;
+  specializations?: string;
+  is_locked?: boolean;
+}
+
 export default function DashboardPage() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Get user data from localStorage
     const userData = localStorage.getItem('user');
     if (userData) {
-      setUser(JSON.parse(userData));
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        router.push('/login');
+      }
     } else {
       // Redirect to login if no user data
-      window.location.href = '/login';
+      router.push('/login');
     }
-  }, []);
+    setIsLoading(false);
+  }, [router]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-  };
-
-  if (!user) {
+  if (isLoading || !user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <DashboardLayout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
+  // Render different dashboard based on user type
+  if (user.user_type === 'admin') {
+    return <AdminDashboard user={user} />;
+  }
+
+  if (user.user_type === 'vendor') {
+    return <VendorDashboardComponent user={user} />;
+  }
+
+  if (user.user_type === 'client') {
+    return <ClientDashboardComponent user={user} />;
+  }
+
+  // Fallback
   return (
-    <div className="h-full bg-primary-bg overflow-auto">
-      {/* Header */}
-      <header className="bg-card border-b-2 border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <div className="h-8 w-8 bg-fire-600 rounded-full flex items-center justify-center mr-3">
-                <svg
-                  className="h-5 w-5 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 1-4 4-4s4 2 4 4c2-1 2.657-2.657 2.657-2.657A8 8 0 0117.657 18.657z"
-                  />
-                </svg>
-              </div>
-              <h1 className="text-2xl font-bold text-primary-text">Fire Guardian</h1>
+    <DashboardLayout>
+      <div className="text-center py-12">
+        <h2 className="text-xl font-semibold text-gray-900">Unknown User Type</h2>
+        <p className="text-gray-600 mt-2">Please contact support.</p>
+      </div>
+    </DashboardLayout>
+  );
+}
+
+// ============================================================================
+// ADMIN DASHBOARD - Full implementation with API integration
+// ============================================================================
+function AdminDashboard({ user }: { user: User }) {
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [stats, setStats] = useState<DashboardStats>({
+    activeVendors: 0,
+    totalClients: 0,
+    criticalAlerts: 0,
+    totalEquipment: 0,
+    pendingInspections: 0,
+    overdueMaintenances: 0
+  });
+  const [recentVendors, setRecentVendors] = useState<RecentVendor[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch dashboard data from API
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      const startTime = DebugLogger.startTimer();
+      DebugLogger.ui('AdminDashboard', 'fetchDashboardData started');
+      
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Get auth token
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('No authentication token found');
+        }
+
+        const headers = getAuthHeaders();
+
+        DebugLogger.log('Fetching dashboard data with auth token', { hasToken: !!token }, 'DASHBOARD');
+
+        // Fetch stats
+        logApiCall('GET', API_ENDPOINTS.DASHBOARD.STATS);
+        const statsResponse = await fetch(API_ENDPOINTS.DASHBOARD.STATS, { headers });
+        
+        if (!statsResponse.ok) {
+          throw new Error(`Failed to fetch dashboard stats: ${statsResponse.status} ${statsResponse.statusText}`);
+        }
+        const statsData = await statsResponse.json();
+        DebugLogger.api('GET', '/api/dashboard/stats', undefined, statsData, statsResponse.status);
+        
+        // Fetch recent vendors
+        logApiCall('GET', API_ENDPOINTS.DASHBOARD.RECENT_VENDORS);
+        const vendorsResponse = await fetch(API_ENDPOINTS.DASHBOARD.RECENT_VENDORS, { headers });
+        
+        if (!vendorsResponse.ok) {
+          throw new Error(`Failed to fetch recent vendors: ${vendorsResponse.status} ${vendorsResponse.statusText}`);
+        }
+        const vendorsData = await vendorsResponse.json();
+        DebugLogger.api('GET', '/api/dashboard/recent-vendors', undefined, vendorsData, vendorsResponse.status);
+
+        if (statsData.success && vendorsData.success) {
+          DebugLogger.log('Dashboard data fetched successfully', {
+            statsKeys: Object.keys(statsData.data || {}),
+            vendorsCount: vendorsData.data?.length || 0
+          }, 'DASHBOARD');
+          
+          setStats(statsData.data);
+          setRecentVendors(vendorsData.data);
+        } else {
+          throw new Error(`API returned success=false. Stats: ${statsData.message}, Vendors: ${vendorsData.message}`);
+        }
+
+        DebugLogger.performance('Dashboard data fetch', startTime);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
+        DebugLogger.error('Dashboard data fetch failed', err, { errorMessage });
+        setError(errorMessage);
+        
+        // Fallback to mock data if API fails
+        setStats({
+          activeVendors: 10,
+          totalClients: 145,
+          criticalAlerts: 3,
+          totalEquipment: 1234,
+          pendingInspections: 28,
+          overdueMaintenances: 7
+        });
+        setRecentVendors([
+          { 
+            id: 1, 
+            name: 'SafeGuard Fire Systems', 
+            email: 'contact@safeguard.com',
+            phone: '+94 77 123 4567',
+            location: 'Colombo, Western',
+            category: 'Fire Protection',
+            clients: 23, 
+            equipment: 156, 
+            status: 'Active', 
+            joinDate: '2024-01-15', 
+            lastActivity: '2 hours ago', 
+            compliance: 98 
+          },
+          { 
+            id: 2, 
+            name: 'ProFire Solutions', 
+            email: 'info@profire.com',
+            phone: '+94 77 234 5678',
+            location: 'Kandy, Central',
+            category: 'Emergency Services',
+            clients: 18, 
+            equipment: 98, 
+            status: 'Active', 
+            joinDate: '2024-02-20', 
+            lastActivity: '1 day ago', 
+            compliance: 95 
+          },
+          { 
+            id: 3, 
+            name: 'FireTech Services', 
+            email: 'hello@firetech.com',
+            phone: '+94 77 345 6789',
+            location: 'Galle, Southern',
+            category: 'Safety Equipment',
+            clients: 31, 
+            equipment: 201, 
+            status: 'Pending', 
+            joinDate: '2024-03-10', 
+            lastActivity: '3 days ago', 
+            compliance: 89 
+          },
+          { 
+            id: 4, 
+            name: 'Emergency Safety Co.', 
+            email: 'support@emergency.com',
+            phone: '+94 77 456 7890',
+            location: 'Jaffna, Northern',
+            category: 'General',
+            clients: 15, 
+            equipment: 87, 
+            status: 'Active', 
+            joinDate: '2024-03-25', 
+            lastActivity: '5 hours ago', 
+            compliance: 92 
+          },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const handleAddVendor = (vendorData: any) => {
+    console.log('New vendor added from dashboard:', vendorData);
+    // Refresh dashboard data after adding vendor
+    window.location.reload();
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <ChartBarIcon className="h-8 w-8 text-gray-900" />
             </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-primary-text">{user.display_name || 'User'}</p>
-                <p className="text-xs text-gray-500 capitalize">{user.user_type?.replace('_', ' ') || 'Unknown'}</p>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+              <p className="text-gray-600 mt-1">Monitor vendor activity and platform overview</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <PlusIcon className="h-5 w-5" />
+            <span>Add New Vendor</span>
+          </button>
+        </div>
+
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+            <div className="flex items-center">
+              <ExclamationTriangleIcon className="h-5 w-5 text-red-600 mr-2" />
+              <p className="text-red-700">
+                {error} - Using fallback data. Please check if the backend server is running.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {isLoading && (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+              <p className="text-blue-700">Loading dashboard data...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center">
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <BuildingOfficeIcon className="h-6 w-6 text-blue-600" />
               </div>
-              <button
-                onClick={handleLogout}
-                className="bg-fire-600 hover:bg-fire-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-200 ease-in-out"
-              >
-                Logout
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Active Vendors</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.activeVendors}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center">
+              <div className="p-3 bg-green-50 rounded-xl">
+                <UserGroupIcon className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Clients</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalClients}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center">
+              <div className="p-3 bg-red-50 rounded-xl">
+                <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Critical Alerts</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.criticalAlerts}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center">
+              <div className="p-3 bg-purple-50 rounded-xl">
+                <FireIcon className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Equipment</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalEquipment.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Vendors Table */}
+        <div className="bg-white rounded-2xl border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900" style={{fontFamily: 'Segoe UI, Helvetica Neue, Arial, sans-serif'}}>
+                Recent Vendors
+              </h2>
+              <button className="text-sm text-red-600 hover:text-red-700 font-medium">
+                Export Report
               </button>
             </div>
           </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Vendor Info
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Contact Info
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Performance
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {recentVendors.map((vendor, index) => (
+                  <tr key={vendor.id} className={`hover:bg-gray-50 transition-colors ${index !== recentVendors.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-xl bg-gray-50 flex items-center justify-center">
+                            <BuildingOfficeIcon className="h-5 w-5 text-red-600" />
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{vendor.name}</div>
+                          <div className="text-sm text-gray-500">{vendor.category}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{vendor.email}</div>
+                      <div className="text-sm text-gray-500">{vendor.phone}</div>
+                      <div className="text-sm text-gray-500">{vendor.location}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{vendor.clients} clients</div>
+                      <div className="text-sm text-gray-500">{vendor.equipment} equipment</div>
+                      <div className="flex items-center mt-1">
+                        <div className="flex-1 bg-gray-200 rounded-full h-2 mr-2 max-w-[80px]">
+                          <div 
+                            className="h-2 rounded-full bg-red-500"
+                            style={{ width: `${vendor.compliance}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-xs text-gray-600">{vendor.compliance}%</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        vendor.status === 'Active' 
+                          ? 'bg-green-100 text-green-800' 
+                          : vendor.status === 'Inactive'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-orange-100 text-orange-800'
+                      }`}>
+                        {vendor.status}
+                      </span>
+                      <div className="text-xs text-gray-500 mt-1">{vendor.lastActivity}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                      <Link 
+                        href={`/dashboard/vendors/${vendor.id}`}
+                        className="text-red-600 hover:text-red-800 transition-colors"
+                      >
+                        View
+                      </Link>
+                      <Link 
+                        href={`/dashboard/vendors/${vendor.id}/edit`}
+                        className="text-gray-600 hover:text-gray-800 transition-colors"
+                      >
+                        Edit
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </header>
+      </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-primary-text">
-            Welcome, {user.display_name || 'User'}!
-          </h2>
-          <p className="mt-2 text-gray-600">
-            You are logged in as: <span className="font-medium capitalize text-fire-600">{user.user_type?.replace('_', ' ') || 'Unknown'}</span>
+      {/* Add Vendor Modal */}
+      <AddVendorModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSubmit={handleAddVendor}
+      />
+    </DashboardLayout>
+  );
+}
+
+// ============================================================================
+// VENDOR DASHBOARD - Placeholder for future implementation
+// ============================================================================
+function VendorDashboardComponent({ user }: { user: User }) {
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Vendor Dashboard</h1>
+          <p className="text-gray-600 mt-1">Welcome back, {user.display_name}</p>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-green-50 rounded-xl">
+                <UserGroupIcon className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">My Clients</p>
+                <p className="text-2xl font-bold text-gray-900">--</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-purple-50 rounded-xl">
+                <FireIcon className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Equipment Managed</p>
+                <p className="text-2xl font-bold text-gray-900">--</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <ClipboardDocumentListIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Service Requests</p>
+                <p className="text-2xl font-bold text-gray-900">--</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-orange-50 rounded-xl">
+                <ClockIcon className="h-6 w-6 text-orange-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Pending Tasks</p>
+                <p className="text-2xl font-bold text-gray-900">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Coming Soon Message */}
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
+          <p className="text-green-800">
+            <strong>Vendor Dashboard:</strong> Client management, equipment tracking, and service request features are coming soon!
           </p>
         </div>
+      </div>
+    </DashboardLayout>
+  );
+}
 
-        {/* Dashboard Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Card 1 */}
-          <div className="bg-white overflow-hidden border-2 border-gray-200 rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-6 w-6 text-gray-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      System Status
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      All Systems Operational
-                    </dd>
-                  </dl>
-                </div>
+// ============================================================================
+// CLIENT DASHBOARD - Placeholder for future implementation
+// ============================================================================
+function ClientDashboardComponent({ user }: { user: User }) {
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Client Dashboard</h1>
+          <p className="text-gray-600 mt-1">Welcome back, {user.display_name}</p>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-purple-50 rounded-xl">
+                <FireIcon className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">My Equipment</p>
+                <p className="text-2xl font-bold text-gray-900">--</p>
               </div>
             </div>
           </div>
 
-          {/* Card 2 */}
-          <div className="bg-white overflow-hidden border-2 border-gray-200 rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-6 w-6 text-gray-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Last Login
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      Just now
-                    </dd>
-                  </dl>
-                </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-green-50 rounded-xl">
+                <ShieldCheckIcon className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Active Equipment</p>
+                <p className="text-2xl font-bold text-gray-900">--</p>
               </div>
             </div>
           </div>
 
-          {/* Card 3 */}
-          <div className="bg-white overflow-hidden border-2 border-gray-200 rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-6 w-6 text-gray-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                    />
-                  </svg>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      User Role
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900 capitalize">
-                      {user.user_type?.replace('_', ' ') || 'Unknown'}
-                    </dd>
-                  </dl>
-                </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-orange-50 rounded-xl">
+                <WrenchScrewdriverIcon className="h-6 w-6 text-orange-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Due for Service</p>
+                <p className="text-2xl font-bold text-gray-900">--</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <ClipboardDocumentListIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Open Requests</p>
+                <p className="text-2xl font-bold text-gray-900">--</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Content Section */}
-        <div className="mt-8">
-          <div className="bg-white border-2 border-gray-200 rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">
-                Getting Started
-              </h3>
-              <div className="mt-2 max-w-xl text-sm text-gray-500">
-                <p>
-                  Welcome to the Fire Guardian Control Center. This dashboard will be customized based on your role and permissions.
-                </p>
-              </div>
-              <div className="mt-5">
-                <p className="text-sm text-gray-600">
-                  Role-specific features coming soon...
-                </p>
-              </div>
-            </div>
-          </div>
+        {/* Coming Soon Message */}
+        <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4">
+          <p className="text-purple-800">
+            <strong>Client Dashboard:</strong> Equipment overview, service request management, and maintenance history features are coming soon!
+          </p>
         </div>
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

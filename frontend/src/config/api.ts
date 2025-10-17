@@ -45,6 +45,22 @@ export const API_ENDPOINTS = {
     UPDATE_STATUS: (id: string | number) => `${API_BASE_URL}/users/${id}/status`,
   },
   
+  // User Details
+  USER_DETAILS: {
+    BY_ID: (id: string | number) => `${API_BASE_URL}/user-details/${id}`,
+    UPDATE: (id: string | number) => `${API_BASE_URL}/user-details/${id}`,
+    RESET_PASSWORD: (id: string | number) => `${API_BASE_URL}/user-details/${id}/reset-password`,
+  },
+  
+  // Settings
+  SETTINGS: {
+    ALL: `${API_BASE_URL}/settings`,
+    SECURITY: `${API_BASE_URL}/settings/security`,
+    BY_KEY: (key: string) => `${API_BASE_URL}/settings/${key}`,
+    UPDATE: `${API_BASE_URL}/settings`,
+    BULK_UPDATE: `${API_BASE_URL}/settings/bulk`,
+  },
+  
   // Analytics
   ANALYTICS: {
     SYSTEM: `${API_BASE_URL}/analytics/system`,
@@ -107,3 +123,66 @@ export const ENV_INFO = {
 if (typeof window !== 'undefined' && ENV_INFO.IS_DEVELOPMENT && DEBUG_CONFIG.frontend) {
   console.log('[ENV] Fire Guardian Frontend Configuration:', ENV_INFO);
 }
+
+/**
+ * Secure fetch wrapper with automatic handling of security errors
+ */
+export const secureFetch = async (
+  url: string,
+  options?: RequestInit
+): Promise<Response> => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+    ...options?.headers,
+  };
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  // Handle security-related errors
+  if (!response.ok) {
+    try {
+      const data = await response.clone().json();
+      
+      // Handle password expiry
+      if (data.code === 'PASSWORD_EXPIRED') {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('password_expired', 'true');
+          window.location.href = '/dashboard/profile?tab=security&expired=true';
+        }
+        throw new Error(data.message);
+      }
+      
+      // Handle session expiry
+      if (data.code === 'SESSION_EXPIRED' || data.code === 'SESSION_INVALID') {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login?expired=true';
+        }
+        throw new Error(data.message);
+      }
+      
+      // Handle required password change
+      if (data.code === 'PASSWORD_CHANGE_REQUIRED') {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('password_change_required', 'true');
+          window.location.href = '/dashboard/profile?tab=security&required=true';
+        }
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      // If JSON parsing fails, continue with normal error handling
+      if (error instanceof Error && error.message.includes('expired')) {
+        throw error;
+      }
+    }
+  }
+
+  return response;
+};

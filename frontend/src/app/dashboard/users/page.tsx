@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import RequireRole from '@/components/auth/RequireRole';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
@@ -238,8 +239,9 @@ export default function UserManagementPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
+    <RequireRole allowedRoles={['admin']}>
+      <DashboardLayout>
+        <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center space-x-3">
@@ -398,7 +400,7 @@ export default function UserManagementPage() {
                   {filteredUsers.map((user) => (
                     <tr 
                       key={user.id} 
-                      onClick={() => window.location.href = `/dashboard/super-admin/users/${user.id}`}
+                      onClick={() => window.location.href = `/dashboard/users/${user.id}`}
                       className="hover:bg-red-50/30 cursor-pointer transition-all duration-150"
                     >
                       {/* User Details */}
@@ -520,5 +522,6 @@ export default function UserManagementPage() {
         </div>
       </div>
     </DashboardLayout>
+    </RequireRole>
   );
 }

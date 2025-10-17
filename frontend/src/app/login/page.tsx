@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState('');
 
   const {
     register,
@@ -28,6 +29,16 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  // Check for session expiry on component mount
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('expired') === 'true') {
+        setSessionExpiredMessage('Your session has expired. Please log in again.');
+      }
+    }
+  }, []);
+
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     setLoginError('');
@@ -35,24 +46,14 @@ export default function LoginPage() {
     try {
       logApiCall('POST', API_ENDPOINTS.AUTH.LOGIN, data);
       const response = await axios.post(API_ENDPOINTS.AUTH.LOGIN, data);
-      console.log('Login response:', response.data);
+      
       if (response.data.success) {
         localStorage.setItem('token', response.data.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
 
-        switch (response.data.data.user.user_type) {
-          case 'admin':
-            window.location.href = '/dashboard/super-admin';
-            break;
-          case 'vendor':
-            window.location.href = '/dashboard/vendor';
-            break;
-          case 'client':
-            window.location.href = '/dashboard/client';
-            break;
-          default:
-            window.location.href = '/dashboard';
-        }
+        // All user types now go to the same dashboard URL
+        // The dashboard page will render different content based on user_type
+        window.location.href = '/dashboard';
       }
     } catch (error: unknown) {
       setLoginError(
@@ -77,6 +78,13 @@ export default function LoginPage() {
 
             {/* Login Form */}
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+              {/* Session Expired Message */}
+              {sessionExpiredMessage && (
+                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm">
+                  {sessionExpiredMessage}
+                </div>
+              )}
+              
               {/* Error Message */}
               {loginError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
@@ -178,12 +186,9 @@ export default function LoginPage() {
               <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h3 className="text-sm font-medium text-primary-text mb-2">Demo Credentials:</h3>
                 <div className="text-xs text-gray-600 space-y-1">
-                  <p><strong className="text-primary-text">Admin:</strong> admin@fireguardian.lk / AdminPass2025!</p>
-                  <p><strong className="text-primary-text">Vendors:</strong></p>
-                  <p className="ml-4">• lakmal@safefire.lk / VendorPass2025!</p>
-                  <p className="ml-4">• nimali@proguard.lk / VendorPass2025!</p>
-                  <p className="ml-4">• ruwan@fireshield.lk / VendorPass2025!</p>
-                  <p><strong className="text-primary-text">Clients:</strong> Any client email / ClientPass2025!</p>
+                  <p><strong className="text-primary-text">Admin:</strong> admin@fireguardian.com / FireGuardian2024!</p>
+                  <p><strong className="text-primary-text">Vendors:</strong> lakmal@safefire.lk / VendorPass2025!</p>
+                  <p><strong className="text-primary-text">Clients:</strong> kasun@royalhotels.lk  / ClientPass2025!</p>
                 </div>
               </div>
             </form>
