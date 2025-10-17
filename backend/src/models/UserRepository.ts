@@ -499,4 +499,221 @@ export class UserRepository {
       throw error;
     }
   }
+
+  /**
+   * Get detailed user information with role-specific data
+   */
+  static async getUserDetailById(userId: number): Promise<any> {
+    try {
+      // Get basic user info
+      const userQuery = `
+        SELECT 
+          u.id, u.first_name, u.last_name, u.display_name, u.email, u.user_type,
+          u.is_locked, u.last_login, u.created_at, u.last_login_ip,
+          r.role_name
+        FROM "user" u
+        LEFT JOIN role r ON u.role_id = r.id
+        WHERE u.id = $1 AND u.deleted_at IS NULL
+      `;
+      
+      const userResult = await pool.query(userQuery, [userId]);
+      
+      if (userResult.rows.length === 0) {
+        return null;
+      }
+
+      const user = userResult.rows[0];
+      let detailedInfo: any = { ...user };
+
+      // Fetch role-specific information
+      if (user.user_type === 'vendor') {
+        detailedInfo = await this.getVendorDetails(userId, detailedInfo);
+      } else if (user.user_type === 'client') {
+        detailedInfo = await this.getClientDetails(userId, detailedInfo);
+      }
+
+      return detailedInfo;
+    } catch (error) {
+      console.error('Error getting user detail:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get vendor-specific details
+   */
+  private static async getVendorDetails(userId: number, baseInfo: any): Promise<any> {
+    // Get vendor company information (only columns that exist in database)
+    const vendorCompanyQuery = `
+      SELECT 
+        company_name, business_type, license_number, 
+        tax_id, website, established_year, 
+        employee_count, annual_revenue
+      FROM vendor_company
+      WHERE vendor_id = $1
+    `;
+    const vendorCompanyResult = await pool.query(vendorCompanyQuery, [userId]);
+
+    // Get vendor contact information (only columns that exist in database)
+    const vendorContactQuery = `
+      SELECT 
+        contact_person_name, contact_title, primary_email, 
+        primary_phone
+      FROM vendor_contact
+      WHERE vendor_id = $1
+    `;
+    const vendorContactResult = await pool.query(vendorContactQuery, [userId]);
+
+    // Get vendor address information (only columns that exist in database)
+    const vendorAddressQuery = `
+      SELECT 
+        street_address, city, state, 
+        zip_code, country
+      FROM vendor_address
+      WHERE vendor_id = $1
+    `;
+    const vendorAddressResult = await pool.query(vendorAddressQuery, [userId]);
+
+    // Get vendor specializations (only columns that exist in database)
+    const specializationsQuery = `
+      SELECT 
+        s.id, s.name, s.description, s.category
+      FROM vendor_specialization vs
+      JOIN specialization s ON s.id = vs.specialization_id
+      WHERE vs.vendor_id = $1
+    `;
+    const specializationsResult = await pool.query(specializationsQuery, [userId]);
+
+    // Get equipment count
+    const equipmentCountQuery = `
+      SELECT COUNT(*) as equipment_count
+      FROM equipment_instance
+      WHERE vendor_id = $1 AND deleted_at IS NULL
+    `;
+    const equipmentCountResult = await pool.query(equipmentCountQuery, [userId]);
+
+    // Get client count
+    const clientCountQuery = `
+      SELECT COUNT(DISTINCT client_id) as client_count
+      FROM equipment_assignment
+      WHERE vendor_id = $1
+    `;
+    const clientCountResult = await pool.query(clientCountQuery, [userId]);
+
+    return {
+      ...baseInfo,
+      company: vendorCompanyResult.rows[0] || null,
+      contact: vendorContactResult.rows[0] || null,
+      addresses: vendorAddressResult.rows,
+      specializations: specializationsResult.rows,
+      equipment_count: parseInt(equipmentCountResult.rows[0]?.equipment_count || 0),
+      client_count: parseInt(clientCountResult.rows[0]?.client_count || 0)
+    };
+  }
+
+  /**
+   * Get client-specific details
+   */
+  private static async getClientDetails(userId: number, baseInfo: any): Promise<any> {
+    // Get client company information (only columns that exist in database)
+    const clientCompanyQuery = `
+      SELECT 
+        company_name, business_type
+      FROM client_company
+      WHERE client_id = $1
+    `;
+    const clientCompanyResult = await pool.query(clientCompanyQuery, [userId]);
+
+    // Get client contact information (only columns that exist in database)
+    const clientContactQuery = `
+      SELECT 
+        contact_person_name, contact_title, primary_email, 
+        primary_phone
+      FROM client_contact
+      WHERE client_id = $1
+    `;
+    const clientContactResult = await pool.query(clientContactQuery, [userId]);
+
+    // Get client address information (only columns that exist in database)
+    const clientAddressQuery = `
+      SELECT 
+        street_address, city, state, 
+        zip_code, country
+      FROM client_address
+      WHERE client_id = $1
+    `;
+    const clientAddressResult = await pool.query(clientAddressQuery, [userId]);
+
+    // Get vendor information (who created this client account)
+    const vendorQuery = `
+      SELECT 
+        u.id, u.display_name, u.email,
+        vc.company_name as vendor_company
+      FROM client_company cc
+      JOIN "user" u ON u.id = cc.created_by_vendor_id
+      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
+      WHERE cc.client_id = $1 AND u.deleted_at IS NULL
+    `;
+    const vendorResult = await pool.query(vendorQuery, [userId]);
+
+    // Get equipment borrowed by this client (only columns that exist in database)
+    const equipmentQuery = `
+      SELECT 
+        e.equipment_name, e.equipment_code, e.equipment_type, e.manufacturer,
+        ei.serial_number, ei.status,
+        ea.assigned_at, ea.status as assignment_status,
+        ea.start_date, ea.end_date,
+        u.display_name as vendor_name,
+        vc.company_name as vendor_company
+      FROM equipment_assignment ea
+      JOIN assignment_item ai ON ai.assignment_id = ea.id
+      JOIN equipment_instance ei ON ei.id = ai.equipment_instance_id
+      JOIN equipment e ON e.id = ei.equipment_id
+      JOIN "user" u ON u.id = ea.vendor_id
+      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
+      WHERE ea.client_id = $1 AND ea.status = 'active'
+      ORDER BY ea.assigned_at DESC
+    `;
+    const equipmentResult = await pool.query(equipmentQuery, [userId]);
+
+    return {
+      ...baseInfo,
+      company: clientCompanyResult.rows[0] || null,
+      contact: clientContactResult.rows[0] || null,
+      addresses: clientAddressResult.rows,
+      vendor: vendorResult.rows[0] || null,  // Single vendor who created this client
+      equipment: equipmentResult.rows
+    };
+  }
+
+  /**
+   * Update user basic information
+   */
+  static async updateUserInfo(
+    userId: number, 
+    data: { first_name?: string; last_name?: string; email?: string }
+  ): Promise<any> {
+    const query = `
+      UPDATE "user"
+      SET 
+        first_name = COALESCE($1, first_name),
+        last_name = COALESCE($2, last_name),
+        email = COALESCE($3, email)
+      WHERE id = $4 AND deleted_at IS NULL
+      RETURNING id, first_name, last_name, display_name, email
+    `;
+
+    try {
+      const result = await pool.query(query, [
+        data.first_name || null,
+        data.last_name || null,
+        data.email || null,
+        userId
+      ]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating user info:', error);
+      throw error;
+    }
+  }
 }
