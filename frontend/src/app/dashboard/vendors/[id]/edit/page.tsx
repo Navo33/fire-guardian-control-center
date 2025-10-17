@@ -560,17 +560,11 @@ function EditVendorContent() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end space-x-4 pb-6">
-            <Link
-              href={`/dashboard/vendors/${vendorId}`}
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </Link>
+          <div className="flex items-center justify-end space-x-3 pb-6">
             <button
               type="submit"
               disabled={saving}
-              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              className="btn-primary flex items-center space-x-2"
             >
               {saving ? (
                 <>
@@ -584,6 +578,12 @@ function EditVendorContent() {
                 </>
               )}
             </button>
+            <Link
+              href={`/dashboard/vendors/${vendorId}`}
+              className="btn-secondary flex items-center space-x-2"
+            >
+              <span>Cancel</span>
+            </Link>
           </div>
         </form>
       </div>
