@@ -106,3 +106,12 @@ PROFILE_MANAGEMENT_TEST_PLAN.md
 REFACTORING_STATUS.md
 URL_REFACTORING_PLAN.md
 URL_REFACTORING_COMPLETE.md
+backend/docs/API_ENDPOINTS.md
+backend/docs/API_TESTING_REFERENCE.md
+backend/docs/Fire-Guardian-API.postman_collection.json
+backend/docs/POSTMAN_GUIDE.md
+backend/src/server.ts
+CONSISTENCY_UPDATE_SUMMARY.md
+VENDOR_PATTERN_APPLIED.md
+frontend/docs/error-loading-consistency.md
+frontend/docs/toast-notification-system.md

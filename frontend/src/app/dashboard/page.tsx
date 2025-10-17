@@ -6,8 +6,10 @@ import Link from 'next/link';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import AddVendorModal from '../../components/modals/AddVendorModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import ErrorDisplay from '../../components/ui/ErrorDisplay';
 import DebugLogger from '../../utils/DebugLogger';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../config/api';
+import { useToast } from '../../components/providers/ToastProvider';
 import { 
   BuildingOfficeIcon, 
   ChartBarIcon,
@@ -88,9 +90,7 @@ export default function DashboardPage() {
   if (isLoading || !user) {
     return (
       <DashboardLayout>
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
-        </div>
+        <LoadingSpinner fullPage text="Loading dashboard..." />
       </DashboardLayout>
     );
   }
@@ -135,137 +135,70 @@ function AdminDashboard({ user }: { user: User }) {
   const [recentVendors, setRecentVendors] = useState<RecentVendor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   // Fetch dashboard data from API
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      const startTime = DebugLogger.startTimer();
-      DebugLogger.ui('AdminDashboard', 'fetchDashboardData started');
-      
-      try {
-        setIsLoading(true);
-        setError(null);
+  const fetchDashboardData = async () => {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.ui('AdminDashboard', 'fetchDashboardData started');
+    
+    try {
+      setIsLoading(true);
+      setError(null);
 
-        // Get auth token
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('No authentication token found');
-        }
-
-        const headers = getAuthHeaders();
-
-        DebugLogger.log('Fetching dashboard data with auth token', { hasToken: !!token }, 'DASHBOARD');
-
-        // Fetch stats
-        logApiCall('GET', API_ENDPOINTS.DASHBOARD.STATS);
-        const statsResponse = await fetch(API_ENDPOINTS.DASHBOARD.STATS, { headers });
-        
-        if (!statsResponse.ok) {
-          throw new Error(`Failed to fetch dashboard stats: ${statsResponse.status} ${statsResponse.statusText}`);
-        }
-        const statsData = await statsResponse.json();
-        DebugLogger.api('GET', '/api/dashboard/stats', undefined, statsData, statsResponse.status);
-        
-        // Fetch recent vendors
-        logApiCall('GET', API_ENDPOINTS.DASHBOARD.RECENT_VENDORS);
-        const vendorsResponse = await fetch(API_ENDPOINTS.DASHBOARD.RECENT_VENDORS, { headers });
-        
-        if (!vendorsResponse.ok) {
-          throw new Error(`Failed to fetch recent vendors: ${vendorsResponse.status} ${vendorsResponse.statusText}`);
-        }
-        const vendorsData = await vendorsResponse.json();
-        DebugLogger.api('GET', '/api/dashboard/recent-vendors', undefined, vendorsData, vendorsResponse.status);
-
-        if (statsData.success && vendorsData.success) {
-          DebugLogger.log('Dashboard data fetched successfully', {
-            statsKeys: Object.keys(statsData.data || {}),
-            vendorsCount: vendorsData.data?.length || 0
-          }, 'DASHBOARD');
-          
-          setStats(statsData.data);
-          setRecentVendors(vendorsData.data);
-        } else {
-          throw new Error(`API returned success=false. Stats: ${statsData.message}, Vendors: ${vendorsData.message}`);
-        }
-
-        DebugLogger.performance('Dashboard data fetch', startTime);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
-        DebugLogger.error('Dashboard data fetch failed', err, { errorMessage });
-        setError(errorMessage);
-        
-        // Fallback to mock data if API fails
-        setStats({
-          activeVendors: 10,
-          totalClients: 145,
-          criticalAlerts: 3,
-          totalEquipment: 1234,
-          pendingInspections: 28,
-          overdueMaintenances: 7
-        });
-        setRecentVendors([
-          { 
-            id: 1, 
-            name: 'SafeGuard Fire Systems', 
-            email: 'contact@safeguard.com',
-            phone: '+94 77 123 4567',
-            location: 'Colombo, Western',
-            category: 'Fire Protection',
-            clients: 23, 
-            equipment: 156, 
-            status: 'Active', 
-            joinDate: '2024-01-15', 
-            lastActivity: '2 hours ago', 
-            compliance: 98 
-          },
-          { 
-            id: 2, 
-            name: 'ProFire Solutions', 
-            email: 'info@profire.com',
-            phone: '+94 77 234 5678',
-            location: 'Kandy, Central',
-            category: 'Emergency Services',
-            clients: 18, 
-            equipment: 98, 
-            status: 'Active', 
-            joinDate: '2024-02-20', 
-            lastActivity: '1 day ago', 
-            compliance: 95 
-          },
-          { 
-            id: 3, 
-            name: 'FireTech Services', 
-            email: 'hello@firetech.com',
-            phone: '+94 77 345 6789',
-            location: 'Galle, Southern',
-            category: 'Safety Equipment',
-            clients: 31, 
-            equipment: 201, 
-            status: 'Pending', 
-            joinDate: '2024-03-10', 
-            lastActivity: '3 days ago', 
-            compliance: 89 
-          },
-          { 
-            id: 4, 
-            name: 'Emergency Safety Co.', 
-            email: 'support@emergency.com',
-            phone: '+94 77 456 7890',
-            location: 'Jaffna, Northern',
-            category: 'General',
-            clients: 15, 
-            equipment: 87, 
-            status: 'Active', 
-            joinDate: '2024-03-25', 
-            lastActivity: '5 hours ago', 
-            compliance: 92 
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
+      // Get auth token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
       }
-    };
 
+      const headers = getAuthHeaders();
+
+      DebugLogger.log('Fetching dashboard data with auth token', { hasToken: !!token }, 'DASHBOARD');
+
+      // Fetch stats
+      logApiCall('GET', API_ENDPOINTS.DASHBOARD.STATS);
+      const statsResponse = await fetch(API_ENDPOINTS.DASHBOARD.STATS, { headers });
+      
+      if (!statsResponse.ok) {
+        throw new Error(`Failed to fetch dashboard stats: ${statsResponse.status} ${statsResponse.statusText}`);
+      }
+      const statsData = await statsResponse.json();
+      DebugLogger.api('GET', '/api/dashboard/stats', undefined, statsData, statsResponse.status);
+      
+      // Fetch recent vendors
+      logApiCall('GET', API_ENDPOINTS.DASHBOARD.RECENT_VENDORS);
+      const vendorsResponse = await fetch(API_ENDPOINTS.DASHBOARD.RECENT_VENDORS, { headers });
+      
+      if (!vendorsResponse.ok) {
+        throw new Error(`Failed to fetch recent vendors: ${vendorsResponse.status} ${vendorsResponse.statusText}`);
+      }
+      const vendorsData = await vendorsResponse.json();
+      DebugLogger.api('GET', '/api/dashboard/recent-vendors', undefined, vendorsData, vendorsResponse.status);
+
+      if (statsData.success && vendorsData.success) {
+        DebugLogger.log('Dashboard data fetched successfully', {
+          statsKeys: Object.keys(statsData.data || {}),
+          vendorsCount: vendorsData.data?.length || 0
+        }, 'DASHBOARD');
+        
+        setStats(statsData.data);
+        setRecentVendors(vendorsData.data);
+      } else {
+        throw new Error(statsData.message || vendorsData.message || 'Failed to load dashboard data');
+      }
+
+      DebugLogger.performance('Dashboard data fetch', startTime);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
+      DebugLogger.error('Dashboard data fetch failed', err, { errorMessage });
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDashboardData();
   }, []);
 
@@ -298,28 +231,25 @@ function AdminDashboard({ user }: { user: User }) {
           </button>
         </div>
 
-        {/* Error State */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
-            <div className="flex items-center">
-              <ExclamationTriangleIcon className="h-5 w-5 text-red-600 mr-2" />
-              <p className="text-red-700">
-                {error} - Using fallback data. Please check if the backend server is running.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Loading State */}
         {isLoading && (
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
-              <p className="text-blue-700">Loading dashboard data...</p>
-            </div>
-          </div>
+          <LoadingSpinner text="Loading dashboard data..." />
         )}
 
+        {/* Error State */}
+        {error && !isLoading && (
+          <ErrorDisplay 
+            message={error}
+            action={{
+              label: 'Try Again',
+              onClick: fetchDashboardData
+            }}
+          />
+        )}
+
+        {/* Dashboard Content */}
+        {!isLoading && !error && (
+          <>
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
@@ -470,6 +400,8 @@ function AdminDashboard({ user }: { user: User }) {
             </table>
           </div>
         </div>
+          </>
+        )}
       </div>
 
       {/* Add Vendor Modal */}

@@ -37,6 +37,7 @@ export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {
           { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
           { name: 'Vendor Management', href: '/dashboard/vendors', icon: BuildingOfficeIcon },
           { name: 'User Management', href: '/dashboard/users', icon: UsersIcon },
+          { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: ChartBarIcon },
           { name: 'System Settings', href: '/dashboard/settings', icon: Cog6ToothIcon },
         ];
       case 'vendor':

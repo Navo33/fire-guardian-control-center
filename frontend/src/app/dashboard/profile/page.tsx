@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import { useToast } from '@/components/providers/ToastProvider';
 import {
   UserCircleIcon,
   ShieldCheckIcon,
@@ -42,12 +45,13 @@ interface PasswordPolicy {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<'profile' | 'security'>('profile');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [passwordPolicy, setPasswordPolicy] = useState<PasswordPolicy | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -86,23 +90,19 @@ export default function ProfilePage() {
       }
       
       if (expired === 'true') {
-        setMessage({
-          type: 'warning',
-          text: 'Your password has expired. Please change it now to continue using the system.'
-        });
+        toast.warning('Your password has expired. Please change it now to continue using the system.');
       }
       
       if (required === 'true') {
-        setMessage({
-          type: 'warning',
-          text: 'You must change your password before you can access other features.'
-        });
+        toast.warning('You must change your password before you can access other features.');
       }
     }
-  }, []);
+  }, [toast]);
 
   const fetchProfile = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const token = localStorage.getItem('token');
       const response = await fetch('http://localhost:5000/api/profile', {
         headers: {
@@ -121,9 +121,9 @@ export default function ProfilePage() {
         lastName: data.data.lastName || '',
         phone: data.data.phone || ''
       });
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      setMessage({ type: 'error', text: 'Failed to load profile' });
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load profile');
     } finally {
       setLoading(false);
     }
@@ -150,7 +150,6 @@ export default function ProfilePage() {
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setMessage(null);
 
     try {
       const token = localStorage.getItem('token');
@@ -170,9 +169,9 @@ export default function ProfilePage() {
       }
 
       setProfile(data.data);
-      setMessage({ type: 'success', text: 'Profile updated successfully' });
+      toast.success('Profile updated successfully');
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to update profile' });
+      toast.error(error.message || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
@@ -181,7 +180,6 @@ export default function ProfilePage() {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setMessage(null);
     setPasswordErrors([]);
 
     try {
@@ -204,14 +202,14 @@ export default function ProfilePage() {
         throw new Error(data.message || 'Failed to change password');
       }
 
-      setMessage({ type: 'success', text: 'Password changed successfully' });
+      toast.success('Password changed successfully');
       setPasswordForm({
         currentPassword: '',
         newPassword: '',
         confirmPassword: ''
       });
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to change password' });
+      toast.error(error.message || 'Failed to change password');
     } finally {
       setSaving(false);
     }
@@ -245,26 +243,6 @@ export default function ProfilePage() {
     return validatePassword(password).length === 0;
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!profile) {
-    return (
-      <DashboardLayout>
-        <div className="text-center py-12">
-          <p className="text-gray-600">Failed to load profile</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -275,36 +253,6 @@ export default function ProfilePage() {
             Manage your personal information and security settings
           </p>
         </div>
-
-        {/* Message Display */}
-        {message && (
-          <div className={`rounded-md p-4 ${
-            message.type === 'success' ? 'bg-green-50' : 
-            message.type === 'warning' ? 'bg-yellow-50' : 
-            'bg-red-50'
-          }`}>
-            <div className="flex">
-              <div className="flex-shrink-0">
-                {message.type === 'success' ? (
-                  <CheckCircleIcon className="h-5 w-5 text-green-400" />
-                ) : message.type === 'warning' ? (
-                  <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" />
-                ) : (
-                  <XCircleIcon className="h-5 w-5 text-red-400" />
-                )}
-              </div>
-              <div className="ml-3">
-                <p className={`text-sm font-medium ${
-                  message.type === 'success' ? 'text-green-800' : 
-                  message.type === 'warning' ? 'text-yellow-800' : 
-                  'text-red-800'
-                }`}>
-                  {message.text}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Tabs */}
         <div className="border-b border-gray-200">
@@ -341,14 +289,33 @@ export default function ProfilePage() {
         {/* Profile Tab */}
         {activeTab === 'profile' && (
           <div className="bg-white shadow rounded-lg">
-            <form onSubmit={handleProfileUpdate} className="p-6 space-y-6">
-              {/* Avatar Section */}
-              <div className="flex items-center space-x-6">
-                <div className="flex-shrink-0">
-                  {profile.avatarUrl ? (
-                    <img
-                      src={profile.avatarUrl}
-                      alt={profile.displayName}
+            {loading && (
+              <div className="p-6">
+                <LoadingSpinner text="Loading profile..." />
+              </div>
+            )}
+            
+            {error && !loading && (
+              <div className="p-6">
+                <ErrorDisplay 
+                  message={error} 
+                  action={{ 
+                    label: 'Try Again', 
+                    onClick: fetchProfile 
+                  }} 
+                />
+              </div>
+            )}
+            
+            {!loading && !error && profile && (
+              <form onSubmit={handleProfileUpdate} className="p-6 space-y-6">
+                {/* Avatar Section */}
+                <div className="flex items-center space-x-6">
+                  <div className="flex-shrink-0">
+                    {profile.avatarUrl ? (
+                      <img
+                        src={profile.avatarUrl}
+                        alt={profile.displayName}
                       className="h-24 w-24 rounded-full object-cover"
                     />
                   ) : (
@@ -460,27 +427,47 @@ export default function ProfilePage() {
               </div>
 
               {/* Submit Button */}
-              <div className="flex justify-end border-t border-gray-200 pt-6">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
+                <div className="flex justify-end border-t border-gray-200 pt-6">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 
         {/* Security Tab */}
         {activeTab === 'security' && (
           <div className="bg-white shadow rounded-lg">
-            <form onSubmit={handlePasswordChange} className="p-6 space-y-6">
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Change Password</h3>
-                <p className="text-sm text-gray-600 mb-6">
-                  Ensure your account is using a long, random password to stay secure.
+            {loading && (
+              <div className="p-6">
+                <LoadingSpinner text="Loading security settings..." />
+              </div>
+            )}
+            
+            {error && !loading && (
+              <div className="p-6">
+                <ErrorDisplay 
+                  message={error} 
+                  action={{ 
+                    label: 'Try Again', 
+                    onClick: fetchProfile 
+                  }} 
+                />
+              </div>
+            )}
+            
+            {!loading && !error && profile && (
+              <form onSubmit={handlePasswordChange} className="p-6 space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Change Password</h3>
+                  <p className="text-sm text-gray-600 mb-6">
+                    Ensure your account is using a long, random password to stay secure.
                 </p>
 
                 {passwordErrors.length > 0 && (
@@ -647,17 +634,18 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* Submit Button */}
-              <div className="flex justify-end border-t border-gray-200 pt-6">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Changing Password...' : 'Change Password'}
-                </button>
-              </div>
-            </form>
+                {/* Submit Button */}
+                <div className="flex justify-end border-t border-gray-200 pt-6">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Changing Password...' : 'Change Password'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
       </div>

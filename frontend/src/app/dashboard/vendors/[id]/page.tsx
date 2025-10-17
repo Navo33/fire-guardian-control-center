@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RequireRole from '@/components/auth/RequireRole';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import {
   ArrowLeftIcon,
@@ -208,7 +209,7 @@ function VendorDetailsContent() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+          <LoadingSpinner text="Loading vendor details..." />
         </div>
       </DashboardLayout>
     );

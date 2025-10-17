@@ -230,14 +230,6 @@ export default function UserManagementPage() {
     }
   };
 
-  if (error) {
-    return (
-      <DashboardLayout>
-        <ErrorDisplay message={error} />
-      </DashboardLayout>
-    );
-  }
-
   return (
     <RequireRole allowedRoles={['admin']}>
       <DashboardLayout>
@@ -362,11 +354,24 @@ export default function UserManagementPage() {
             </h3>
           </div>
 
-          {isLoading ? (
-            <div className="flex justify-center items-center py-12">
-              <LoadingSpinner />
-            </div>
-          ) : filteredUsers.length === 0 ? (
+          {/* Loading State */}
+          {isLoading && (
+            <LoadingSpinner text="Loading users..." />
+          )}
+
+          {/* Error State */}
+          {error && !isLoading && (
+            <ErrorDisplay 
+              message={error}
+              action={{
+                label: 'Try Again',
+                onClick: fetchUsers
+              }}
+            />
+          )}
+
+          {/* Empty State */}
+          {!isLoading && !error && filteredUsers.length === 0 && (
             <div className="text-center py-12">
               <UserIcon className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
@@ -374,7 +379,10 @@ export default function UserManagementPage() {
                 Try adjusting your search or filter criteria.
               </p>
             </div>
-          ) : (
+          )}
+
+          {/* Users Table Content */}
+          {!isLoading && !error && filteredUsers.length > 0 && (
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>

@@ -81,22 +81,27 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// Rate limiting
-const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'); // 15 minutes
-const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
+// Rate limiting - Disabled in development
+if (process.env.NODE_ENV === 'production') {
+  const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'); // 15 minutes
+  const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
 
-const limiter = rateLimit({
-  windowMs,
-  max: maxRequests,
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-    retryAfter: Math.ceil(windowMs / 1000)
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
+  const limiter = rateLimit({
+    windowMs,
+    max: maxRequests,
+    message: {
+      error: 'Too many requests from this IP, please try again later.',
+      retryAfter: Math.ceil(windowMs / 1000)
+    },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
 
-app.use(limiter);
+  app.use(limiter);
+  console.log(`🔒 Rate limiting enabled: ${maxRequests} requests per ${windowMs / 1000}s`);
+} else {
+  console.log('⚠️  Rate limiting disabled in development mode');
+}
 
 // CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [

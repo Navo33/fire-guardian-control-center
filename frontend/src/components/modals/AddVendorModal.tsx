@@ -5,6 +5,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../config/api';
+import { useToast } from '../providers/ToastProvider';
+import { handleApiError, TOAST_MESSAGES } from '../../utils/toastUtils';
+import LoadingSpinner from '../ui/LoadingSpinner';
 import {
   XMarkIcon,
   BuildingOfficeIcon,
@@ -61,6 +64,7 @@ interface AddVendorModalProps {
 export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }: AddVendorModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   const {
     register,
@@ -137,6 +141,7 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
       // If onSubmit prop is provided, use it instead of the default API call
       if (onSubmit) {
         await onSubmit(data);
+        toast.success(TOAST_MESSAGES.VENDOR_CREATED);
         reset();
         onClose();
         if (onSuccess) {
@@ -167,6 +172,7 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
         throw new Error(result.message || 'Failed to create vendor');
       }
 
+      toast.success(TOAST_MESSAGES.VENDOR_CREATED);
       reset();
       onClose();
       if (onSuccess) {
@@ -174,7 +180,9 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
       }
     } catch (error) {
       console.error('Error creating vendor:', error);
-      setError(error instanceof Error ? error.message : 'Failed to create vendor');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create vendor';
+      setError(errorMessage);
+      handleApiError(toast, error, 'Failed to create vendor');
     } finally {
       setIsLoading(false);
     }
@@ -561,10 +569,10 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                   className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span className="flex items-center space-x-2">
+                      <LoadingSpinner size="sm" />
                       <span>Adding Vendor...</span>
-                    </div>
+                    </span>
                   ) : (
                     'Add Vendor'
                   )}

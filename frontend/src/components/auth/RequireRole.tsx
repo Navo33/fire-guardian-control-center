@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldExclamationIcon } from '@heroicons/react/24/outline';
+import LoadingSpinner from '../ui/LoadingSpinner';
 
 interface RequireRoleProps {
   children: React.ReactNode;
@@ -42,10 +43,7 @@ export default function RequireRole({ children, allowedRoles }: RequireRoleProps
   if (isAuthorized === null) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Checking permissions...</p>
-        </div>
+        <LoadingSpinner text="Checking permissions..." />
       </div>
     );
   }

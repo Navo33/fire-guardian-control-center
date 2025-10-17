@@ -15,7 +15,7 @@ const router = express.Router();
 const requireAdmin = (req: Request, res: Response, next: Function) => {
   const user = (req as any).user;
   
-  if (user.userType !== 'admin') {
+  if (user.user_type !== 'admin') {
     return res.status(403).json({
       success: false,
       message: 'Access denied. Admin privileges required.'
