@@ -166,9 +166,9 @@ router.put('/:key', authenticateToken, requireAdmin, async (req: Request, res: R
 
 /**
  * Update multiple settings at once
- * PUT /api/settings
+ * PUT /api/settings/bulk
  */
-router.put('/', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
+router.put('/bulk', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { settings } = req.body;
     const userId = (req as any).user.userId;

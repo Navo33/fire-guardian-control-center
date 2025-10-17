@@ -63,11 +63,22 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
       });
     }
 
-    if (phone !== undefined && phone !== null && typeof phone !== 'string') {
-      return res.status(400).json({
-        success: false,
-        message: 'Phone must be a string'
-      });
+    if (phone !== undefined && phone !== null) {
+      if (typeof phone !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone must be a string'
+        });
+      }
+      
+      // Validate Sri Lankan phone format (+94XXXXXXXXX)
+      const phoneRegex = /^\+94\d{9}$/;
+      if (phone && !phoneRegex.test(phone)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone must be in Sri Lankan format: +94XXXXXXXXX (e.g., +94771234567)'
+        });
+      }
     }
 
     if (avatarUrl !== undefined && avatarUrl !== null && typeof avatarUrl !== 'string') {
