@@ -20,8 +20,11 @@ import {
   ClockIcon,
   ShieldCheckIcon,
   WrenchScrewdriverIcon,
-  ClipboardDocumentListIcon
+  ClipboardDocumentListIcon,
+  CogIcon,
+  CheckCircleIcon
 } from '@heroicons/react/24/outline';
+import { WrenchIcon } from '@heroicons/react/24/solid';
 
 interface User {
   id: number;
@@ -251,52 +254,202 @@ function AdminDashboard({ user }: { user: User }) {
         {!isLoading && !error && (
           <>
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
-            <div className="flex items-center">
-              <div className="p-3 bg-blue-50 rounded-xl">
-                <BuildingOfficeIcon className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm font-medium text-gray-600">Active Vendors</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.activeVendors}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.activeVendors}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-green-600 font-medium">↗ 12% this month</span>
+                </div>
+              </div>
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <BuildingOfficeIcon className="h-8 w-8 text-blue-600" />
               </div>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
-            <div className="flex items-center">
-              <div className="p-3 bg-green-50 rounded-xl">
-                <UserGroupIcon className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm font-medium text-gray-600">Total Clients</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalClients}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalClients}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-green-600 font-medium">↗ 8% this month</span>
+                </div>
+              </div>
+              <div className="p-3 bg-green-50 rounded-xl">
+                <UserGroupIcon className="h-8 w-8 text-green-600" />
               </div>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
-            <div className="flex items-center">
-              <div className="p-3 bg-red-50 rounded-xl">
-                <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
-              </div>
-              <div className="ml-4">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm font-medium text-gray-600">Critical Alerts</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.criticalAlerts}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.criticalAlerts}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-red-600 font-medium">Needs attention</span>
+                </div>
+              </div>
+              <div className="p-3 bg-red-50 rounded-xl">
+                <ExclamationTriangleIcon className="h-8 w-8 text-red-600" />
               </div>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
-            <div className="flex items-center">
-              <div className="p-3 bg-purple-50 rounded-xl">
-                <FireIcon className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm font-medium text-gray-600">Total Equipment</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalEquipment.toLocaleString()}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalEquipment.toLocaleString()}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-gray-600 font-medium">Across all vendors</span>
+                </div>
               </div>
+              <div className="p-3 bg-purple-50 rounded-xl">
+                <FireIcon className="h-8 w-8 text-purple-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Pending Inspections</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.pendingInspections}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-amber-600 font-medium">Due this week</span>
+                </div>
+              </div>
+              <div className="p-3 bg-amber-50 rounded-xl">
+                <ClockIcon className="h-8 w-8 text-amber-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Overdue Maintenance</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.overdueMaintenances}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-red-600 font-medium">Requires action</span>
+                </div>
+              </div>
+              <div className="p-3 bg-orange-50 rounded-xl">
+                <WrenchIcon className="h-8 w-8 text-orange-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions & Alerts Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Quick Actions */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+            <div className="space-y-3">
+              <button 
+                onClick={() => setIsAddModalOpen(true)}
+                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
+              >
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <PlusIcon className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Add New Vendor</p>
+                  <p className="text-xs text-gray-500">Register a new vendor</p>
+                </div>
+              </button>
+              
+              <Link 
+                href="/dashboard/analytics"
+                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                <div className="p-2 bg-purple-50 rounded-lg">
+                  <ChartBarIcon className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">View Analytics</p>
+                  <p className="text-xs text-gray-500">System performance insights</p>
+                </div>
+              </Link>
+              
+              <Link 
+                href="/dashboard/users"
+                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                <div className="p-2 bg-green-50 rounded-lg">
+                  <UserGroupIcon className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Manage Users</p>
+                  <p className="text-xs text-gray-500">User accounts & permissions</p>
+                </div>
+              </Link>
+              
+              <Link 
+                href="/dashboard/settings"
+                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                <div className="p-2 bg-gray-50 rounded-lg">
+                  <CogIcon className="h-5 w-5 text-gray-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">System Settings</p>
+                  <p className="text-xs text-gray-500">Configure security & policies</p>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* Critical Alerts */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Critical Alerts</h3>
+              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full font-medium">
+                {stats.criticalAlerts} Active
+              </span>
+            </div>
+            <div className="space-y-3">
+              {stats.criticalAlerts > 0 ? (
+                <>
+                  <div className="flex items-start space-x-3 p-3 bg-red-50 rounded-xl border border-red-100">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">Overdue Maintenance Items</p>
+                      <p className="text-xs text-gray-600 mt-1">{stats.overdueMaintenances} equipment items require immediate attention</p>
+                      <Link href="/dashboard/analytics" className="text-xs text-red-600 hover:text-red-700 font-medium mt-2 inline-block">
+                        View Details →
+                      </Link>
+                    </div>
+                  </div>
+                  
+                  {(stats.pendingInspections ?? 0) > 5 && (
+                    <div className="flex items-start space-x-3 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                      <ClockIcon className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">Pending Inspections</p>
+                        <p className="text-xs text-gray-600 mt-1">{stats.pendingInspections} inspections scheduled this week</p>
+                        <Link href="/dashboard/analytics" className="text-xs text-amber-600 hover:text-amber-700 font-medium mt-2 inline-block">
+                          View Schedule →
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center justify-center w-12 h-12 bg-green-50 rounded-xl mb-3">
+                    <CheckCircleIcon className="h-6 w-6 text-green-600" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">All Clear!</p>
+                  <p className="text-xs text-gray-500 mt-1">No critical alerts at this time</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

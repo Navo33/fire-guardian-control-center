@@ -153,7 +153,6 @@ export default function SystemAnalyticsPage() {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Filter states
   const [filters, setFilters] = useState<AnalyticsFilters>({
@@ -166,11 +165,11 @@ export default function SystemAnalyticsPage() {
     specializations: []
   });
 
-  // Initialize date filters to last 30 days
+  // Initialize date filters to last 14 days (2 weeks)
   useEffect(() => {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
+    startDate.setDate(startDate.getDate() - 14); // 2 weeks from today
 
     setFilters(prev => ({
       ...prev,
@@ -240,14 +239,13 @@ export default function SystemAnalyticsPage() {
   // Apply filters
   const applyFilters = () => {
     fetchAnalyticsData();
-    setShowFilters(false);
   };
 
   // Reset filters
   const resetFilters = () => {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
+    startDate.setDate(startDate.getDate() - 14); // Reset to 2 weeks
 
     setFilters({
       startDate: startDate.toISOString().split('T')[0],
@@ -298,20 +296,13 @@ export default function SystemAnalyticsPage() {
               <p className="text-gray-600 mt-1">Comprehensive analytics and insights for Fire Guardian Control Center</p>
             </div>
           </div>
-          <div className="mt-4 sm:mt-0 flex space-x-3">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="btn-secondary flex items-center space-x-2"
-            >
-              <FunnelIcon className="h-5 w-5" />
-              <span>Filters</span>
-            </button>
+          <div className="mt-4 sm:mt-0">
             <button
               onClick={exportData}
               className="btn-primary flex items-center space-x-2"
             >
               <ArrowDownTrayIcon className="h-5 w-5" />
-              <span>Export</span>
+              <span>Export Report</span>
             </button>
           </div>
         </div>
@@ -339,72 +330,72 @@ export default function SystemAnalyticsPage() {
         {/* Content - Only show when not loading and no error */}
         {!loading && !error && analyticsData && (
           <>
-            {/* Filters Panel */}
-            {showFilters && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Filter Analytics Data</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Date Range */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
-                  className="input-field"
-                />
-              </div>
+            {/* Filters Panel - Vendor-style Inline Layout */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex flex-col lg:flex-row gap-3">
+                {/* Date Range Filters */}
+                <div className="flex-1 relative">
+                  <CalendarIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
+                  <input
+                    type="date"
+                    value={filters.startDate}
+                    onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="input-field pl-10"
+                    placeholder="Start Date"
+                  />
+                </div>
 
-              {/* Company Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Companies</label>
+                <div className="flex-1 relative">
+                  <CalendarIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
+                  <input
+                    type="date"
+                    value={filters.endDate}
+                    onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="input-field pl-10"
+                    placeholder="End Date"
+                  />
+                </div>
+
+                {/* Company Filter - Inline Dropdown */}
                 <div className="relative">
                   <select
-                    multiple
-                    value={filters.selectedCompanies.map(String)}
+                    value={filters.selectedCompanies.length === 1 ? filters.selectedCompanies[0] : ''}
                     onChange={(e) => {
-                      const selected = Array.from(e.target.selectedOptions, option => parseInt(option.value));
-                      setFilters(prev => ({ ...prev, selectedCompanies: selected }));
+                      const value = e.target.value;
+                      setFilters(prev => ({
+                        ...prev,
+                        selectedCompanies: value ? [parseInt(value)] : []
+                      }));
                     }}
-                    className="input-field appearance-none pr-8"
-                    size={4}
+                    className="input-field appearance-none pr-8 min-w-[180px]"
                   >
+                    <option value="">All Companies</option>
                     {analyticsData.companies.map((company: any) => (
                       <option key={company.id} value={company.id}>
-                        {company.name} ({company.vendorCount} vendors)
+                        {company.name} ({company.vendorCount})
                       </option>
                     ))}
                   </select>
                   <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
                 </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={applyFilters}
+                    className="btn-primary px-6"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    onClick={resetFilters}
+                    className="btn-secondary px-4"
+                  >
+                    Reset
+                  </button>
+                </div>
               </div>
             </div>
-
-            <div className="mt-6 flex space-x-3">
-              <button
-                onClick={applyFilters}
-                className="btn-primary"
-              >
-                Apply Filters
-              </button>
-              <button
-                onClick={resetFilters}
-                className="btn-secondary"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-            )}
 
             {/* Key Metrics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

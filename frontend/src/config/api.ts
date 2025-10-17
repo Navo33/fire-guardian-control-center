@@ -33,6 +33,7 @@ export const API_ENDPOINTS = {
     LIST: `${API_BASE_URL}/vendors`,
     CREATE: `${API_BASE_URL}/vendors`,
     BY_ID: (id: string | number) => `${API_BASE_URL}/vendors/${id}`,
+    EQUIPMENT: (id: string | number) => `${API_BASE_URL}/vendors/${id}/equipment`,
     SPECIALIZATIONS: `${API_BASE_URL}/vendors/specializations`,
     STATS: `${API_BASE_URL}/users/vendors/stats`,
   },

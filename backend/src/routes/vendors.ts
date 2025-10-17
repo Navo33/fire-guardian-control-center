@@ -219,4 +219,12 @@ router.delete('/:id', vendorController.deleteVendor);
  */
 router.get('/:id/stats', vendorController.getVendorStats);
 
+/**
+ * @route   GET /api/vendors/:id/equipment
+ * @desc    Get all equipment for a specific vendor
+ * @access  Private (super_admin only)
+ * @params  id
+ */
+router.get('/:id/equipment', vendorController.getVendorEquipment);
+
 export default router;

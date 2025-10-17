@@ -152,8 +152,56 @@ function VendorDetailsContent() {
           throw new Error('Vendor not found');
         }
 
-        // For now, set empty equipment array - we can implement equipment fetching later
-        setEquipment([]);
+        // Fetch vendor equipment
+        const equipmentUrl = API_ENDPOINTS.VENDORS.EQUIPMENT(vendorId);
+        logApiCall('GET', equipmentUrl);
+        const equipmentResponse = await fetch(equipmentUrl, { headers });
+        const equipmentResult = await equipmentResponse.json();
+
+        if (equipmentResponse.ok && equipmentResult.success && equipmentResult.data) {
+          // Transform equipment data to match frontend interface
+          const transformedEquipment: Equipment[] = equipmentResult.data.map((item: any) => {
+            // Determine status based on maintenance and condition
+            let status: 'Good' | 'Needs Attention' | 'Critical' = 'Good';
+            
+            if (item.status === 'maintenance' || item.status === 'out_of_service') {
+              status = 'Critical';
+            } else if (item.nextMaintenanceDate) {
+              const daysUntilMaintenance = Math.floor(
+                (new Date(item.nextMaintenanceDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+              );
+              if (daysUntilMaintenance < 0) {
+                status = 'Critical'; // Overdue
+              } else if (daysUntilMaintenance < 30) {
+                status = 'Needs Attention'; // Due soon
+              }
+            } else if (item.conditionRating && item.conditionRating < 3) {
+              status = 'Needs Attention';
+            }
+
+            return {
+              id: item.id,
+              type: item.equipmentType || item.equipmentName || 'Unknown',
+              model: item.model ? `${item.manufacturer || ''} ${item.model}`.trim() : 'N/A',
+              location: item.location || 'Not specified',
+              clientName: item.clientName || 'Unassigned',
+              lastInspection: item.lastMaintenanceDate 
+                ? new Date(item.lastMaintenanceDate).toLocaleDateString() 
+                : 'Never',
+              nextInspection: item.nextMaintenanceDate 
+                ? new Date(item.nextMaintenanceDate).toLocaleDateString() 
+                : 'Not scheduled',
+              status,
+              compliance: item.compliance || 0
+            };
+          });
+          
+          setEquipment(transformedEquipment);
+        } else {
+          // If equipment fetch fails, just set empty array and continue
+          console.warn('Failed to fetch equipment data');
+          setEquipment([]);
+        }
 
       } catch (err) {
         console.error('Error fetching vendor data:', err);

@@ -627,4 +627,101 @@ export class VendorRepository {
       throw error;
     }
   }
+
+  /**
+   * Get equipment for a specific vendor
+   */
+  static async getVendorEquipment(vendorId: number): Promise<any[]> {
+    const query = `
+      SELECT 
+        ei.id,
+        ei.serial_number,
+        ei.asset_tag,
+        ei.status,
+        ei.condition_rating,
+        ei.assigned_at,
+        ei.last_maintenance_date,
+        ei.next_maintenance_date,
+        ei.location,
+        
+        -- Equipment details
+        e.equipment_name,
+        e.equipment_type,
+        e.equipment_code,
+        e.model,
+        e.manufacturer,
+        
+        -- Client details (if assigned)
+        client.id as client_id,
+        client.display_name as client_name,
+        client.email as client_email,
+        
+        -- Assignment details (if assigned)
+        ea.id as assignment_id,
+        ea.assigned_at as assignment_date,
+        ea.start_date,
+        ea.end_date,
+        ea.status as assignment_status
+        
+      FROM equipment_instance ei
+      INNER JOIN equipment e ON ei.equipment_id = e.id
+      LEFT JOIN "user" client ON ei.assigned_to = client.id
+      LEFT JOIN equipment_assignment ea ON ea.vendor_id = ei.vendor_id 
+        AND ea.client_id = ei.assigned_to 
+        AND ea.status = 'active'
+      
+      WHERE ei.vendor_id = $1 
+        AND ei.deleted_at IS NULL
+        AND e.deleted_at IS NULL
+      
+      ORDER BY ei.created_at DESC
+    `;
+
+    try {
+      const result = await pool.query(query, [vendorId]);
+      
+      DebugLogger.log('Vendor equipment fetched', { 
+        vendorId, 
+        count: result.rows.length 
+      }, 'VENDOR_EQUIPMENT');
+      
+      return result.rows.map(row => ({
+        id: row.id,
+        serialNumber: row.serial_number,
+        assetTag: row.asset_tag,
+        status: row.status,
+        conditionRating: row.condition_rating,
+        assignedAt: row.assigned_at,
+        lastMaintenanceDate: row.last_maintenance_date,
+        nextMaintenanceDate: row.next_maintenance_date,
+        location: row.location,
+        
+        // Equipment info
+        equipmentName: row.equipment_name,
+        equipmentType: row.equipment_type,
+        equipmentCode: row.equipment_code,
+        model: row.model,
+        manufacturer: row.manufacturer,
+        
+        // Client info
+        clientId: row.client_id,
+        clientName: row.client_name || 'Unassigned',
+        clientEmail: row.client_email,
+        
+        // Assignment info
+        assignmentId: row.assignment_id,
+        assignmentDate: row.assignment_date,
+        startDate: row.start_date,
+        endDate: row.end_date,
+        assignmentStatus: row.assignment_status,
+        
+        // Calculated fields for frontend
+        compliance: row.next_maintenance_date ? 
+          (new Date(row.next_maintenance_date) > new Date() ? 100 : 50) : 75
+      }));
+    } catch (error) {
+      console.error('Error getting vendor equipment:', error);
+      throw error;
+    }
+  }
 }

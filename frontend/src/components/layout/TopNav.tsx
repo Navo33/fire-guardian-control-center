@@ -74,7 +74,7 @@ export default function TopNav({ user, onMenuToggle, isMobileMenuOpen }: TopNavP
 
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-40 flex-shrink-0">
-      <div className="px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1920px] mx-auto px-6 sm:px-8 lg:px-12">
         <div className="flex justify-between items-center h-16">
           {/* Left side - Logo and menu toggle */}
           <div className="flex items-center">
@@ -125,29 +125,29 @@ export default function TopNav({ user, onMenuToggle, isMobileMenuOpen }: TopNavP
 
               {/* Dropdown Menu */}
               {isDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
                   {/* User Info */}
                   <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-sm font-medium text-gray-900">{user.display_name || 'User'}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{getRoleDisplay(user.user_type)}</p>
+                    <p className="text-sm font-semibold text-gray-900">{user.display_name || 'User'}</p>
+                    <p className="text-xs text-gray-500 mt-1">{getRoleDisplay(user.user_type)}</p>
                   </div>
 
                   {/* Menu Items */}
-                  <div className="py-1">
+                  <div className="py-2">
                     <button
                       onClick={handleProfileClick}
-                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                      className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
                     >
-                      <UserCircleIcon className="h-4 w-4" />
+                      <UserCircleIcon className="h-5 w-5 text-gray-400" />
                       <span>My Profile</span>
                     </button>
 
                     {user.user_type === 'admin' && (
                       <button
                         onClick={handleSettingsClick}
-                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                        className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
                       >
-                        <Cog6ToothIcon className="h-4 w-4" />
+                        <Cog6ToothIcon className="h-5 w-5 text-gray-400" />
                         <span>System Settings</span>
                       </button>
                     )}
@@ -155,12 +155,12 @@ export default function TopNav({ user, onMenuToggle, isMobileMenuOpen }: TopNavP
                   </div>
 
                   {/* Logout */}
-                  <div className="border-t border-gray-100 py-1">
+                  <div className="border-t border-gray-100 py-2">
                     <button
                       onClick={handleLogout}
-                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                      className="w-full px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
                     >
-                      <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                      <ArrowRightOnRectangleIcon className="h-5 w-5" />
                       <span>Logout</span>
                     </button>
                   </div>
