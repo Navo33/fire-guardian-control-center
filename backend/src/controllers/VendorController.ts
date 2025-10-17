@@ -394,6 +394,48 @@ export class VendorController extends BaseController {
   });
 
   /**
+   * GET /api/vendors/:id/equipment
+   * Get all equipment for a specific vendor (admin only)
+   */
+  getVendorEquipment = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    DebugLogger.log('VendorController.getVendorEquipment called', { 
+      userId: req.user?.userId,
+      vendorId: req.params.id 
+    });
+
+    // Check permissions
+    if (!this.requireRole(req, res, ['admin'])) return;
+
+    try {
+      const vendorId = parseInt(req.params.id);
+      if (isNaN(vendorId)) {
+        DebugLogger.log('Invalid vendor ID for equipment', { vendorId: req.params.id }, 'WARNING');
+        return ApiResponseUtil.error(res, 'Invalid vendor ID', 400, 'INVALID_ID');
+      }
+
+      const equipment = await VendorRepository.getVendorEquipment(vendorId);
+
+      DebugLogger.log('Vendor equipment retrieved successfully', { 
+        vendorId, 
+        count: equipment.length 
+      });
+
+      this.logAction('VENDOR_EQUIPMENT_RETRIEVED', req.user!.userId, { vendorId });
+
+      ApiResponseUtil.success(res, equipment, 'Vendor equipment retrieved successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error retrieving vendor equipment', error);
+      this.logAction('VENDOR_EQUIPMENT_ERROR', req.user?.userId, { 
+        vendorId: req.params.id,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      console.error('Error retrieving vendor equipment:', error);
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
    * GET /api/vendors/specializations
    * Get all available specializations for dropdown (admin only)
    */

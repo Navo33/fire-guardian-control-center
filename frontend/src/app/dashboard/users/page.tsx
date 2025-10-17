@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import RequireRole from '@/components/auth/RequireRole';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
@@ -229,17 +230,10 @@ export default function UserManagementPage() {
     }
   };
 
-  if (error) {
-    return (
-      <DashboardLayout>
-        <ErrorDisplay message={error} />
-      </DashboardLayout>
-    );
-  }
-
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
+    <RequireRole allowedRoles={['admin']}>
+      <DashboardLayout>
+        <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center space-x-3">
@@ -354,17 +348,30 @@ export default function UserManagementPage() {
 
         {/* Users Table */}
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h3 className="text-lg font-medium text-gray-900">
+          <div className="px-6 py-5 border-b border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900">
               System Users ({filteredUsers.length})
             </h3>
           </div>
 
-          {isLoading ? (
-            <div className="flex justify-center items-center py-12">
-              <LoadingSpinner />
-            </div>
-          ) : filteredUsers.length === 0 ? (
+          {/* Loading State */}
+          {isLoading && (
+            <LoadingSpinner text="Loading users..." />
+          )}
+
+          {/* Error State */}
+          {error && !isLoading && (
+            <ErrorDisplay 
+              message={error}
+              action={{
+                label: 'Try Again',
+                onClick: fetchUsers
+              }}
+            />
+          )}
+
+          {/* Empty State */}
+          {!isLoading && !error && filteredUsers.length === 0 && (
             <div className="text-center py-12">
               <UserIcon className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
@@ -372,84 +379,147 @@ export default function UserManagementPage() {
                 Try adjusting your search or filter criteria.
               </p>
             </div>
-          ) : (
+          )}
+
+          {/* Users Table Content */}
+          {!isLoading && !error && filteredUsers.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      User
+              <table className="min-w-full">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/50">
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      User Details
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Role & Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Business Metrics
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Activity
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Last Activity
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {filteredUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {user.display_name || `${user.first_name} ${user.last_name}`}
+                    <tr 
+                      key={user.id} 
+                      onClick={() => window.location.href = `/dashboard/users/${user.id}`}
+                      className="hover:bg-red-50/30 cursor-pointer transition-all duration-150"
+                    >
+                      {/* User Details */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex-shrink-0">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center text-white font-semibold text-sm">
+                              {user.first_name?.[0]}{user.last_name?.[0]}
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500">{user.email}</div>
+                          <div>
+                            <div className="text-sm font-semibold text-gray-900">
+                              {user.display_name || `${user.first_name} ${user.last_name}`}
+                            </div>
+                            <div className="text-xs text-gray-500">{user.email}</div>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getUserTypeBadge(user.user_type)}
+
+                      {/* Role & Status */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-1.5">
+                          {getUserTypeBadge(user.user_type)}
+                          <div className="flex items-center space-x-1">
+                            {getStatusBadge(user.status)}
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(user.status)}
+
+                      {/* Business Metrics */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          {user.user_type === 'vendor' && (
+                            <>
+                              <div className="flex items-center text-xs text-gray-600">
+                                <span className="font-medium mr-1">{user.companies_count || 0}</span>
+                                <span className="text-gray-500">Clients</span>
+                              </div>
+                              <div className="flex items-center text-xs text-gray-600">
+                                <span className="font-medium mr-1">{user.equipment_count || 0}</span>
+                                <span className="text-gray-500">Equipment</span>
+                              </div>
+                            </>
+                          )}
+                          {user.user_type === 'client' && (
+                            <>
+                              <div className="flex items-center text-xs text-gray-600">
+                                <span className="font-medium mr-1">{user.equipment_count || 0}</span>
+                                <span className="text-gray-500">Equipment Units</span>
+                              </div>
+                              <div className="flex items-center text-xs text-gray-500">
+                                <span>{user.companies_count || 0} Active Assignments</span>
+                              </div>
+                            </>
+                          )}
+                          {user.user_type === 'admin' && (
+                            <div className="text-xs text-gray-500">
+                              System Administrator
+                            </div>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div>
-                          <div>Last Login:</div>
-                          <div className="font-medium">
+
+                      {/* Last Activity */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-medium text-gray-700">
                             {user.last_login 
-                              ? new Date(user.last_login).toLocaleDateString()
-                              : 'Never'
+                              ? new Date(user.last_login).toLocaleDateString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })
+                              : 'Never logged in'
+                            }
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {user.last_login 
+                              ? `${Math.floor((Date.now() - new Date(user.last_login).getTime()) / (1000 * 60 * 60 * 24))} days ago`
+                              : 'No activity'
                             }
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button
-                          onClick={() => toggleUserLock(user.id, user.is_locked)}
-                          className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                            user.is_locked
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-                          }`}
-                        >
-                          {user.is_locked ? (
-                            <>
-                              <LockOpenIcon className="h-4 w-4 mr-1" />
-                              Unlock
-                            </>
-                          ) : (
-                            <>
-                              <LockClosedIcon className="h-4 w-4 mr-1" />
-                              Lock
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => deleteUser(user.id)}
-                          className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
-                        >
-                          <TrashIcon className="h-4 w-4 mr-1" />
-                          Delete
-                        </button>
+
+                      {/* Actions */}
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end space-x-3 text-sm font-medium">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleUserLock(user.id, user.is_locked);
+                            }}
+                            className={`transition-colors ${
+                              user.is_locked
+                                ? 'text-green-600 hover:text-green-800'
+                                : 'text-yellow-600 hover:text-yellow-800'
+                            }`}
+                          >
+                            {user.is_locked ? 'Unlock' : 'Lock'}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteUser(user.id);
+                            }}
+                            className="text-red-600 hover:text-red-800 transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -460,5 +530,6 @@ export default function UserManagementPage() {
         </div>
       </div>
     </DashboardLayout>
+    </RequireRole>
   );
 }

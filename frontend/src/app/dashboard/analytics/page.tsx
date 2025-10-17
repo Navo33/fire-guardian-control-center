@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import RequireRole from '@/components/auth/RequireRole';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall, buildApiUrl } from '@/config/api';
@@ -152,7 +153,6 @@ export default function SystemAnalyticsPage() {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Filter states
   const [filters, setFilters] = useState<AnalyticsFilters>({
@@ -165,11 +165,11 @@ export default function SystemAnalyticsPage() {
     specializations: []
   });
 
-  // Initialize date filters to last 30 days
+  // Initialize date filters to last 14 days (2 weeks)
   useEffect(() => {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
+    startDate.setDate(startDate.getDate() - 14); // 2 weeks from today
 
     setFilters(prev => ({
       ...prev,
@@ -239,14 +239,13 @@ export default function SystemAnalyticsPage() {
   // Apply filters
   const applyFilters = () => {
     fetchAnalyticsData();
-    setShowFilters(false);
   };
 
   // Reset filters
   const resetFilters = () => {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
+    startDate.setDate(startDate.getDate() - 14); // Reset to 2 weeks
 
     setFilters({
       startDate: startDate.toISOString().split('T')[0],
@@ -282,41 +281,10 @@ export default function SystemAnalyticsPage() {
     URL.revokeObjectURL(url);
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex justify-center items-center h-64">
-          <LoadingSpinner />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <DashboardLayout>
-        <ErrorDisplay 
-          message={error}
-        />
-      </DashboardLayout>
-    );
-  }
-
-  if (!analyticsData) {
-    return (
-      <DashboardLayout>
-        <div className="text-center py-12">
-          <p className="text-gray-500">No analytics data available</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  const { systemMetrics, vendorMetrics, equipmentMetrics, clientMetrics, timeSeriesData, companies, alertMetrics, alertTrends } = analyticsData;
-
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
+    <RequireRole allowedRoles={['admin']}>
+      <DashboardLayout>
+        <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center space-x-3">
@@ -328,102 +296,118 @@ export default function SystemAnalyticsPage() {
               <p className="text-gray-600 mt-1">Comprehensive analytics and insights for Fire Guardian Control Center</p>
             </div>
           </div>
-          <div className="mt-4 sm:mt-0 flex space-x-3">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="btn-secondary flex items-center space-x-2"
-            >
-              <FunnelIcon className="h-5 w-5" />
-              <span>Filters</span>
-            </button>
+          <div className="mt-4 sm:mt-0">
             <button
               onClick={exportData}
               className="btn-primary flex items-center space-x-2"
             >
               <ArrowDownTrayIcon className="h-5 w-5" />
-              <span>Export</span>
+              <span>Export Report</span>
             </button>
           </div>
         </div>
 
-        {/* Filters Panel */}
-        {showFilters && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Filter Analytics Data</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Date Range */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
-                  className="input-field"
-                />
-              </div>
+        {/* Loading State */}
+        {loading && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-12">
+            <LoadingSpinner text="Loading analytics data..." />
+          </div>
+        )}
 
-              {/* Company Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Companies</label>
+        {/* Error State */}
+        {error && !loading && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-12">
+            <ErrorDisplay 
+              message={error}
+              action={{
+                label: 'Try Again',
+                onClick: fetchAnalyticsData
+              }}
+            />
+          </div>
+        )}
+
+        {/* Content - Only show when not loading and no error */}
+        {!loading && !error && analyticsData && (
+          <>
+            {/* Filters Panel - Vendor-style Inline Layout */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex flex-col lg:flex-row gap-3">
+                {/* Date Range Filters */}
+                <div className="flex-1 relative">
+                  <CalendarIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
+                  <input
+                    type="date"
+                    value={filters.startDate}
+                    onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="input-field pl-10"
+                    placeholder="Start Date"
+                  />
+                </div>
+
+                <div className="flex-1 relative">
+                  <CalendarIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
+                  <input
+                    type="date"
+                    value={filters.endDate}
+                    onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="input-field pl-10"
+                    placeholder="End Date"
+                  />
+                </div>
+
+                {/* Company Filter - Inline Dropdown */}
                 <div className="relative">
                   <select
-                    multiple
-                    value={filters.selectedCompanies.map(String)}
+                    value={filters.selectedCompanies.length === 1 ? filters.selectedCompanies[0] : ''}
                     onChange={(e) => {
-                      const selected = Array.from(e.target.selectedOptions, option => parseInt(option.value));
-                      setFilters(prev => ({ ...prev, selectedCompanies: selected }));
+                      const value = e.target.value;
+                      setFilters(prev => ({
+                        ...prev,
+                        selectedCompanies: value ? [parseInt(value)] : []
+                      }));
                     }}
-                    className="input-field appearance-none pr-8"
-                    size={4}
+                    className="input-field appearance-none pr-8 min-w-[180px]"
                   >
-                    {companies.map(company => (
+                    <option value="">All Companies</option>
+                    {analyticsData.companies.map((company: any) => (
                       <option key={company.id} value={company.id}>
-                        {company.name} ({company.vendorCount} vendors)
+                        {company.name} ({company.vendorCount})
                       </option>
                     ))}
                   </select>
                   <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
                 </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={applyFilters}
+                    className="btn-primary px-6"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    onClick={resetFilters}
+                    className="btn-secondary px-4"
+                  >
+                    Reset
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="mt-6 flex space-x-3">
-              <button
-                onClick={applyFilters}
-                className="btn-primary"
-              >
-                Apply Filters
-              </button>
-              <button
-                onClick={resetFilters}
-                className="btn-secondary"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Key Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <UserGroupIcon className="h-8 w-8 text-blue-600" />
-              </div>
-              <div className="ml-4 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Total Vendors</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{systemMetrics.totalVendors}</dd>
+            {/* Key Metrics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-shadow">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <UserGroupIcon className="h-8 w-8 text-red-600" />
+                  </div>
+                  <div className="ml-4 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Total Vendors</dt>
+                      <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.totalVendors}</dd>
                 </dl>
               </div>
             </div>
@@ -437,7 +421,7 @@ export default function SystemAnalyticsPage() {
               <div className="ml-4 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Total Clients</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{systemMetrics.totalClients}</dd>
+                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.totalClients}</dd>
                 </dl>
               </div>
             </div>
@@ -451,7 +435,7 @@ export default function SystemAnalyticsPage() {
               <div className="ml-4 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Total Equipment</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{systemMetrics.totalEquipment}</dd>
+                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.totalEquipment}</dd>
                 </dl>
               </div>
             </div>
@@ -465,7 +449,7 @@ export default function SystemAnalyticsPage() {
               <div className="ml-4 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Active Assignments</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{systemMetrics.activeAssignments}</dd>
+                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.activeAssignments}</dd>
                 </dl>
               </div>
             </div>
@@ -479,7 +463,7 @@ export default function SystemAnalyticsPage() {
               <div className="ml-4 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Total Assignments</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{systemMetrics.totalAssignments}</dd>
+                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.totalAssignments}</dd>
                 </dl>
               </div>
             </div>
@@ -493,7 +477,7 @@ export default function SystemAnalyticsPage() {
               <div className="ml-4 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Pending Returns</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{systemMetrics.pendingReturns}</dd>
+                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.pendingReturns}</dd>
                 </dl>
               </div>
             </div>
@@ -503,11 +487,11 @@ export default function SystemAnalyticsPage() {
         {/* Time Series Chart */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Activity Trends Over Time</h3>
-          {timeSeriesData.length > 0 ? (
+          {analyticsData.timeSeriesData.length > 0 ? (
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
-                  data={timeSeriesData}
+                  data={analyticsData.timeSeriesData}
                   margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                 >
                   <defs>
@@ -599,12 +583,12 @@ export default function SystemAnalyticsPage() {
         {/* Vendor Performance Chart */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Top Vendor Performance</h3>
-          {vendorMetrics.length > 0 ? (
+          {analyticsData.vendorMetrics.length > 0 ? (
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart 
-                  data={vendorMetrics
-                    .sort((a, b) => b.totalEquipment - a.totalEquipment)
+                  data={analyticsData.vendorMetrics
+                    .sort((a: any, b: any) => b.totalEquipment - a.totalEquipment)
                     .slice(0, 8)
                   }
                   margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
@@ -668,24 +652,24 @@ export default function SystemAnalyticsPage() {
           <h3 className="text-lg font-medium text-gray-900 mb-4">System Alerts Overview</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div className="text-center p-4 bg-red-50 rounded-lg border border-red-100">
-              <div className="text-3xl font-bold" style={{ color: COLORS.danger }}>{systemMetrics?.criticalAlerts || 0}</div>
+              <div className="text-3xl font-bold" style={{ color: COLORS.danger }}>{analyticsData.systemMetrics?.criticalAlerts || 0}</div>
               <div className="text-sm font-medium text-red-700">Critical Alerts</div>
             </div>
             <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-100">
-              <div className="text-3xl font-bold" style={{ color: COLORS.warning }}>{systemMetrics?.warningAlerts || 0}</div>
+              <div className="text-3xl font-bold" style={{ color: COLORS.warning }}>{analyticsData.systemMetrics?.warningAlerts || 0}</div>
               <div className="text-sm font-medium text-orange-700">Warning Alerts</div>
             </div>
             <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
-              <div className="text-3xl font-bold" style={{ color: COLORS.info }}>{systemMetrics?.infoAlerts || 0}</div>
+              <div className="text-3xl font-bold" style={{ color: COLORS.info }}>{analyticsData.systemMetrics?.infoAlerts || 0}</div>
               <div className="text-sm font-medium text-blue-700">Info Alerts</div>
             </div>
           </div>
           
-          {alertTrends && alertTrends.length > 0 ? (
+          {analyticsData.alertTrends && analyticsData.alertTrends.length > 0 ? (
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
-                  data={alertTrends}
+                  data={analyticsData.alertTrends}
                   margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                 >
                   <defs>
@@ -770,9 +754,9 @@ export default function SystemAnalyticsPage() {
                 <PieChart>
                   <Pie
                     data={[
-                      { name: 'Available', value: equipmentMetrics.reduce((acc, eq) => acc + eq.availableInstances, 0) },
-                      { name: 'Assigned', value: equipmentMetrics.reduce((acc, eq) => acc + eq.assignedInstances, 0) },
-                      { name: 'Maintenance', value: equipmentMetrics.reduce((acc, eq) => acc + eq.maintenanceInstances, 0) }
+                      { name: 'Available', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.availableInstances, 0) },
+                      { name: 'Assigned', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.assignedInstances, 0) },
+                      { name: 'Maintenance', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.maintenanceInstances, 0) }
                     ]}
                     cx="50%"
                     cy="50%"
@@ -783,9 +767,9 @@ export default function SystemAnalyticsPage() {
                     dataKey="value"
                   >
                     {[
-                      { name: 'Available', value: equipmentMetrics.reduce((acc, eq) => acc + eq.availableInstances, 0), color: COLORS.secondary },
-                      { name: 'Assigned', value: equipmentMetrics.reduce((acc, eq) => acc + eq.assignedInstances, 0), color: COLORS.primary },
-                      { name: 'Maintenance', value: equipmentMetrics.reduce((acc, eq) => acc + eq.maintenanceInstances, 0), color: COLORS.warning }
+                      { name: 'Available', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.availableInstances, 0), color: COLORS.secondary },
+                      { name: 'Assigned', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.assignedInstances, 0), color: COLORS.primary },
+                      { name: 'Maintenance', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.maintenanceInstances, 0), color: COLORS.warning }
                     ].map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
@@ -810,27 +794,27 @@ export default function SystemAnalyticsPage() {
               <div className="flex items-center justify-between py-2 border-b border-gray-100">
                 <span className="text-sm text-gray-600">Most Active Vendor:</span>
                 <span className="text-sm font-medium text-gray-900">
-                  {vendorMetrics.length > 0 ? vendorMetrics[0].companyName : 'N/A'}
+                  {analyticsData.vendorMetrics.length > 0 ? analyticsData.vendorMetrics[0].companyName : 'N/A'}
                 </span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-gray-100">
                 <span className="text-sm text-gray-600">Most Utilized Equipment:</span>
                 <span className="text-sm font-medium text-gray-900">
-                  {equipmentMetrics.length > 0 ? equipmentMetrics[0].equipmentName : 'N/A'}
+                  {analyticsData.equipmentMetrics.length > 0 ? analyticsData.equipmentMetrics[0].equipmentName : 'N/A'}
                 </span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-gray-100">
                 <span className="text-sm text-gray-600">Average Utilization Rate:</span>
                 <span className="text-sm font-medium text-gray-900">
-                  {equipmentMetrics.length > 0 
-                    ? `${(equipmentMetrics.reduce((acc, eq) => acc + eq.utilizationRate, 0) / equipmentMetrics.length).toFixed(1)}%`
+                  {analyticsData.equipmentMetrics.length > 0 
+                    ? `${(analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.utilizationRate, 0) / analyticsData.equipmentMetrics.length).toFixed(1)}%`
                     : '0%'
                   }
                 </span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-gray-600">Total Companies:</span>
-                <span className="text-sm font-medium text-gray-900">{companies.length}</span>
+                <span className="text-sm font-medium text-gray-900">{analyticsData.companies.length}</span>
               </div>
             </div>
           </div>
@@ -857,7 +841,7 @@ export default function SystemAnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {vendorMetrics.slice(0, 5).map((vendor) => (
+                  {analyticsData.vendorMetrics.slice(0, 5).map((vendor: any) => (
                     <tr key={vendor.vendorId} className="hover:bg-gray-50">
                       <td className="py-3 text-sm font-medium text-gray-900">
                         {vendor.companyName}
@@ -894,7 +878,7 @@ export default function SystemAnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {equipmentMetrics.slice(0, 5).map((equipment) => (
+                  {analyticsData.equipmentMetrics.slice(0, 5).map((equipment: any) => (
                     <tr key={equipment.equipmentId} className="hover:bg-gray-50">
                       <td className="py-3 text-sm font-medium text-gray-900">
                         {equipment.equipmentName}
@@ -920,8 +904,11 @@ export default function SystemAnalyticsPage() {
             </div>
           </div>
         </div>
+          </>
+        )}
 
-      </div>
-    </DashboardLayout>
+        </div>
+      </DashboardLayout>
+    </RequireRole>
   );
 }

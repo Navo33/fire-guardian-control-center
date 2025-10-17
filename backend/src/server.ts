@@ -7,11 +7,13 @@ import dotenv from 'dotenv';
 
 // Import database configuration
 import { testConnection, closePool } from './config/database';
-import { initializeDatabase as initDb } from './scripts/initDatabase';
+import { runMigrations } from './scripts/migrate';
+import { seedAll } from './scripts/seed';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/validation';
 import { DebugLogger } from './utils/DebugLogger';
+import { securityMiddleware, cleanupExpiredSessions } from './middleware/security';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -19,6 +21,9 @@ import dashboardRoutes from './routes/dashboard';
 import vendorRoutes from './routes/vendors';
 import analyticsRoutes from './routes/analytics';
 import usersRoutes from './routes/users';
+import userDetailsRoutes from './routes/userDetails';
+import profileRoutes from './routes/profile';
+import settingsRoutes from './routes/settings';
 
 // Load environment variables
 dotenv.config();
@@ -38,17 +43,36 @@ const initializeDatabase = async () => {
   
   console.log('✅ Database connection successful');
   
-  // Initialize database schema and seed data
-  try {
-    await initDb();
-    console.log('✅ Database initialization completed');
-  } catch (error) {
-    console.error('❌ Database initialization failed:', error);
-    // Don't exit on initialization failure in production - database might already be set up
-    if (process.env.NODE_ENV === 'development') {
-      process.exit(1);
+  // Run migrations and seed data on startup (in development only)
+  if (process.env.AUTO_MIGRATE === 'true') {
+    try {
+      console.log('🔄 Running database migrations...');
+      await runMigrations();
+      
+      if (process.env.AUTO_SEED === 'true') {
+        console.log('🌱 Seeding database...');
+        await seedAll();
+      }
+      
+      console.log('✅ Database initialization completed');
+    } catch (error) {
+      console.error('⚠️ Database initialization failed:', error);
+      console.log('ℹ️  You may need to run: npm run db:init');
+      // Don't exit - database might already be initialized
     }
+  } else {
+    console.log('ℹ️  Auto-migration disabled. Run "npm run db:init" if needed.');
   }
+  
+  // Start periodic cleanup of expired sessions (every 1 hour)
+  setInterval(async () => {
+    try {
+      await cleanupExpiredSessions();
+      console.log('🧹 Cleaned up expired sessions');
+    } catch (error) {
+      console.error('⚠️  Error during session cleanup:', error);
+    }
+  }, 60 * 60 * 1000); // 1 hour
 };
 
 // Security middleware
@@ -57,22 +81,27 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// Rate limiting
-const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'); // 15 minutes
-const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
+// Rate limiting - Disabled in development
+if (process.env.NODE_ENV === 'production') {
+  const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'); // 15 minutes
+  const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
 
-const limiter = rateLimit({
-  windowMs,
-  max: maxRequests,
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-    retryAfter: Math.ceil(windowMs / 1000)
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
+  const limiter = rateLimit({
+    windowMs,
+    max: maxRequests,
+    message: {
+      error: 'Too many requests from this IP, please try again later.',
+      retryAfter: Math.ceil(windowMs / 1000)
+    },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
 
-app.use(limiter);
+  app.use(limiter);
+  console.log(`🔒 Rate limiting enabled: ${maxRequests} requests per ${windowMs / 1000}s`);
+} else {
+  console.log('⚠️  Rate limiting disabled in development mode');
+}
 
 // CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
@@ -152,10 +181,15 @@ app.get('/health', async (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/vendors', vendorRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/analytics', analyticsRoutes);
+
+// Apply security middleware to all protected routes
+app.use('/api/dashboard', securityMiddleware, dashboardRoutes);
+app.use('/api/vendors', securityMiddleware, vendorRoutes);
+app.use('/api/users', securityMiddleware, usersRoutes);
+app.use('/api/user-details', securityMiddleware, userDetailsRoutes);
+app.use('/api/analytics', securityMiddleware, analyticsRoutes);
+app.use('/api/profile', securityMiddleware, profileRoutes);
+app.use('/api/settings', securityMiddleware, settingsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

@@ -34,29 +34,27 @@ export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {
     switch (userRole) {
       case 'admin':
         return [
-          { name: 'Dashboard', href: '/dashboard/super-admin', icon: HomeIcon },
-          { name: 'Vendor Management', href: '/dashboard/super-admin/vendors', icon: BuildingOfficeIcon },
-          { name: 'System Analytics', href: '/dashboard/super-admin/analytics', icon: ChartBarIcon },
-          { name: 'User Management', href: '/dashboard/super-admin/users', icon: UsersIcon },
-          { name: 'Settings', href: '/dashboard/super-admin/settings', icon: Cog6ToothIcon },
+          { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+          { name: 'Vendor Management', href: '/dashboard/vendors', icon: BuildingOfficeIcon },
+          { name: 'User Management', href: '/dashboard/users', icon: UsersIcon },
+          { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: ChartBarIcon },
+          { name: 'System Settings', href: '/dashboard/settings', icon: Cog6ToothIcon },
         ];
       case 'vendor':
         return [
-          { name: 'Dashboard', href: '/dashboard/vendor', icon: HomeIcon },
-          { name: 'Client Management', href: '/dashboard/vendor/clients', icon: UsersIcon },
-          { name: 'Equipment Management', href: '/dashboard/vendor/equipment', icon: FireIcon },
-          { name: 'Service Requests', href: '/dashboard/vendor/requests', icon: WrenchScrewdriverIcon },
-          { name: 'Reports', href: '/dashboard/vendor/reports', icon: ChartBarIcon },
-          { name: 'Settings', href: '/dashboard/vendor/settings', icon: Cog6ToothIcon },
+          { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+          { name: 'Client Management', href: '/dashboard/clients', icon: UsersIcon },
+          { name: 'Equipment Management', href: '/dashboard/equipment', icon: FireIcon },
+          { name: 'Service Requests', href: '/dashboard/requests', icon: WrenchScrewdriverIcon },
+          { name: 'Reports', href: '/dashboard/reports', icon: ChartBarIcon },
         ];
       case 'client':
         return [
-          { name: 'Dashboard', href: '/dashboard/client', icon: HomeIcon },
-          { name: 'My Equipment', href: '/dashboard/client/equipment', icon: FireIcon },
-          { name: 'Service Requests', href: '/dashboard/client/requests', icon: ClipboardDocumentListIcon },
-          { name: 'Maintenance History', href: '/dashboard/client/maintenance', icon: WrenchScrewdriverIcon },
-          { name: 'Safety Reports', href: '/dashboard/client/reports', icon: ShieldCheckIcon },
-          { name: 'Settings', href: '/dashboard/client/settings', icon: Cog6ToothIcon },
+          { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+          { name: 'My Equipment', href: '/dashboard/equipment', icon: FireIcon },
+          { name: 'Service Requests', href: '/dashboard/requests', icon: ClipboardDocumentListIcon },
+          { name: 'Maintenance History', href: '/dashboard/maintenance', icon: WrenchScrewdriverIcon },
+          { name: 'Safety Reports', href: '/dashboard/reports', icon: ShieldCheckIcon },
         ];
       default:
         return [];

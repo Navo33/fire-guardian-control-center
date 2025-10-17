@@ -7,6 +7,8 @@ import { z } from 'zod';
 import axios from 'axios';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { API_ENDPOINTS, logApiCall } from '../../config/api';
+import { useToast } from '../../components/providers/ToastProvider';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -18,7 +20,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [loginError, setLoginError] = useState('');
+  const toast = useToast();
 
   const {
     register,
@@ -28,36 +30,40 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  // Check for session expiry on component mount
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('expired') === 'true') {
+        toast.warning('Your session has expired. Please log in again.');
+      }
+    }
+  }, [toast]);
+
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
-    setLoginError('');
 
     try {
       logApiCall('POST', API_ENDPOINTS.AUTH.LOGIN, data);
       const response = await axios.post(API_ENDPOINTS.AUTH.LOGIN, data);
-      console.log('Login response:', response.data);
+      
       if (response.data.success) {
         localStorage.setItem('token', response.data.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
 
-        switch (response.data.data.user.user_type) {
-          case 'admin':
-            window.location.href = '/dashboard/super-admin';
-            break;
-          case 'vendor':
-            window.location.href = '/dashboard/vendor';
-            break;
-          case 'client':
-            window.location.href = '/dashboard/client';
-            break;
-          default:
-            window.location.href = '/dashboard';
-        }
+        // Show success toast
+        toast.success('Login successful! Redirecting...');
+
+        // Redirect after a short delay to show the toast
+        setTimeout(() => {
+          // All user types now go to the same dashboard URL
+          // The dashboard page will render different content based on user_type
+          window.location.href = '/dashboard';
+        }, 1000);
       }
     } catch (error: unknown) {
-      setLoginError(
-        (error as any).response?.data?.message || 'Login failed. Please try again.'
-      );
+      const errorMessage = (error as any).response?.data?.message || 'Login failed. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -77,13 +83,6 @@ export default function LoginPage() {
 
             {/* Login Form */}
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-              {/* Error Message */}
-              {loginError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                  {loginError}
-                </div>
-              )}
-
               {/* Email Field */}
               <div>
                 <input
@@ -135,29 +134,10 @@ export default function LoginPage() {
                   className="btn-primary px-8 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
-                    <div className="flex items-center justify-center">
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
-                      Signing in...
-                    </div>
+                    <span className="flex items-center justify-center">
+                      <LoadingSpinner size="sm" />
+                      <span className="ml-2">Signing in...</span>
+                    </span>
                   ) : (
                     'Login'
                   )}
@@ -178,12 +158,9 @@ export default function LoginPage() {
               <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h3 className="text-sm font-medium text-primary-text mb-2">Demo Credentials:</h3>
                 <div className="text-xs text-gray-600 space-y-1">
-                  <p><strong className="text-primary-text">Admin:</strong> admin@fireguardian.lk / AdminPass2025!</p>
-                  <p><strong className="text-primary-text">Vendors:</strong></p>
-                  <p className="ml-4">• lakmal@safefire.lk / VendorPass2025!</p>
-                  <p className="ml-4">• nimali@proguard.lk / VendorPass2025!</p>
-                  <p className="ml-4">• ruwan@fireshield.lk / VendorPass2025!</p>
-                  <p><strong className="text-primary-text">Clients:</strong> Any client email / ClientPass2025!</p>
+                  <p><strong className="text-primary-text">Admin:</strong> admin@fireguardian.com / FireGuardian2024!</p>
+                  <p><strong className="text-primary-text">Vendors:</strong> lakmal@safefire.lk / VendorPass2025!</p>
+                  <p><strong className="text-primary-text">Clients:</strong> kasun@royalhotels.lk  / ClientPass2025!</p>
                 </div>
               </div>
             </form>

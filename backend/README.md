@@ -61,15 +61,42 @@ The server will start on http://localhost:5000
 
 ### Available Commands
 
-- `npm run db:status` - Check database connection and initialization status
-- `npm run db:init` - Initialize database with schema and seed data
-- `npm run db:reset` - **⚠️ WARNING**: Drop all tables and reinitialize (destroys all data)
+| Command | Description | Use Case |
+|---------|-------------|----------|
+| `npm run db:init` | Initialize database (migrate + seed) | First time setup |
+| `npm run db:migrate` | Run pending migrations only | Update schema mid-development |
+| `npm run db:seed` | Seed initial data only | Add mock data |
+| `npm run db:reset` | Drop all & recreate (dev only) | Start fresh |
+| `npm run db:status` | Show migration status | Check what's applied |
+| `npm run db:help` | Show help message | See all commands |
 
-### Initial Admin Account
+### Migration System
 
-After database initialization, you can log in with:
-- **Email**: admin@fireguardian.com
-- **Password**: FireGuardian2024!
+The database uses a professional migration system that:
+- ✅ Tracks applied migrations (no duplicates)
+- ✅ Safe mid-development updates (can add tables/columns without dropping data)
+- ✅ Uses `schema_migrations` table for tracking
+- ✅ Schema-driven approach (all tables in `schema.sql`)
+
+See [Database Scripts README](src/scripts/README.md) for detailed documentation.
+
+### Initial Credentials
+
+After running `npm run db:init`, you can log in with:
+
+**Admin:**
+- Email: `admin@fireguardian.com`
+- Password: `FireGuardian2024!`
+
+**Mock Vendors:**
+- `lakmal@safefire.lk` | VendorPass2025!
+- `nimali@proguard.lk` | VendorPass2025!
+- `ruwan@fireshield.lk` | VendorPass2025!
+
+**Mock Clients:**
+- `kasun@royalhotels.lk` | ClientPass2025!
+- `shalini@techinnovations.lk` | ClientPass2025!
+- `dilshan@citymall.lk` | ClientPass2025!
 
 ## 📚 API Documentation
 

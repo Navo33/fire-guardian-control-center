@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import DashboardLayout from '../../../../../components/layout/DashboardLayout';
-import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../../../../config/api';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import RequireRole from '@/components/auth/RequireRole';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import {
   ArrowLeftIcon,
   BuildingOfficeIcon,
@@ -91,6 +93,14 @@ interface Equipment {
 }
 
 export default function VendorDetailsPage() {
+  return (
+    <RequireRole allowedRoles={['admin']}>
+      <VendorDetailsContent />
+    </RequireRole>
+  );
+}
+
+function VendorDetailsContent() {
   const params = useParams();
   const router = useRouter();
   const vendorId = parseInt(params.id as string);
@@ -142,13 +152,61 @@ export default function VendorDetailsPage() {
           throw new Error('Vendor not found');
         }
 
-        // For now, set empty equipment array - we can implement equipment fetching later
-        setEquipment([]);
+        // Fetch vendor equipment
+        const equipmentUrl = API_ENDPOINTS.VENDORS.EQUIPMENT(vendorId);
+        logApiCall('GET', equipmentUrl);
+        const equipmentResponse = await fetch(equipmentUrl, { headers });
+        const equipmentResult = await equipmentResponse.json();
+
+        if (equipmentResponse.ok && equipmentResult.success && equipmentResult.data) {
+          // Transform equipment data to match frontend interface
+          const transformedEquipment: Equipment[] = equipmentResult.data.map((item: any) => {
+            // Determine status based on maintenance and condition
+            let status: 'Good' | 'Needs Attention' | 'Critical' = 'Good';
+            
+            if (item.status === 'maintenance' || item.status === 'out_of_service') {
+              status = 'Critical';
+            } else if (item.nextMaintenanceDate) {
+              const daysUntilMaintenance = Math.floor(
+                (new Date(item.nextMaintenanceDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+              );
+              if (daysUntilMaintenance < 0) {
+                status = 'Critical'; // Overdue
+              } else if (daysUntilMaintenance < 30) {
+                status = 'Needs Attention'; // Due soon
+              }
+            } else if (item.conditionRating && item.conditionRating < 3) {
+              status = 'Needs Attention';
+            }
+
+            return {
+              id: item.id,
+              type: item.equipmentType || item.equipmentName || 'Unknown',
+              model: item.model ? `${item.manufacturer || ''} ${item.model}`.trim() : 'N/A',
+              location: item.location || 'Not specified',
+              clientName: item.clientName || 'Unassigned',
+              lastInspection: item.lastMaintenanceDate 
+                ? new Date(item.lastMaintenanceDate).toLocaleDateString() 
+                : 'Never',
+              nextInspection: item.nextMaintenanceDate 
+                ? new Date(item.nextMaintenanceDate).toLocaleDateString() 
+                : 'Not scheduled',
+              status,
+              compliance: item.compliance || 0
+            };
+          });
+          
+          setEquipment(transformedEquipment);
+        } else {
+          // If equipment fetch fails, just set empty array and continue
+          console.warn('Failed to fetch equipment data');
+          setEquipment([]);
+        }
 
       } catch (err) {
         console.error('Error fetching vendor data:', err);
         // Optionally redirect to vendors list or show error message
-        router.push('/dashboard/super-admin/vendors');
+        router.push('/dashboard/vendors');
       } finally {
         setIsLoading(false);
       }
@@ -157,7 +215,7 @@ export default function VendorDetailsPage() {
     if (vendorId && !isNaN(vendorId)) {
       fetchVendorData();
     } else {
-      router.push('/dashboard/super-admin/vendors');
+      router.push('/dashboard/vendors');
     }
   }, [vendorId, router]);
 
@@ -165,7 +223,7 @@ export default function VendorDetailsPage() {
     if (confirm('Are you sure you want to delete this vendor? This action cannot be undone.')) {
       // In real app, make API call to delete vendor
       console.log('Deleting vendor:', vendorId);
-      router.push('/dashboard/super-admin/vendors');
+      router.push('/dashboard/vendors');
     }
   };
 
@@ -199,7 +257,7 @@ export default function VendorDetailsPage() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+          <LoadingSpinner text="Loading vendor details..." />
         </div>
       </DashboardLayout>
     );
@@ -212,7 +270,7 @@ export default function VendorDetailsPage() {
           <BuildingOfficeIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Vendor not found</h3>
           <p className="text-gray-500 mb-4">The vendor you're looking for doesn't exist.</p>
-          <Link href="/dashboard/super-admin/vendors" className="btn-primary">
+          <Link href="/dashboard/vendors" className="btn-primary">
             Back to Vendors
           </Link>
         </div>
@@ -227,7 +285,7 @@ export default function VendorDetailsPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link
-              href="/dashboard/super-admin/vendors"
+              href="/dashboard/vendors"
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
@@ -247,7 +305,7 @@ export default function VendorDetailsPage() {
           
           <div className="flex items-center space-x-3">
             <Link
-              href={`/dashboard/super-admin/vendors/${vendor.id}/edit`}
+              href={`/dashboard/vendors/${vendor.id}/edit`}
               className="btn-secondary flex items-center space-x-2"
             >
               <PencilIcon className="h-4 w-4" />
