@@ -53,6 +53,15 @@ export const API_ENDPOINTS = {
     RESET_PASSWORD: (id: string | number) => `${API_BASE_URL}/user-details/${id}/reset-password`,
   },
   
+  // Profile
+  PROFILE: {
+    GET: `${API_BASE_URL}/profile`,
+    UPDATE: `${API_BASE_URL}/profile`,
+    CHANGE_PASSWORD: `${API_BASE_URL}/profile/change-password`,
+    PASSWORD_POLICY: `${API_BASE_URL}/profile/password-policy`,
+    PASSWORD_EXPIRED: `${API_BASE_URL}/profile/password-expired`,
+  },
+  
   // Settings
   SETTINGS: {
     ALL: `${API_BASE_URL}/settings`,

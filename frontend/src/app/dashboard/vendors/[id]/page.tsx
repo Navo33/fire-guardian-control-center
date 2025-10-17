@@ -53,6 +53,7 @@ interface VendorDetails {
     contact_title: string;
     primary_email: string;
     primary_phone: string;
+    secondary_phone?: string;
   };
   
   // Address details
@@ -109,6 +110,26 @@ function VendorDetailsContent() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    company_name: '',
+    business_type: '',
+    license_number: '',
+    contact_person_name: '',
+    contact_title: '',
+    primary_email: '',
+    primary_phone: '',
+    secondary_phone: '',
+    street_address: '',
+    city: '',
+    state: '',
+    zip_code: '',
+    country: 'Sri Lanka'
+  });
 
   useEffect(() => {
     const fetchVendorData = async () => {
@@ -148,6 +169,26 @@ function VendorDetailsContent() {
           };
           
           setVendor(transformedVendor);
+          
+          // Populate edit form
+          setEditForm({
+            first_name: vendorData.first_name || '',
+            last_name: vendorData.last_name || '',
+            email: vendorData.email || '',
+            company_name: vendorData.company?.company_name || '',
+            business_type: vendorData.company?.business_type || '',
+            license_number: vendorData.company?.license_number || '',
+            contact_person_name: vendorData.contact?.contact_person_name || '',
+            contact_title: vendorData.contact?.contact_title || '',
+            primary_email: vendorData.contact?.primary_email || '',
+            primary_phone: vendorData.contact?.primary_phone || '',
+            secondary_phone: vendorData.contact?.secondary_phone || '',
+            street_address: vendorData.address?.street_address || '',
+            city: vendorData.address?.city || '',
+            state: vendorData.address?.state || '',
+            zip_code: vendorData.address?.zip_code || '',
+            country: vendorData.address?.country || 'Sri Lanka'
+          });
         } else {
           throw new Error('Vendor not found');
         }
@@ -219,11 +260,95 @@ function VendorDetailsContent() {
     }
   }, [vendorId, router]);
 
-  const handleDeleteVendor = () => {
-    if (confirm('Are you sure you want to delete this vendor? This action cannot be undone.')) {
-      // In real app, make API call to delete vendor
-      console.log('Deleting vendor:', vendorId);
+  const handleUpdateVendor = async () => {
+    try {
+      setIsSaving(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.VENDORS.BY_ID(vendorId);
+
+      logApiCall('PUT', url, editForm);
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(editForm)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to update vendor');
+      }
+
+      // Refresh vendor data
+      window.location.reload();
+    } catch (err) {
+      console.error('Error updating vendor:', err);
+      alert(err instanceof Error ? err.message : 'Failed to update vendor');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    // Reset form to original values
+    if (vendor) {
+      setEditForm({
+        first_name: vendor.first_name || '',
+        last_name: vendor.last_name || '',
+        email: vendor.email || '',
+        company_name: vendor.company?.company_name || '',
+        business_type: vendor.company?.business_type || '',
+        license_number: vendor.company?.license_number || '',
+        contact_person_name: vendor.contact?.contact_person_name || '',
+        contact_title: vendor.contact?.contact_title || '',
+        primary_email: vendor.contact?.primary_email || '',
+        primary_phone: vendor.contact?.primary_phone || '',
+        secondary_phone: vendor.contact?.secondary_phone || '',
+        street_address: vendor.address?.street_address || '',
+        city: vendor.address?.city || '',
+        state: vendor.address?.state || '',
+        zip_code: vendor.address?.zip_code || '',
+        country: vendor.address?.country || 'Sri Lanka'
+      });
+    }
+  };
+
+  const handleDeleteVendor = async () => {
+    if (!confirm('Are you sure you want to delete this vendor? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.VENDORS.BY_ID(vendorId);
+
+      logApiCall('DELETE', url);
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to delete vendor');
+      }
+
       router.push('/dashboard/vendors');
+    } catch (err) {
+      console.error('Error deleting vendor:', err);
+      alert(err instanceof Error ? err.message : 'Failed to delete vendor');
     }
   };
 
@@ -303,33 +428,64 @@ function VendorDetailsContent() {
             </div>
           </div>
           
-          <div className="flex items-center space-x-3">
-            <Link
-              href={`/dashboard/vendors/${vendor.id}/edit`}
-              className="btn-secondary flex items-center space-x-2"
-            >
-              <PencilIcon className="h-4 w-4" />
-              <span>Edit</span>
-            </Link>
-            <button
-              onClick={() => {
-                if (confirm(`Reset password for ${vendor.name}? They will receive an email with login instructions.`)) {
-                  // In real app, make API call to reset password
-                  console.log('Resetting password for vendor:', vendorId);
-                  alert('Password reset email sent successfully!');
-                }
-              }}
-              className="btn-primary flex items-center space-x-2"
-            >
-              <ShieldCheckIcon className="h-4 w-4" />
-              <span>Reset Password</span>
-            </button>
-            <button
-              onClick={handleDeleteVendor}
-              className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-full hover:bg-red-100 transition-colors"
-            >
-              <TrashIcon className="h-4 w-4" />
-            </button>
+          <div className="flex space-x-3">
+            {isEditing ? (
+              <>
+                <button
+                  onClick={handleUpdateVendor}
+                  disabled={isSaving}
+                  className="btn-primary"
+                >
+                  {isSaving ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircleIcon className="h-4 w-4" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  disabled={isSaving}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="btn-secondary flex items-center space-x-2"
+                >
+                  <PencilIcon className="h-4 w-4" />
+                  <span>Edit</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm(`Reset password for ${vendor.name}? They will receive an email with login instructions.`)) {
+                      // In real app, make API call to reset password
+                      console.log('Resetting password for vendor:', vendorId);
+                      alert('Password reset email sent successfully!');
+                    }
+                  }}
+                  className="btn-primary flex items-center space-x-2"
+                >
+                  <ShieldCheckIcon className="h-4 w-4" />
+                  <span>Reset Password</span>
+                </button>
+                <button
+                  onClick={handleDeleteVendor}
+                  className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-full hover:bg-red-100 transition-colors"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </>
+            )}
           </div>
         </div>
 

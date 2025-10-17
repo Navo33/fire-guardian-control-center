@@ -6,6 +6,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import { useToast } from '@/components/providers/ToastProvider';
+import { API_ENDPOINTS, getAuthHeaders } from '@/config/api';
 import {
   UserCircleIcon,
   ShieldCheckIcon,
@@ -103,12 +104,8 @@ export default function ProfilePage() {
     try {
       setLoading(true);
       setError(null);
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/profile', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const headers = getAuthHeaders();
+      const response = await fetch(API_ENDPOINTS.PROFILE.GET, { headers });
 
       if (!response.ok) {
         throw new Error('Failed to fetch profile');
@@ -131,12 +128,8 @@ export default function ProfilePage() {
 
   const fetchPasswordPolicy = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/profile/password-policy', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const headers = getAuthHeaders();
+      const response = await fetch(API_ENDPOINTS.PROFILE.PASSWORD_POLICY, { headers });
 
       if (response.ok) {
         const data = await response.json();
@@ -152,13 +145,10 @@ export default function ProfilePage() {
     setSaving(true);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/profile', {
+      const headers = getAuthHeaders();
+      const response = await fetch(API_ENDPOINTS.PROFILE.UPDATE, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify(profileForm)
       });
 
@@ -183,13 +173,10 @@ export default function ProfilePage() {
     setPasswordErrors([]);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/profile/change-password', {
+      const headers = getAuthHeaders();
+      const response = await fetch(API_ENDPOINTS.PROFILE.CHANGE_PASSWORD, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify(passwordForm)
       });
 
