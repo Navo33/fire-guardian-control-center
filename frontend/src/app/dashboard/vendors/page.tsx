@@ -8,6 +8,8 @@ import AddVendorModal from '../../../components/modals/AddVendorModal';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 import ErrorDisplay from '../../../components/ui/ErrorDisplay';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall, buildApiUrl } from '../../../config/api';
+import { useToast } from '../../../components/providers/ToastProvider';
+import { useConfirmModal } from '../../../components/providers/ConfirmModalProvider';
 import { 
   BuildingOfficeIcon,
   MagnifyingGlassIcon,
@@ -54,6 +56,8 @@ export default function VendorManagementPage() {
   const [vendorStats, setVendorStats] = useState<VendorStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  const confirmModal = useConfirmModal();
   
   // Fetch vendors from API
   const fetchVendors = async () => {
@@ -145,12 +149,21 @@ export default function VendorManagementPage() {
 
   // Handle successful vendor creation
   const handleVendorCreated = () => {
+    toast.success('Vendor created successfully');
     fetchVendors(); // Refresh the vendor list
+    fetchVendorStats(); // Refresh stats
   };
 
   // Handle vendor deletion
-  const handleDeleteVendor = async (vendorId: number) => {
-    if (!confirm('Are you sure you want to delete this vendor?')) return;
+  const handleDeleteVendor = async (vendorId: number, vendorName: string) => {
+    const confirmed = await confirmModal.danger({
+      title: 'Delete Vendor',
+      message: `Are you sure you want to delete ${vendorName}? This will also remove all associated clients and equipment data. This action cannot be undone.`,
+      confirmText: 'Delete Vendor',
+      cancelText: 'Cancel'
+    });
+
+    if (!confirmed) return;
 
     try {
       // Get auth token
@@ -174,11 +187,13 @@ export default function VendorManagementPage() {
         throw new Error(result.message || 'Failed to delete vendor');
       }
 
-      // Refresh vendor list
+      toast.success(`${vendorName} has been deleted successfully`);
+      // Refresh vendor list and stats
       fetchVendors();
+      fetchVendorStats();
     } catch (err) {
       console.error('Error deleting vendor:', err);
-      alert(err instanceof Error ? err.message : 'Failed to delete vendor');
+      toast.error(err instanceof Error ? err.message : 'Failed to delete vendor');
     }
   };
 
@@ -406,9 +421,7 @@ export default function VendorManagementPage() {
                           className="text-red-600 hover:text-red-800 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm(`Are you sure you want to delete ${vendor.name}?`)) {
-                              console.log('Delete vendor:', vendor.id);
-                            }
+                            handleDeleteVendor(vendor.id, vendor.name);
                           }}
                         >
                           Delete
