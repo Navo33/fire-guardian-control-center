@@ -96,6 +96,18 @@ export const API_ENDPOINTS = {
     MAINTENANCE: (id: string | number) => `${API_BASE_URL}/equipment/${id}/maintenance`,
     ASSIGN: (id: string | number) => `${API_BASE_URL}/equipment/${id}/assign`,
   },
+
+  // Clients (Vendor-specific)
+  CLIENTS: {
+    KPIS: `${API_BASE_URL}/vendor/clients/kpis`,
+    LIST: `${API_BASE_URL}/vendor/clients`,
+    CREATE: `${API_BASE_URL}/vendor/clients`,
+    BY_ID: (id: string | number) => `${API_BASE_URL}/vendor/clients/${id}`,
+    UPDATE: (id: string | number) => `${API_BASE_URL}/vendor/clients/${id}`,
+    DELETE: (id: string | number) => `${API_BASE_URL}/vendor/clients/${id}`,
+    EQUIPMENT: (id: string | number) => `${API_BASE_URL}/vendor/clients/${id}/equipment`,
+    MAINTENANCE: (id: string | number) => `${API_BASE_URL}/vendor/clients/${id}/maintenance`,
+  },
 };
 
 /**
