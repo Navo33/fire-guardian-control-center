@@ -1,447 +1,639 @@
-'use client';
+'use client'
 
-import React, { useState, useEffect } from 'react';
-import DashboardLayout from '@/components/layout/DashboardLayout';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import ErrorDisplay from '@/components/ui/ErrorDisplay';
-import { useToast } from '@/components/providers/ToastProvider';
-import { useConfirmModal } from '@/components/providers/ConfirmModalProvider';
-import { 
-  UserGroupIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-  BuildingOfficeIcon,
-  PhoneIcon,
-  EnvelopeIcon,
-  MapPinIcon,
-  FireIcon,
-  WrenchScrewdriverIcon,
-  ClockIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon
-} from '@heroicons/react/24/outline';
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import DashboardLayout from '@/components/layout/DashboardLayout'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import ErrorDisplay from '@/components/ui/ErrorDisplay'
+import AddClientModal from '@/components/modals/AddClientModal'
+import { useToast } from '@/components/providers/ToastProvider'
+import { API_ENDPOINTS, buildApiUrl } from '@/config/api'
+
+interface ClientKPIs {
+  totalClients: number
+  activeClients: number
+  averageCompliance: number
+}
 
 interface Client {
-  id: number;
-  company_name: string;
-  contact_person: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  equipment_count: number;
-  last_service: string;
-  next_service: string;
-  status: 'Active' | 'Inactive' | 'Overdue';
-  compliance_score: number;
-  created_at: string;
+  id: number
+  company_name: string
+  business_type: string
+  contact_name: string
+  email: string
+  phone: string
+  primary_phone: string
+  address: string
+  street_address: string
+  city: string
+  state: string
+  zip_code: string
+  country: string
+  status: 'active' | 'inactive' | 'pending'
+  is_active: boolean
+  created_at: string
+  equipment_count?: number
+  last_service_date?: string
+  compliance_status?: string
 }
 
-interface ClientStats {
-  totalClients: number;
-  activeClients: number;
-  overdueClients: number;
-  newThisMonth: number;
-  totalEquipment: number;
-  avgComplianceScore: number;
+interface VendorInfo {
+  id: number
+  company_name: string
+  user: {
+    display_name: string
+    avatar_url?: string
+    first_name: string
+    last_name: string
+  }
 }
 
-export default function VendorClientsPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [clients, setClients] = useState<Client[]>([
-    {
-      id: 1,
-      company_name: 'Royal Hotels Ltd',
-      contact_person: 'Kasun Perera',
-      email: 'kasun@royalhotels.lk',
-      phone: '+94 11 234 5678',
-      address: '123 Galle Road, Colombo 03',
-      city: 'Colombo',
-      equipment_count: 45,
-      last_service: '2024-09-15',
-      next_service: '2024-12-15',
-      status: 'Active',
-      compliance_score: 95,
-      created_at: '2024-01-15'
-    },
-    {
-      id: 2,
-      company_name: 'Tech Innovations',
-      contact_person: 'Shalini Fernando',
-      email: 'shalini@techinnovations.lk',
-      phone: '+94 81 987 6543',
-      address: '45 Peradeniya Road, Kandy',
-      city: 'Kandy',
-      equipment_count: 28,
-      last_service: '2024-08-20',
-      next_service: '2024-11-20',
-      status: 'Active',
-      compliance_score: 88,
-      created_at: '2024-02-10'
-    },
-    {
-      id: 3,
-      company_name: 'City Mall',
-      contact_person: 'Dilshan Silva',
-      email: 'dilshan@citymall.lk',
-      phone: '+94 11 876 5432',
-      address: '78 Main Street, Colombo 07',
-      city: 'Colombo',
-      equipment_count: 67,
-      last_service: '2024-07-10',
-      next_service: '2024-10-10',
-      status: 'Overdue',
-      compliance_score: 72,
-      created_at: '2023-11-20'
-    },
-    {
-      id: 4,
-      company_name: 'Green Valley Resort',
-      contact_person: 'Nimali De Silva',
-      email: 'nimali@greenvalley.lk',
-      phone: '+94 91 345 6789',
-      address: '234 Beach Road, Negombo',
-      city: 'Negombo',
-      equipment_count: 38,
-      last_service: '2024-09-30',
-      next_service: '2024-12-30',
-      status: 'Active',
-      compliance_score: 92,
-      created_at: '2024-03-05'
-    },
-    {
-      id: 5,
-      company_name: 'Ocean View Restaurant',
-      contact_person: 'Ruwan Jayasinghe',
-      email: 'ruwan@oceanview.lk',
-      phone: '+94 38 234 5678',
-      address: '56 Coastal Road, Galle',
-      city: 'Galle',
-      equipment_count: 15,
-      last_service: '2024-06-15',
-      next_service: '2024-09-15',
-      status: 'Overdue',
-      compliance_score: 68,
-      created_at: '2024-01-30'
+interface ClientListResponse {
+  clients: Client[]
+  pagination: {
+    currentPage: number
+    totalPages: number
+    totalItems: number
+    itemsPerPage: number
+  }
+}
+
+export default function ClientsPage() {
+  const router = useRouter()
+  const { success: showToast } = useToast()
+  
+  // Debug API_ENDPOINTS
+  useEffect(() => {
+    console.log('Full API_ENDPOINTS object:', API_ENDPOINTS)
+    console.log('API_ENDPOINTS keys:', Object.keys(API_ENDPOINTS))
+    console.log('API_ENDPOINTS.CLIENTS:', API_ENDPOINTS.CLIENTS)
+    if (API_ENDPOINTS.CLIENTS) {
+      console.log('CLIENTS keys:', Object.keys(API_ENDPOINTS.CLIENTS))
     }
-  ]);
+  }, [])
+  
+  // State management
+  const [kpis, setKpis] = useState<ClientKPIs | null>(null)
+  const [clients, setClients] = useState<Client[]>([])
+  const [vendorInfo, setVendorInfo] = useState<VendorInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    itemsPerPage: 20
+  })
+  
+  // Modal and form state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  
+  // Filters
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [sortBy, setSortBy] = useState<'company_name' | 'created_at' | 'last_service_date'>('company_name')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
 
-  const [clientStats] = useState<ClientStats>({
-    totalClients: 47,
-    activeClients: 42,
-    overdueClients: 5,
-    newThisMonth: 3,
-    totalEquipment: 312,
-    avgComplianceScore: 87
-  });
-
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const toast = useToast();
-  const confirmModal = useConfirmModal();
-
-  // Filter clients based on search and status
-  const filteredClients = clients.filter(client => {
-    const matchesSearch = 
-      client.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.contact_person.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.city.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = statusFilter === 'All' || client.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Active':
-        return 'bg-green-100 text-green-800';
-      case 'Inactive':
-        return 'bg-gray-100 text-gray-800';
-      case 'Overdue':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getComplianceColor = (score: number) => {
-    if (score >= 90) return 'text-green-600';
-    if (score >= 75) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const handleDeleteClient = async (clientId: number, clientName: string) => {
-    const confirmed = await confirmModal.danger({
-      title: 'Remove Client',
-      message: `Are you sure you want to remove ${clientName}? This will also remove all associated equipment and service history. This action cannot be undone.`,
-      confirmText: 'Remove Client',
-      cancelText: 'Cancel'
-    });
-
-    if (!confirmed) return;
-
+  // Fetch vendor information
+  const fetchVendorInfo = async () => {
     try {
-      // Simulate API call
-      setClients(clients.filter(c => c.id !== clientId));
-      toast.success(`${clientName} has been removed successfully`);
+      // Get user info from localStorage for now
+      const userInfo = localStorage.getItem('user')
+      if (userInfo) {
+        const user = JSON.parse(userInfo)
+        setVendorInfo({
+          id: user.vendor_id || 1,
+          company_name: user.company_name || 'Fire Safety Solutions',
+          user: {
+            display_name: user.display_name || `${user.first_name || 'Vendor'} ${user.last_name || 'User'}`,
+            avatar_url: user.avatar_url,
+            first_name: user.first_name || 'Vendor',
+            last_name: user.last_name || 'User'
+          }
+        })
+      }
     } catch (err) {
-      toast.error('Failed to remove client. Please try again.');
+      console.error('Error fetching vendor info:', err)
+      // Set default vendor info
+      setVendorInfo({
+        id: 1,
+        company_name: 'Fire Safety Solutions',
+        user: {
+          display_name: 'Vendor User',
+          first_name: 'Vendor',
+          last_name: 'User'
+        }
+      })
     }
-  };
+  }
 
-  const handleScheduleService = async (clientId: number, clientName: string) => {
-    const confirmed = await confirmModal.confirm({
-      title: 'Schedule Service',
-      message: `Schedule a service visit for ${clientName}?`,
-      confirmText: 'Schedule',
-      cancelText: 'Cancel'
-    });
+  // Fetch KPIs
+  const fetchKPIs = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) throw new Error('No authentication token found')
 
-    if (confirmed) {
-      toast.success(`Service scheduled for ${clientName}`);
+      // Use API_ENDPOINTS with fallback
+      const url = API_ENDPOINTS.CLIENTS?.KPIS || 'http://localhost:5000/api/vendor/clients/kpis'
+      console.log('Fetching KPIs from:', url)
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch KPIs: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      if (data.success) {
+        setKpis(data.data)
+      } else {
+        throw new Error(data.message || 'Failed to fetch KPIs')
+      }
+    } catch (err) {
+      console.error('Error fetching KPIs:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch KPIs')
     }
-  };
+  }
+
+  // Fetch clients list
+  const fetchClients = async (page = 1) => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) throw new Error('No authentication token found')
+
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pagination.itemsPerPage.toString(),
+        search: searchTerm,
+        status: statusFilter,
+        sortBy,
+        sortOrder
+      })
+
+      const response = await fetch(`${API_ENDPOINTS.CLIENTS?.LIST || 'http://localhost:5000/api/vendor/clients'}?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch clients: ${response.statusText}`)
+      }
+
+      const data: ClientListResponse = await response.json()
+      if (data) {
+        setClients(data.clients || [])
+        setPagination(data.pagination || pagination)
+      }
+    } catch (err) {
+      console.error('Error fetching clients:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch clients')
+    }
+  }
+
+  // Initial load
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true)
+      setError(null)
+      
+      try {
+        await Promise.all([fetchVendorInfo(), fetchKPIs(), fetchClients()])
+      } catch (err) {
+        console.error('Error loading client data:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [searchTerm, statusFilter, sortBy, sortOrder])
+
+  // Handle pagination
+  const handlePageChange = (page: number) => {
+    setPagination(prev => ({ ...prev, currentPage: page }))
+    fetchClients(page)
+  }
+
+  // Handle client creation
+  const handleClientCreated = () => {
+    setIsAddModalOpen(false)
+    showToast('Client created successfully')
+    fetchKPIs() // Refresh KPIs
+    fetchClients(pagination.currentPage) // Refresh current page
+  }
+
+  // Handle row click
+  const handleClientClick = (clientId: number) => {
+    router.push(`/clients/${clientId}`)
+  }
+
+  // Format date
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  // Get compliance status color
+  const getComplianceColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'compliant':
+        return 'text-green-600 bg-green-50'
+      case 'partial':
+        return 'text-yellow-600 bg-yellow-50'
+      case 'non-compliant':
+        return 'text-red-600 bg-red-50'
+      default:
+        return 'text-gray-600 bg-gray-50'
+    }
+  }
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex justify-center items-center h-64">
+          <LoadingSpinner size="lg" />
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <ErrorDisplay message={error} />
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <div className="flex-shrink-0">
-              <UserGroupIcon className="h-8 w-8 text-gray-900" />
+        {/* Header */}
+        <div className="flex justify-between items-start">
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-red-50 rounded-xl">
+              <svg className="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM9 9a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Client Management</h1>
-              <p className="text-gray-600 mt-1">Manage your clients and their fire safety equipment</p>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {vendorInfo?.company_name ? `${vendorInfo.company_name} - Client Management` : 'Client Management'}
+              </h1>
+              <p className="text-gray-600 mt-1">
+                {vendorInfo?.user?.display_name ? `Manage your clients, ${vendorInfo.user.display_name}` : 'Manage your clients and their fire safety equipment'}
+              </p>
             </div>
           </div>
-          <button className="btn-primary flex items-center space-x-2">
-            <PlusIcon className="h-5 w-5" />
-            <span>Add New Client</span>
-          </button>
+          <div className="flex items-center space-x-4">
+            {/* User Avatar */}
+            <div className="flex items-center space-x-3">
+              <div className="flex-shrink-0">
+                {vendorInfo?.user?.avatar_url ? (
+                  <Image
+                    className="h-10 w-10 rounded-full object-cover"
+                    src={vendorInfo.user.avatar_url}
+                    alt={vendorInfo.user.display_name}
+                    width={40}
+                    height={40}
+                  />
+                ) : (
+                  <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                    <span className="text-sm font-medium text-red-600">
+                      {vendorInfo?.user?.first_name?.[0]}{vendorInfo?.user?.last_name?.[0]}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="hidden md:block">
+                <p className="text-sm font-medium text-gray-900">{vendorInfo?.user?.display_name}</p>
+                <p className="text-xs text-gray-500">{vendorInfo?.company_name}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="btn-primary flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add New Client
+            </button>
+          </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <UserGroupIcon className="h-8 w-8 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Clients</p>
-                <p className="text-2xl font-bold text-gray-900">{clientStats.totalClients}</p>
+        {/* KPI Cards */}
+        {kpis && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-blue-50 rounded-xl">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM9 9a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Total Clients</p>
+                  <p className="text-2xl font-bold text-gray-900">{kpis?.totalClients?.toLocaleString() || '0'}</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <CheckCircleIcon className="h-8 w-8 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Active</p>
-                <p className="text-2xl font-bold text-gray-900">{clientStats.activeClients}</p>
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-green-50 rounded-xl">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Active Clients</p>
+                  <p className="text-2xl font-bold text-gray-900">{kpis?.activeClients?.toLocaleString() || '0'}</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ExclamationTriangleIcon className="h-8 w-8 text-red-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Overdue</p>
-                <p className="text-2xl font-bold text-gray-900">{clientStats.overdueClients}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <PlusIcon className="h-8 w-8 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">New This Month</p>
-                <p className="text-2xl font-bold text-gray-900">{clientStats.newThisMonth}</p>
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="p-2 bg-yellow-50 rounded-xl">
+                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Average Compliance</p>
+                  <p className="text-2xl font-bold text-gray-900">{kpis?.averageCompliance?.toFixed(1) || '0.0'}%</p>
+                </div>
               </div>
             </div>
           </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <FireIcon className="h-8 w-8 text-orange-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Equipment</p>
-                <p className="text-2xl font-bold text-gray-900">{clientStats.totalEquipment}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <WrenchScrewdriverIcon className="h-8 w-8 text-yellow-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Avg Compliance</p>
-                <p className="text-2xl font-bold text-gray-900">{clientStats.avgComplianceScore}%</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Filters */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search clients..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                />
-              </div>
+        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.414A1 1 0 013 6.707V4z" />
+            </svg>
+            <h3 className="text-lg font-medium text-gray-900">Filters</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Search */}
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search clients..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              />
             </div>
-            <div className="sm:w-48">
+
+            {/* Status Filter */}
+            <div>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="w-full p-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
               >
-                <option value="All">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="Overdue">Overdue</option>
+                <option value="all">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
               </select>
+            </div>
+
+            {/* Sort By */}
+            <div>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="w-full p-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              >
+                <option value="company_name">Company Name</option>
+                <option value="created_at">Date Created</option>
+                <option value="last_service_date">Last Service</option>
+              </select>
+            </div>
+
+            {/* Clear Filters */}
+            <div>
+              <button
+                onClick={() => {
+                  setSearchTerm('')
+                  setStatusFilter('all')
+                  setSortBy('company_name')
+                  setSortOrder('asc')
+                }}
+                className="w-full py-2 px-4 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                Clear Filters
+              </button>
             </div>
           </div>
         </div>
 
         {/* Clients Table */}
-        <div className="bg-white rounded-lg border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200">
+        <div className="bg-white rounded-2xl border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900">
-              Clients ({filteredClients.length})
+              Clients ({clients.length})
             </h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Client Info
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Company Details
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Contact
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Business Type
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Equipment
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Contact Information
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Service Status
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Address
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Compliance
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Status & Equipment
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredClients.map((client) => (
-                  <tr key={client.id} className="hover:bg-gray-50">
+              <tbody className="bg-white">
+                {clients.map((client, index) => (
+                  <tr
+                    key={client.id}
+                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${index !== clients.length - 1 ? 'border-b border-gray-100' : ''}`}
+                    onClick={() => handleClientClick(client.id)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="flex-shrink-0">
-                          <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                            <BuildingOfficeIcon className="h-5 w-5 text-gray-600" />
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                            <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
                           </div>
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{client.company_name}</div>
-                          <div className="text-sm text-gray-500">{client.contact_person}</div>
+                          <div className="text-sm text-gray-500">{client.contact_name}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        <div className="flex items-center">
-                          <EnvelopeIcon className="h-4 w-4 text-gray-400 mr-2" />
-                          {client.email}
-                        </div>
-                        <div className="flex items-center mt-1">
-                          <PhoneIcon className="h-4 w-4 text-gray-400 mr-2" />
-                          {client.phone}
-                        </div>
-                        <div className="flex items-center mt-1">
-                          <MapPinIcon className="h-4 w-4 text-gray-400 mr-2" />
-                          {client.city}
-                        </div>
+                      <div className="text-sm text-gray-900">{client.business_type || 'Not specified'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900 flex items-center">
+                        <svg className="h-4 w-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        {client.email}
+                      </div>
+                      <div className="text-sm text-gray-500 flex items-center">
+                        <svg className="h-4 w-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        {client.primary_phone || client.phone}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{client.equipment_count} items</div>
+                      <div className="text-sm text-gray-900 flex items-center">
+                        <svg className="h-4 w-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {client.street_address || client.address}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {client.city}, {client.state} {client.zip_code}
+                      </div>
+                      {client.country && (
+                        <div className="text-sm text-gray-500">{client.country}</div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        <div>Last: {new Date(client.last_service).toLocaleDateString()}</div>
-                        <div className="text-gray-500">Next: {new Date(client.next_service).toLocaleDateString()}</div>
+                      <div className="space-y-2">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          client.status === 'active' || client.is_active
+                            ? 'text-green-800 bg-green-100' 
+                            : client.status === 'pending'
+                            ? 'text-yellow-800 bg-yellow-100'
+                            : 'text-red-800 bg-red-100'
+                        }`}>
+                          {client.status || (client.is_active ? 'Active' : 'Inactive')}
+                        </span>
+                        <div className="text-sm text-gray-900 flex items-center">
+                          <svg className="h-4 w-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                          </svg>
+                          {client.equipment_count || 0} items
+                        </div>
+                        {client.compliance_status && (
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getComplianceColor(client.compliance_status)}`}>
+                            {client.compliance_status}
+                          </span>
+                        )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className={`text-sm font-medium ${getComplianceColor(client.compliance_score)}`}>
-                        {client.compliance_score}%
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleClientClick(client.id);
+                          }}
+                          className="text-red-600 hover:text-red-900 font-medium"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Add edit functionality later
+                          }}
+                          className="text-gray-600 hover:text-gray-900 font-medium"
+                        >
+                          Edit
+                        </button>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(client.status)}`}>
-                        {client.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                      <button className="text-blue-600 hover:text-blue-800 transition-colors">
-                        View
-                      </button>
-                      <button className="text-green-600 hover:text-green-800 transition-colors">
-                        Edit
-                      </button>
-                      <button 
-                        onClick={() => handleScheduleService(client.id, client.company_name)}
-                        className="text-purple-600 hover:text-purple-800 transition-colors"
-                      >
-                        Schedule
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteClient(client.id, client.company_name)}
-                        className="text-red-600 hover:text-red-800 transition-colors"
-                      >
-                        Remove
-                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Empty State */}
+          {clients.length === 0 && !loading && (
+            <div className="text-center py-12">
+              <svg className="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM9 9a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No clients found</h3>
+              <p className="text-gray-500">
+                {searchTerm || statusFilter !== 'all' 
+                  ? 'Try adjusting your search criteria.'
+                  : 'Get started by adding your first client.'
+                }
+              </p>
+            </div>
+          )}
         </div>
+
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between bg-white px-6 py-4 border border-gray-100 rounded-2xl">
+            <div className="text-sm text-gray-700">
+              Showing {(pagination.currentPage - 1) * pagination.itemsPerPage + 1} to{' '}
+              {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
+              {pagination.totalItems} results
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handlePageChange(pagination.currentPage - 1)}
+                disabled={pagination.currentPage === 1}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => handlePageChange(pagination.currentPage + 1)}
+                disabled={pagination.currentPage === pagination.totalPages}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Add Client Modal */}
+      <AddClientModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onClientCreated={handleClientCreated}
+      />
     </DashboardLayout>
-  );
+  )
 }
