@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import AddVendorModal from '../../components/modals/AddVendorModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -207,8 +208,9 @@ function AdminDashboard({ user }: { user: User }) {
 
   const handleAddVendor = (vendorData: any) => {
     console.log('New vendor added from dashboard:', vendorData);
+    toast.success('Vendor added successfully');
     // Refresh dashboard data after adding vendor
-    window.location.reload();
+    fetchDashboardData();
   };
 
   return (
@@ -261,7 +263,7 @@ function AdminDashboard({ user }: { user: User }) {
                 <p className="text-sm font-medium text-gray-600">Active Vendors</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">{stats.activeVendors}</p>
                 <div className="flex items-center mt-2">
-                  <span className="text-xs text-green-600 font-medium">↗ 12% this month</span>
+                  <span className="text-xs text-green-600 font-medium">+12% this month</span>
                 </div>
               </div>
               <div className="p-3 bg-blue-50 rounded-xl">
@@ -276,7 +278,7 @@ function AdminDashboard({ user }: { user: User }) {
                 <p className="text-sm font-medium text-gray-600">Total Clients</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalClients}</p>
                 <div className="flex items-center mt-2">
-                  <span className="text-xs text-green-600 font-medium">↗ 8% this month</span>
+                  <span className="text-xs text-green-600 font-medium">+8% this month</span>
                 </div>
               </div>
               <div className="p-3 bg-green-50 rounded-xl">
@@ -366,7 +368,7 @@ function AdminDashboard({ user }: { user: User }) {
               </button>
               
               <Link 
-                href="/dashboard/analytics"
+                href="/analytics"
                 className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 <div className="p-2 bg-purple-50 rounded-lg">
@@ -379,7 +381,7 @@ function AdminDashboard({ user }: { user: User }) {
               </Link>
               
               <Link 
-                href="/dashboard/users"
+                href="/users"
                 className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 <div className="p-2 bg-green-50 rounded-lg">
@@ -392,7 +394,7 @@ function AdminDashboard({ user }: { user: User }) {
               </Link>
               
               <Link 
-                href="/dashboard/settings"
+                href="/settings"
                 className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 <div className="p-2 bg-gray-50 rounded-lg">
@@ -422,8 +424,8 @@ function AdminDashboard({ user }: { user: User }) {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900">Overdue Maintenance Items</p>
                       <p className="text-xs text-gray-600 mt-1">{stats.overdueMaintenances} equipment items require immediate attention</p>
-                      <Link href="/dashboard/analytics" className="text-xs text-red-600 hover:text-red-700 font-medium mt-2 inline-block">
-                        View Details →
+                      <Link href="/analytics" className="text-xs text-red-600 hover:text-red-700 font-medium mt-2 inline-block">
+                        View Details
                       </Link>
                     </div>
                   </div>
@@ -434,8 +436,8 @@ function AdminDashboard({ user }: { user: User }) {
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-900">Pending Inspections</p>
                         <p className="text-xs text-gray-600 mt-1">{stats.pendingInspections} inspections scheduled this week</p>
-                        <Link href="/dashboard/analytics" className="text-xs text-amber-600 hover:text-amber-700 font-medium mt-2 inline-block">
-                          View Schedule →
+                        <Link href="/analytics" className="text-xs text-amber-600 hover:text-amber-700 font-medium mt-2 inline-block">
+                          View Schedule
                         </Link>
                       </div>
                     </div>
@@ -535,13 +537,13 @@ function AdminDashboard({ user }: { user: User }) {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                       <Link 
-                        href={`/dashboard/vendors/${vendor.id}`}
-                        className="text-red-600 hover:text-red-800 transition-colors"
+                        href={`/vendors/${vendor.id}`}
+                        className="text-red-600 hover:text-red-800 transition-colors" 
                       >
                         View
                       </Link>
                       <Link 
-                        href={`/dashboard/vendors/${vendor.id}/edit`}
+                        href={`/vendors/${vendor.id}/edit`}
                         className="text-gray-600 hover:text-gray-800 transition-colors"
                       >
                         Edit
@@ -568,75 +570,367 @@ function AdminDashboard({ user }: { user: User }) {
 }
 
 // ============================================================================
-// VENDOR DASHBOARD - Placeholder for future implementation
+// VENDOR DASHBOARD - Full implementation with API integration according to specification
 // ============================================================================
 function VendorDashboardComponent({ user }: { user: User }) {
+  const [kpiData, setKpiData] = useState<any>(null);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+
+  // Fetch vendor dashboard data from API
+  const fetchVendorDashboardData = async () => {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.ui('VendorDashboard', 'fetchVendorDashboardData started');
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Get auth token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+
+      DebugLogger.log('Fetching vendor dashboard data with auth token', { hasToken: !!token }, 'VENDOR_DASHBOARD');
+
+      // Fetch KPIs
+      logApiCall('GET', API_ENDPOINTS.DASHBOARD.VENDOR_KPIS);
+      const kpiResponse = await fetch(API_ENDPOINTS.DASHBOARD.VENDOR_KPIS, { headers });
+      
+      if (!kpiResponse.ok) {
+        throw new Error(`Failed to fetch vendor KPIs: ${kpiResponse.status} ${kpiResponse.statusText}`);
+      }
+      const kpiData = await kpiResponse.json();
+      DebugLogger.api('GET', '/api/dashboard/vendor-kpis', undefined, kpiData, kpiResponse.status);
+      
+      // Fetch recent activity
+      logApiCall('GET', API_ENDPOINTS.DASHBOARD.VENDOR_ACTIVITY);
+      const activityResponse = await fetch(`${API_ENDPOINTS.DASHBOARD.VENDOR_ACTIVITY}?limit=10`, { headers });
+      
+      if (!activityResponse.ok) {
+        throw new Error(`Failed to fetch vendor activity: ${activityResponse.status} ${activityResponse.statusText}`);
+      }
+      const activityData = await activityResponse.json();
+      DebugLogger.api('GET', '/api/dashboard/vendor-activity', undefined, activityData, activityResponse.status);
+
+      if (kpiData.success && activityData.success) {
+        DebugLogger.log('Vendor dashboard data fetched successfully', {
+          kpiKeys: Object.keys(kpiData.data?.kpis || {}),
+          activityCount: activityData.data?.length || 0
+        }, 'VENDOR_DASHBOARD');
+        
+        setKpiData(kpiData.data);
+        setRecentActivity(activityData.data);
+      } else {
+        throw new Error(kpiData.message || activityData.message || 'Failed to load vendor dashboard data');
+      }
+
+      DebugLogger.performance('Vendor dashboard data fetch', startTime);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load vendor dashboard data';
+      DebugLogger.error('Vendor dashboard data fetch failed', err, { errorMessage });
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVendorDashboardData();
+  }, []);
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'Audit':
+        return <ClipboardDocumentListIcon className="h-4 w-4" />;
+      case 'Notification':
+        return <ExclamationTriangleIcon className="h-4 w-4" />;
+      default:
+        return <ClockIcon className="h-4 w-4" />;
+    }
+  };
+
+  const getActivityTypeColor = (type: string) => {
+    switch (type) {
+      case 'Audit':
+        return 'text-blue-600 bg-blue-50';
+      case 'Notification':
+        return 'text-orange-600 bg-orange-50';
+      default:
+        return 'text-gray-600 bg-gray-50';
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Vendor Dashboard</h1>
-          <p className="text-gray-600 mt-1">Welcome back, {user.display_name}</p>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-green-50 rounded-xl">
-                <UserGroupIcon className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">My Clients</p>
-                <p className="text-2xl font-bold text-gray-900">--</p>
-              </div>
+        {/* Page Header */}
+        <div className="flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <ChartBarIcon className="h-8 w-8 text-gray-900" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {kpiData?.vendorInfo?.companyName || 'Vendor Dashboard'}
+              </h1>
+              <p className="text-gray-600 mt-1">
+                Welcome, {kpiData?.vendorInfo?.displayName || user.display_name}
+              </p>
             </div>
           </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-purple-50 rounded-xl">
-                <FireIcon className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Equipment Managed</p>
-                <p className="text-2xl font-bold text-gray-900">--</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-blue-50 rounded-xl">
-                <ClipboardDocumentListIcon className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Service Requests</p>
-                <p className="text-2xl font-bold text-gray-900">--</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-orange-50 rounded-xl">
-                <ClockIcon className="h-6 w-6 text-orange-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Pending Tasks</p>
-                <p className="text-2xl font-bold text-gray-900">--</p>
-              </div>
-            </div>
+          <div className="flex items-center space-x-3">
+            {kpiData?.vendorInfo?.avatarUrl && (
+              <Image 
+                src={kpiData.vendorInfo.avatarUrl} 
+                alt="Avatar"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-full"
+              />
+            )}
+            <button className="btn-primary flex items-center space-x-2">
+              <PlusIcon className="h-5 w-5" />
+              <span>Add Equipment</span>
+            </button>
           </div>
         </div>
 
-        {/* Coming Soon Message */}
-        <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
-          <p className="text-green-800">
-            <strong>Vendor Dashboard:</strong> Client management, equipment tracking, and service request features are coming soon!
-          </p>
-        </div>
+        {/* Loading State */}
+        {isLoading && (
+          <LoadingSpinner text="Loading vendor dashboard..." />
+        )}
+
+        {/* Error State */}
+        {error && !isLoading && (
+          <ErrorDisplay 
+            message={error}
+            action={{
+              label: 'Try Again',
+              onClick: fetchVendorDashboardData
+            }}
+          />
+        )}
+
+        {/* Dashboard Content */}
+        {!isLoading && !error && kpiData && (
+          <>
+            {/* KPI Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Equipment</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">{kpiData.kpis.totalEquipment}</p>
+                    <div className="flex items-center mt-2">
+                      <span className="text-xs text-blue-600 font-medium">All devices</span>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-blue-50 rounded-xl">
+                    <FireIcon className="h-8 w-8 text-blue-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Compliant Equipment</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">{kpiData.kpis.compliantEquipment}</p>
+                    <div className="flex items-center mt-2">
+                      <span className="text-xs text-green-600 font-medium">✓ Up to standard</span>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-xl">
+                    <CheckCircleIcon className="h-8 w-8 text-green-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Expired Equipment</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">{kpiData.kpis.expiredEquipment}</p>
+                    <div className="flex items-center mt-2">
+                      <span className="text-xs text-red-600 font-medium">Needs renewal</span>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-xl">
+                    <ExclamationTriangleIcon className="h-8 w-8 text-red-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Overdue Equipment</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">{kpiData.kpis.overdueEquipment}</p>
+                    <div className="flex items-center mt-2">
+                      <span className="text-xs text-red-600 font-medium">! Past due</span>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-xl">
+                    <WrenchIcon className="h-8 w-8 text-red-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Due Soon Equipment</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">{kpiData.kpis.dueSoonEquipment}</p>
+                    <div className="flex items-center mt-2">
+                      <span className="text-xs text-amber-600 font-medium">Due soon</span>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-amber-50 rounded-xl">
+                    <ClockIcon className="h-8 w-8 text-amber-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Active Clients</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">{kpiData.kpis.activeClients}</p>
+                    <div className="flex items-center mt-2">
+                      <span className="text-xs text-green-600 font-medium">Clients Managed</span>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-xl">
+                    <UserGroupIcon className="h-8 w-8 text-green-600" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Open Tickets</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">{kpiData.kpis.openTickets}</p>
+                    <div className="flex items-center mt-2">
+                      <span className="text-xs text-orange-600 font-medium">Active Tickets</span>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-orange-50 rounded-xl">
+                    <WrenchScrewdriverIcon className="h-8 w-8 text-orange-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Activity and Quick Actions */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Recent Activity Table */}
+              <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100">
+                <div className="px-6 py-4 border-b border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                          Type
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                          Description
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                          Timestamp
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      {recentActivity.length > 0 ? (
+                        recentActivity.map((activity, index) => (
+                          <tr key={index} className={`hover:bg-gray-50 transition-colors ${index !== recentActivity.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className={`flex-shrink-0 p-2 rounded-lg ${getActivityTypeColor(activity.type)}`}>
+                                  {getActivityIcon(activity.type)}
+                                </div>
+                                <div className="ml-3">
+                                  <span className="text-sm font-medium text-gray-900">{activity.type}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-gray-900">{activity.description}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {activity.formattedTimestamp}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={3} className="px-6 py-8 text-center text-gray-500">
+                            No recent activity
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                <div className="space-y-3">
+                  <Link 
+                    href="/equipment"
+                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <PlusIcon className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Add Equipment</p>
+                      <p className="text-xs text-gray-500">Register new equipment</p>
+                    </div>
+                  </Link>
+                  
+                  <Link 
+                    href="/service-requests"
+                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="p-2 bg-orange-50 rounded-lg">
+                      <WrenchScrewdriverIcon className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Create Ticket</p>
+                      <p className="text-xs text-gray-500">New maintenance ticket</p>
+                    </div>
+                  </Link>
+                  
+                  <Link 
+                    href="/clients"
+                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="p-2 bg-green-50 rounded-lg">
+                      <UserGroupIcon className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">View Clients</p>
+                      <p className="text-xs text-gray-500">Manage client accounts</p>
+                    </div>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

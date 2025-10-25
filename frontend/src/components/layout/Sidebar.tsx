@@ -35,26 +35,26 @@ export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {
       case 'admin':
         return [
           { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-          { name: 'Vendor Management', href: '/dashboard/vendors', icon: BuildingOfficeIcon },
-          { name: 'User Management', href: '/dashboard/users', icon: UsersIcon },
-          { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: ChartBarIcon },
-          { name: 'System Settings', href: '/dashboard/settings', icon: Cog6ToothIcon },
+          { name: 'Vendor Management', href: '/vendors', icon: BuildingOfficeIcon },
+          { name: 'User Management', href: '/users', icon: UsersIcon },
+          { name: 'Analytics & Reports', href: '/analytics', icon: ChartBarIcon },
+          { name: 'System Settings', href: '/settings', icon: Cog6ToothIcon },
         ];
       case 'vendor':
         return [
           { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-          { name: 'Client Management', href: '/dashboard/clients', icon: UsersIcon },
-          { name: 'Equipment Management', href: '/dashboard/equipment', icon: FireIcon },
-          { name: 'Service Requests', href: '/dashboard/service-requests', icon: WrenchScrewdriverIcon },
-          { name: 'Reports', href: '/dashboard/reports', icon: ChartBarIcon },
+          { name: 'Client Management', href: '/clients', icon: UsersIcon },
+          { name: 'Equipment Management', href: '/equipment', icon: FireIcon },
+          { name: 'Service Requests', href: '/service-requests', icon: WrenchScrewdriverIcon },
+          { name: 'Reports', href: '/reports', icon: ChartBarIcon },
         ];
       case 'client':
         return [
           { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-          { name: 'My Equipment', href: '/dashboard/equipment', icon: FireIcon },
-          { name: 'Service Requests', href: '/dashboard/requests', icon: ClipboardDocumentListIcon },
-          { name: 'Maintenance History', href: '/dashboard/maintenance', icon: WrenchScrewdriverIcon },
-          { name: 'Safety Reports', href: '/dashboard/reports', icon: ShieldCheckIcon },
+          { name: 'My Equipment', href: '/equipment', icon: FireIcon },
+          { name: 'Service Requests', href: '/requests', icon: ClipboardDocumentListIcon },
+          { name: 'Maintenance History', href: '/maintenance', icon: WrenchScrewdriverIcon },
+          { name: 'Safety Reports', href: '/reports', icon: ShieldCheckIcon },
         ];
       default:
         return [];
@@ -79,14 +79,6 @@ export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex flex-col h-full">
-          {/* Sidebar header - only visible on mobile */}
-          <div className="flex items-center justify-between h-16 px-4 border-b border-gray-100 lg:hidden">
-            <div className="flex items-center">
-              <FireIcon className="h-8 w-8 text-danger mr-3" />
-              <span className="text-lg font-semibold text-primary-text" style={{fontFamily: 'Segoe UI, Helvetica Neue, Arial, sans-serif'}}>Fire Guardian</span>
-            </div>
-          </div>
-
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-2 lg:pt-8">
             {navItems.map((item) => {

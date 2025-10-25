@@ -26,6 +26,8 @@ export const API_ENDPOINTS = {
   DASHBOARD: {
     STATS: `${API_BASE_URL}/dashboard/stats`,
     RECENT_VENDORS: `${API_BASE_URL}/dashboard/recent-vendors`,
+    VENDOR_KPIS: `${API_BASE_URL}/dashboard/vendor-kpis`,
+    VENDOR_ACTIVITY: `${API_BASE_URL}/dashboard/vendor-activity`,
   },
   
   // Vendors

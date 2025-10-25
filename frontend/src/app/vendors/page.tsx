@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import RequireRole from '../../../components/auth/RequireRole';
-import DashboardLayout from '../../../components/layout/DashboardLayout';
-import AddVendorModal from '../../../components/modals/AddVendorModal';
-import LoadingSpinner from '../../../components/ui/LoadingSpinner';
-import ErrorDisplay from '../../../components/ui/ErrorDisplay';
-import { API_ENDPOINTS, getAuthHeaders, logApiCall, buildApiUrl } from '../../../config/api';
-import { useToast } from '../../../components/providers/ToastProvider';
-import { useConfirmModal } from '../../../components/providers/ConfirmModalProvider';
+import RequireRole from '../../components/auth/RequireRole';
+import DashboardLayout from '../../components/layout/DashboardLayout';
+import AddVendorModal from '../../components/modals/AddVendorModal';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import ErrorDisplay from '../../components/ui/ErrorDisplay';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall, buildApiUrl } from '../../config/api';
+import { useToast } from '../../components/providers/ToastProvider';
+import { useConfirmModal } from '../../components/providers/ConfirmModalProvider';
 import { 
   BuildingOfficeIcon,
   MagnifyingGlassIcon,
@@ -370,7 +370,7 @@ export default function VendorManagementPage() {
                   <tr 
                     key={vendor.id} 
                     className={`hover:bg-gray-50 transition-colors cursor-pointer ${index !== vendors.length - 1 ? 'border-b border-gray-100' : ''}`}
-                    onClick={() => window.location.href = `/dashboard/vendors/${vendor.id}`}
+                    onClick={() => window.location.href = `/vendors/${vendor.id}`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -412,7 +412,7 @@ export default function VendorManagementPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
                       <div className="flex space-x-3">
                         <Link
-                          href={`/dashboard/vendors/${vendor.id}/edit`}
+                          href={`/vendors/${vendor.id}/edit`}
                           className="text-gray-600 hover:text-gray-800 transition-colors"
                         >
                           Edit

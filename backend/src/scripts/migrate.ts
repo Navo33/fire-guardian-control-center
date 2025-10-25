@@ -142,16 +142,6 @@ export const runMigrations = async (): Promise<void> => {
       up: async () => {
         await applyInitialSchema();
       }
-    },
-    {
-      name: '002_add_profile_security_tracking',
-      description: 'Add profile and security tracking columns (last_password_change, phone, avatar_url, bio) and system_settings/user_sessions tables',
-      up: async () => {
-        const migrationPath = path.join(__dirname, 'migrations', '002_add_profile_security_tracking.sql');
-        const migrationSql = fs.readFileSync(migrationPath, 'utf-8');
-        await pool.query(migrationSql);
-        console.log('✅ Added profile and security tracking columns');
-      }
     }
   ];
 

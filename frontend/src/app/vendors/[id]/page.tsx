@@ -247,7 +247,7 @@ function VendorDetailsContent() {
       } catch (err) {
         console.error('Error fetching vendor data:', err);
         // Optionally redirect to vendors list or show error message
-        router.push('/dashboard/vendors');
+        router.push('/vendors');
       } finally {
         setIsLoading(false);
       }
@@ -256,7 +256,7 @@ function VendorDetailsContent() {
     if (vendorId && !isNaN(vendorId)) {
       fetchVendorData();
     } else {
-      router.push('/dashboard/vendors');
+      router.push('/vendors');
     }
   }, [vendorId, router]);
 
@@ -345,7 +345,7 @@ function VendorDetailsContent() {
         throw new Error(result.message || 'Failed to delete vendor');
       }
 
-      router.push('/dashboard/vendors');
+      router.push('/vendors');
     } catch (err) {
       console.error('Error deleting vendor:', err);
       alert(err instanceof Error ? err.message : 'Failed to delete vendor');
@@ -395,7 +395,7 @@ function VendorDetailsContent() {
           <BuildingOfficeIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Vendor not found</h3>
           <p className="text-gray-500 mb-4">The vendor you're looking for doesn't exist.</p>
-          <Link href="/dashboard/vendors" className="btn-primary">
+          <Link href="/vendors" className="btn-primary">
             Back to Vendors
           </Link>
         </div>
@@ -410,7 +410,7 @@ function VendorDetailsContent() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link
-              href="/dashboard/vendors"
+              href="/vendors"
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <ArrowLeftIcon className="h-5 w-5 text-gray-500" />

@@ -6,6 +6,8 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
+import { useToast } from '@/components/providers/ToastProvider';
+import { useConfirmModal } from '@/components/providers/ConfirmModalProvider';
 import { 
   UserGroupIcon,
   MagnifyingGlassIcon,
@@ -53,6 +55,8 @@ export default function UserManagementPage() {
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  const confirmModal = useConfirmModal();
   
   // Fetch users from API
   const fetchUsers = async () => {
@@ -108,7 +112,19 @@ export default function UserManagementPage() {
   };
 
   // Toggle user lock status
-  const toggleUserLock = async (userId: number, currentLockStatus: boolean) => {
+  const toggleUserLock = async (userId: number, currentLockStatus: boolean, userName: string) => {
+    const action = currentLockStatus ? 'unlock' : 'lock';
+    
+    const confirmed = await confirmModal.confirm({
+      title: `${currentLockStatus ? 'Unlock' : 'Lock'} User Account`,
+      message: `Are you sure you want to ${action} ${userName}'s account?`,
+      confirmText: currentLockStatus ? 'Unlock Account' : 'Lock Account',
+      cancelText: 'Cancel',
+      type: currentLockStatus ? 'confirm' : 'danger'
+    });
+
+    if (!confirmed) return;
+
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -130,6 +146,7 @@ export default function UserManagementPage() {
       const result = await response.json();
 
       if (result.success) {
+        toast.success(`User account ${currentLockStatus ? 'unlocked' : 'locked'} successfully`);
         // Refresh users list
         fetchUsers();
         fetchUserStats();
@@ -138,15 +155,20 @@ export default function UserManagementPage() {
       }
     } catch (err) {
       console.error('Error updating user status:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update user status');
+      toast.error(err instanceof Error ? err.message : 'Failed to update user status');
     }
   };
 
   // Delete user
-  const deleteUser = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      return;
-    }
+  const deleteUser = async (userId: number, userName: string) => {
+    const confirmed = await confirmModal.danger({
+      title: 'Delete User',
+      message: `Are you sure you want to delete ${userName}? This action cannot be undone and will permanently remove all associated data.`,
+      confirmText: 'Delete User',
+      cancelText: 'Cancel'
+    });
+
+    if (!confirmed) return;
 
     try {
       const token = localStorage.getItem('token');
@@ -166,6 +188,7 @@ export default function UserManagementPage() {
       const result = await response.json();
 
       if (result.success) {
+        toast.success(`${userName} has been deleted successfully`);
         // Refresh users list
         fetchUsers();
         fetchUserStats();
@@ -174,7 +197,7 @@ export default function UserManagementPage() {
       }
     } catch (err) {
       console.error('Error deleting user:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete user');
+      toast.error(err instanceof Error ? err.message : 'Failed to delete user');
     }
   };
 
@@ -408,7 +431,7 @@ export default function UserManagementPage() {
                   {filteredUsers.map((user) => (
                     <tr 
                       key={user.id} 
-                      onClick={() => window.location.href = `/dashboard/users/${user.id}`}
+                      onClick={() => window.location.href = `/users/${user.id}`}
                       className="hover:bg-red-50/30 cursor-pointer transition-all duration-150"
                     >
                       {/* User Details */}
@@ -500,7 +523,7 @@ export default function UserManagementPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              toggleUserLock(user.id, user.is_locked);
+                              toggleUserLock(user.id, user.is_locked, user.display_name);
                             }}
                             className={`transition-colors ${
                               user.is_locked
@@ -513,7 +536,7 @@ export default function UserManagementPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteUser(user.id);
+                              deleteUser(user.id, user.display_name);
                             }}
                             className="text-red-600 hover:text-red-800 transition-colors"
                           >
