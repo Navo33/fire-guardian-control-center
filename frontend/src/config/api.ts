@@ -81,6 +81,21 @@ export const API_ENDPOINTS = {
     SYSTEM: `${API_BASE_URL}/analytics/system`,
     METRICS: `${API_BASE_URL}/analytics/metrics`,
   },
+  
+  // Equipment
+  EQUIPMENT: {
+    LIST: `${API_BASE_URL}/equipment`,
+    CREATE: `${API_BASE_URL}/equipment`,
+    TYPES: `${API_BASE_URL}/equipment/types`,
+    CLIENTS: `${API_BASE_URL}/equipment/clients`,
+    BY_ID: (id: string | number) => `${API_BASE_URL}/equipment/${id}`,
+    UPDATE: (id: string | number) => `${API_BASE_URL}/equipment/${id}`,
+    DELETE: (id: string | number) => `${API_BASE_URL}/equipment/${id}`,
+    RELATED: (id: string | number) => `${API_BASE_URL}/equipment/${id}/related`,
+    ASSIGNMENTS: (id: string | number) => `${API_BASE_URL}/equipment/${id}/assignments`,
+    MAINTENANCE: (id: string | number) => `${API_BASE_URL}/equipment/${id}/maintenance`,
+    ASSIGN: (id: string | number) => `${API_BASE_URL}/equipment/${id}/assign`,
+  },
 };
 
 /**

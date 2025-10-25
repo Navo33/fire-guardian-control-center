@@ -803,7 +803,7 @@ function VendorDashboardComponent({ user }: { user: User }) {
                     <p className="text-sm font-medium text-gray-600">Active Clients</p>
                     <p className="text-3xl font-bold text-gray-900 mt-2">{kpiData.kpis.activeClients}</p>
                     <div className="flex items-center mt-2">
-                      <span className="text-xs text-green-600 font-medium">Managed</span>
+                      <span className="text-xs text-green-600 font-medium">Clients Managed</span>
                     </div>
                   </div>
                   <div className="p-3 bg-green-50 rounded-xl">
@@ -818,7 +818,7 @@ function VendorDashboardComponent({ user }: { user: User }) {
                     <p className="text-sm font-medium text-gray-600">Open Tickets</p>
                     <p className="text-3xl font-bold text-gray-900 mt-2">{kpiData.kpis.openTickets}</p>
                     <div className="flex items-center mt-2">
-                      <span className="text-xs text-orange-600 font-medium">🎫 Active</span>
+                      <span className="text-xs text-orange-600 font-medium">Active Tickets</span>
                     </div>
                   </div>
                   <div className="p-3 bg-orange-50 rounded-xl">
