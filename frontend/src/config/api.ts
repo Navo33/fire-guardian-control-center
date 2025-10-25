@@ -123,6 +123,53 @@ export const API_ENDPOINTS = {
     EQUIPMENT: `${API_BASE_URL}/vendor/tickets/equipment`,
     TECHNICIANS: `${API_BASE_URL}/vendor/tickets/technicians`,
   },
+
+  // Reports and Analytics
+  REPORTS: {
+    KPIS: `${API_BASE_URL}/reports/kpis`,
+    ENHANCED_KPIS: `${API_BASE_URL}/reports/enhanced-kpis`,
+    DASHBOARD: `${API_BASE_URL}/reports/dashboard`,
+    COMPLIANCE_CHART: `${API_BASE_URL}/reports/compliance-chart`,
+    TICKETS_CHART: `${API_BASE_URL}/reports/tickets-chart`,
+    // Enhanced Charts (NEW)
+    EQUIPMENT_STATUS: `${API_BASE_URL}/reports/equipment-status`,
+    MAINTENANCE_TRENDS: `${API_BASE_URL}/reports/maintenance-trends`,
+    COMPLIANCE_OVERVIEW: `${API_BASE_URL}/reports/compliance-overview`,
+    REVENUE_TRENDS: `${API_BASE_URL}/reports/revenue-trends`,
+    EQUIPMENT_VALUE_CHART: `${API_BASE_URL}/reports/equipment-value-chart`,
+    CLIENT_SATISFACTION_CHART: `${API_BASE_URL}/reports/client-satisfaction-chart`,
+    COMPLIANCE_TRENDS_CHART: `${API_BASE_URL}/reports/compliance-trends-chart`,
+    // Analytics Tables
+    TOP_CLIENTS: `${API_BASE_URL}/reports/top-clients`,
+    EQUIPMENT_PERFORMANCE: `${API_BASE_URL}/reports/equipment-performance`,
+    MAINTENANCE_BACKLOG: `${API_BASE_URL}/reports/maintenance-backlog`,
+    REVENUE_BY_CLIENT: `${API_BASE_URL}/reports/revenue-by-client`,
+    COMPLIANCE_ISSUES: `${API_BASE_URL}/reports/compliance-issues`,
+    UPCOMING_MAINTENANCE: `${API_BASE_URL}/reports/upcoming-maintenance`,
+    CLIENTS_DROPDOWN: `${API_BASE_URL}/reports/clients-dropdown`,
+    EQUIPMENT_TYPES_DROPDOWN: `${API_BASE_URL}/reports/equipment-types-dropdown`,
+    EQUIPMENT_COMPLIANCE_REPORT: `${API_BASE_URL}/reports/equipment-compliance-report`,
+    MAINTENANCE_REPORT: `${API_BASE_URL}/reports/maintenance-report`,
+  },
+
+  // Client Views (for client users)
+  CLIENT: {
+    DASHBOARD: {
+      KPIS: `${API_BASE_URL}/client/dashboard/kpis`,
+      ACTIVITY: `${API_BASE_URL}/client/dashboard/activity`,
+    },
+    EQUIPMENT: `${API_BASE_URL}/client/equipment`,
+    TICKETS: `${API_BASE_URL}/client/tickets`,
+    REPORTS: {
+      KPIS: `${API_BASE_URL}/client/reports/kpis`,
+      COMPLIANCE_CHART: `${API_BASE_URL}/client/reports/compliance-chart`,
+      LIST: `${API_BASE_URL}/client/reports`,
+      BY_ID: (id: string) => `${API_BASE_URL}/client/reports/${id}`,
+      RELATED: (id: string) => `${API_BASE_URL}/client/reports/${id}/related`,
+      EXPORT: (id: string) => `${API_BASE_URL}/client/reports/${id}/export`,
+      EXPORT_ALL: `${API_BASE_URL}/client/reports/export-all`,
+    },
+  },
 };
 
 /**

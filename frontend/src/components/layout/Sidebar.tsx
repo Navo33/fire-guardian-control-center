@@ -46,7 +46,7 @@ export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {
           { name: 'Client Management', href: '/clients', icon: UsersIcon },
           { name: 'Equipment Management', href: '/equipment', icon: FireIcon },
           { name: 'Maintenance Tickets', href: '/maintenance-tickets', icon: WrenchScrewdriverIcon },
-          { name: 'Reports', href: '/reports', icon: ChartBarIcon },
+          { name: 'Analytics & Reports', href: '/reports', icon: ChartBarIcon },
         ];
       case 'client':
         return [
