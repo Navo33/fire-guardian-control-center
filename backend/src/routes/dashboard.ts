@@ -66,4 +66,19 @@ router.get('/charts/:chartType', dashboardController.getChartData);
  */
 router.get('/export', dashboardController.exportData);
 
+/**
+ * @route   GET /api/dashboard/vendor-kpis
+ * @desc    Get vendor dashboard KPIs (vendor only)
+ * @access  Private (Vendor only)
+ */
+router.get('/vendor-kpis', dashboardController.getVendorKPIs);
+
+/**
+ * @route   GET /api/dashboard/vendor-activity
+ * @desc    Get vendor recent activity with notifications (vendor only)
+ * @query   limit - Number of items to return (default: 10)
+ * @access  Private (Vendor only)
+ */
+router.get('/vendor-activity', dashboardController.getVendorActivity);
+
 export default router;

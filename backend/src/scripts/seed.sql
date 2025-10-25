@@ -1,7 +1,8 @@
 -- Insert into schema_migrations
 INSERT INTO public.schema_migrations (migration_name, executed_at, execution_time_ms, success) VALUES
 ('001_initial_schema', '2025-10-25 11:25:00+05:30', 258, true),
-('002_enhanced_schema', '2025-10-25 11:25:00+05:30', 200, true);
+('002_enhanced_schema', '2025-10-25 11:25:00+05:30', 200, true)
+ON CONFLICT (migration_name) DO NOTHING;
 
 -- Insert into user
 INSERT INTO public.user (id, first_name, last_name, display_name, email, password, user_type, role_id, is_locked, failed_login_attempts, last_login, last_login_ip, created_at, updated_at, last_password_change, phone) VALUES
@@ -11,7 +12,8 @@ INSERT INTO public.user (id, first_name, last_name, display_name, email, passwor
 (4, 'Ruwan', 'Bandara', 'Ruwan Bandara', 'ruwan@fireshield.lk', '$2b$12$RJncseQumfTlZBZmPRR/WehxSkVQOFljsvzzHEJV5A9Sg140kjF6.', 'vendor', 2, false, 0, NULL, NULL, '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '+94 81 456 7890'),
 (5, 'Kasun', 'Jayasinghe', 'Kasun Jayasinghe', 'kasun@royalhotels.lk', '$2b$12$cE0ghM8sGqpxo3NesiCAs.WT7KsGbrbJglAH03vGt2hrN3Fx.Rcvq', 'client', 3, false, 0, NULL, NULL, '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '+94 11 567 8901'),
 (6, 'Shalini', 'Fernando', 'Shalini Fernando', 'shalini@techinnovations.lk', '$2b$12$cE0ghM8sGqpxo3NesiCAs.WT7KsGbrbJglAH03vGt2hrN3Fx.Rcvq', 'client', 3, false, 0, NULL, NULL, '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '+94 11 678 9012'),
-(7, 'Dilshan', 'Weerasinghe', 'Dilshan Weerasinghe', 'dilshan@citymall.lk', '$2b$12$cE0ghM8sGqpxo3NesiCAs.WT7KsGbrbJglAH03vGt2hrN3Fx.Rcvq', 'client', 3, false, 0, NULL, NULL, '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '+94 91 789 0123');
+(7, 'Dilshan', 'Weerasinghe', 'Dilshan Weerasinghe', 'dilshan@citymall.lk', '$2b$12$cE0ghM8sGqpxo3NesiCAs.WT7KsGbrbJglAH03vGt2hrN3Fx.Rcvq', 'client', 3, false, 0, NULL, NULL, '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '2025-10-25 11:25:00+05:30', '+94 91 789 0123')
+ON CONFLICT (email) DO NOTHING;
 
 -- Insert into system_settings
 INSERT INTO public.system_settings (id, setting_key, setting_value, setting_type, description, updated_at, updated_by) VALUES
@@ -30,7 +32,8 @@ INSERT INTO public.system_settings (id, setting_key, setting_value, setting_type
 INSERT INTO public.role (id, role_name, description, created_at) VALUES
 (1, 'admin', 'Full system access', '2025-10-25 11:25:00+05:30'),
 (2, 'vendor', 'Manage own equipment, clients, and tickets', '2025-10-25 11:25:00+05:30'),
-(3, 'client', 'View assigned equipment and tickets', '2025-10-25 11:25:00+05:30');
+(3, 'client', 'View assigned equipment and tickets', '2025-10-25 11:25:00+05:30')
+ON CONFLICT (role_name) DO NOTHING;
 
 -- Insert into permission
 INSERT INTO public.permission (id, permission_name, description, category, created_at) VALUES
@@ -47,7 +50,8 @@ INSERT INTO public.permission (id, permission_name, description, category, creat
 (11, 'view_maintenance', 'View maintenance information', 'maintenance', '2025-10-25 11:25:00+05:30'),
 (12, 'manage_permissions', 'Manage roles and permissions', 'system', '2025-10-25 11:25:00+05:30'),
 (13, 'view_audit_logs', 'View audit logs', 'system', '2025-10-25 11:25:00+05:30'),
-(14, 'manage_system_settings', 'Manage system settings', 'system', '2025-10-25 11:25:00+05:30');
+(14, 'manage_system_settings', 'Manage system settings', 'system', '2025-10-25 11:25:00+05:30')
+ON CONFLICT (permission_name) DO NOTHING;
 
 -- Insert into role_permission
 INSERT INTO public.role_permission (role_id, permission_id, granted_by, granted_at) VALUES
@@ -71,7 +75,8 @@ INSERT INTO public.role_permission (role_id, permission_id, granted_by, granted_
 (2, 11, 1, '2025-10-25 11:25:00+05:30'), -- vendor: view_maintenance
 (2, 6, 1, '2025-10-25 11:25:00+05:30'), -- vendor: view_clients
 (3, 8, 1, '2025-10-25 11:25:00+05:30'), -- client: view_equipment
-(3, 11, 1, '2025-10-25 11:25:00+05:30'); -- client: view_maintenance
+(3, 11, 1, '2025-10-25 11:25:00+05:30') -- client: view_maintenance
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- Insert into vendors
 INSERT INTO public.vendors (id, user_id, company_name, business_type, license_number, primary_phone, street_address, city, state, zip_code, country, status, created_at, updated_at) VALUES

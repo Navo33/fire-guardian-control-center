@@ -29,7 +29,12 @@ export class DashboardController extends BaseController {
           overview = await DashboardRepository.getAdminOverview();
           break;
         case 'vendor':
-          overview = await DashboardRepository.getVendorOverview(userId);
+          // Get vendor ID from user ID
+          const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorId) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
+          overview = await DashboardRepository.getVendorOverview(vendorId);
           break;
         case 'client':
           overview = await DashboardRepository.getClientOverview(userId);
@@ -75,7 +80,12 @@ export class DashboardController extends BaseController {
           stats = await DashboardRepository.getAdminStats(period as string, category as string);
           break;
         case 'vendor':
-          stats = await DashboardRepository.getVendorStats(userId, period as string);
+          // Get vendor ID from user ID
+          const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorId) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
+          stats = await DashboardRepository.getVendorStats(vendorId, period as string);
           break;
         case 'client':
           stats = await DashboardRepository.getClientStats(userId, period as string);
@@ -354,6 +364,153 @@ export class DashboardController extends BaseController {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       console.error('Error exporting dashboard data:', error);
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * GET /api/dashboard/vendor-kpis
+   * Get vendor dashboard KPIs according to specification
+   */
+  getVendorKpis = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.api('GET', '/api/dashboard/vendor-kpis', req.query);
+
+    try {
+      const userId = req.user!.userId;
+      const userType = req.user!.user_type;
+
+      if (userType !== 'vendor') {
+        DebugLogger.log('Non-vendor user attempted to access vendor KPIs', { userId, userType }, 'DASHBOARD');
+        return ApiResponseUtil.forbidden(res, 'Access restricted to vendors only');
+      }
+
+      // Get vendor ID from user ID
+      const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+      if (!vendorId) {
+        DebugLogger.error('Vendor record not found for user', { userId });
+        return ApiResponseUtil.notFound(res, 'Vendor record not found');
+      }
+
+      DebugLogger.log('Fetching vendor dashboard KPIs', { userId, vendorId }, 'DASHBOARD');
+
+      const kpis = await DashboardRepository.getVendorDashboardKPIs(vendorId);
+
+      DebugLogger.log('Vendor dashboard KPIs retrieved successfully', { 
+        vendorId, 
+        kpiKeys: Object.keys(kpis.kpis) 
+      }, 'DASHBOARD');
+      
+      this.logAction('VENDOR_DASHBOARD_KPI_ACCESSED', userId, { vendorId });
+
+      DebugLogger.performance('Vendor dashboard KPIs fetch', startTime, { userId, vendorId });
+      ApiResponseUtil.success(res, kpis, 'Vendor dashboard KPIs retrieved successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error getting vendor dashboard KPIs', error, { userId: req.user?.userId });
+      this.logAction('VENDOR_DASHBOARD_KPI_ERROR', req.user?.userId, { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * GET /api/dashboard/vendor-activity
+   * Get vendor recent activity with notifications
+   */
+  getVendorActivity = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.api('GET', '/api/dashboard/vendor-activity', req.query);
+
+    try {
+      const { limit = 10 } = req.query;
+      const userId = req.user!.userId;
+      const userType = req.user!.user_type;
+
+      if (userType !== 'vendor') {
+        DebugLogger.log('Non-vendor user attempted to access vendor activity', { userId, userType }, 'DASHBOARD');
+        return ApiResponseUtil.forbidden(res, 'Access restricted to vendors only');
+      }
+
+      // Get vendor ID from user ID
+      const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+      if (!vendorId) {
+        DebugLogger.error('Vendor record not found for user', { userId });
+        return ApiResponseUtil.notFound(res, 'Vendor record not found');
+      }
+
+      DebugLogger.log('Fetching vendor recent activity', { userId, vendorId, limit }, 'DASHBOARD');
+
+      const activity = await DashboardRepository.getVendorRecentActivityWithNotifications(vendorId, parseInt(limit as string));
+
+      DebugLogger.log('Vendor recent activity retrieved successfully', { 
+        vendorId, 
+        activityCount: activity.length 
+      }, 'DASHBOARD');
+      
+      this.logAction('VENDOR_DASHBOARD_ACTIVITY_ACCESSED', userId, { vendorId, limit });
+
+      DebugLogger.performance('Vendor activity fetch', startTime, { userId, vendorId });
+      ApiResponseUtil.success(res, activity, 'Vendor recent activity retrieved successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error getting vendor recent activity', error, { userId: req.user?.userId });
+      this.logAction('VENDOR_DASHBOARD_ACTIVITY_ERROR', req.user?.userId, { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * GET /api/dashboard/vendor-kpis
+   * Get vendor dashboard KPIs according to specification
+   */
+  getVendorKPIs = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.api('GET', '/api/dashboard/vendor-kpis', req.query);
+
+    try {
+      const userId = req.user!.userId;
+      const userType = req.user!.user_type;
+
+      if (userType !== 'vendor') {
+        DebugLogger.error('Non-vendor user attempted to access vendor KPIs', { userId, userType });
+        return ApiResponseUtil.forbidden(res, 'Access denied. Vendor access required.');
+      }
+
+      // Get vendor ID from user ID
+      const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+      if (!vendorId) {
+        return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+      }
+
+      DebugLogger.log('Fetching vendor KPIs', { userId, vendorId }, 'DASHBOARD');
+
+      const kpiData = await DashboardRepository.getVendorDashboardKPIs(vendorId);
+
+      DebugLogger.log('Vendor KPIs retrieved successfully', { 
+        vendorId, 
+        kpisKeys: Object.keys(kpiData.kpis) 
+      }, 'DASHBOARD');
+      
+      this.logAction('VENDOR_DASHBOARD_KPIS_ACCESSED', userId, { vendorId });
+
+      DebugLogger.performance('Vendor KPIs fetch', startTime, { userId, vendorId });
+      ApiResponseUtil.success(res, kpiData, 'Vendor KPIs retrieved successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error getting vendor KPIs', error, { userId: req.user?.userId });
+      this.logAction('VENDOR_DASHBOARD_KPIS_ERROR', req.user?.userId, { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       return ApiResponseUtil.internalError(res);
     }
   });

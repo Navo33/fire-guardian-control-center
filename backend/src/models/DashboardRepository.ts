@@ -18,9 +18,9 @@ export class DashboardRepository {
       SELECT 
         (SELECT COUNT(*) FROM "user" WHERE user_type = 'vendor' AND deleted_at IS NULL) as total_vendors,
         (SELECT COUNT(*) FROM "user" WHERE user_type = 'client' AND deleted_at IS NULL) as total_clients,
-        (SELECT COUNT(*) FROM equipment WHERE deleted_at IS NULL) as total_equipment,
-        (SELECT COUNT(*) FROM equipment_instance WHERE status = 'assigned') as equipment_assigned,
-        (SELECT COUNT(*) FROM equipment_instance WHERE status = 'maintenance') as equipment_maintenance,
+        (SELECT COUNT(*) FROM equipment_instance WHERE deleted_at IS NULL) as total_equipment,
+        (SELECT COUNT(*) FROM equipment_instance WHERE assigned_to IS NOT NULL AND deleted_at IS NULL) as equipment_assigned,
+        (SELECT COUNT(*) FROM equipment_instance WHERE status = 'maintenance' AND deleted_at IS NULL) as equipment_maintenance,
         (SELECT COUNT(*) FROM notification WHERE is_read = false) as unread_notifications,
         (SELECT COUNT(*) FROM audit_log WHERE created_at >= CURRENT_DATE) as todays_activities
     `;
@@ -55,12 +55,12 @@ export class DashboardRepository {
         SELECT 
           (SELECT COUNT(*) FROM "user" WHERE user_type = 'vendor' AND deleted_at IS NULL) as active_vendors,
           (SELECT COUNT(*) FROM "user" WHERE user_type = 'client' AND deleted_at IS NULL) as total_clients,
-          (SELECT COUNT(*) FROM equipment WHERE deleted_at IS NULL) as total_equipment,
-          (SELECT COUNT(*) FROM equipment_instance WHERE status = 'assigned') as equipment_assigned,
-          (SELECT COUNT(*) FROM equipment_instance WHERE status = 'maintenance') as equipment_maintenance,
+          (SELECT COUNT(*) FROM equipment_instance WHERE deleted_at IS NULL) as total_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE assigned_to IS NOT NULL AND deleted_at IS NULL) as equipment_assigned,
+          (SELECT COUNT(*) FROM equipment_instance WHERE status = 'maintenance' AND deleted_at IS NULL) as equipment_maintenance,
           (SELECT COUNT(*) FROM notification WHERE is_read = false AND created_at >= CURRENT_DATE - INTERVAL '7 days') as critical_alerts,
-          (SELECT COUNT(*) FROM equipment_instance WHERE expiry_date <= CURRENT_DATE + INTERVAL '7 days' AND expiry_date IS NOT NULL) as pending_inspections,
-          (SELECT COUNT(*) FROM equipment_instance WHERE expiry_date < CURRENT_DATE AND expiry_date IS NOT NULL) as overdue_maintenances
+          (SELECT COUNT(*) FROM equipment_instance WHERE next_maintenance_date <= CURRENT_DATE + INTERVAL '7 days' AND next_maintenance_date IS NOT NULL AND deleted_at IS NULL) as pending_inspections,
+          (SELECT COUNT(*) FROM equipment_instance WHERE next_maintenance_date < CURRENT_DATE AND next_maintenance_date IS NOT NULL AND deleted_at IS NULL) as overdue_maintenances
       `;
 
       DebugLogger.database('Admin Stats Query', currentStatsQuery);
@@ -171,31 +171,55 @@ export class DashboardRepository {
   static async getVendorOverview(vendorId: number) {
     const query = `
       SELECT 
-        (SELECT COUNT(*) FROM "user" u 
-         JOIN equipment_assignment ea ON ea.client_id = u.id
-         JOIN equipment_instance ei ON ei.assigned_to = u.id
-         JOIN vendor_location vl ON vl.vendor_id = $1
-         WHERE u.user_type = 'client' AND u.deleted_at IS NULL) as total_clients,
+        -- Active clients count (clients that have equipment assignments from this vendor)
+        (SELECT COUNT(DISTINCT ea.client_id) FROM equipment_assignment ea 
+         WHERE ea.vendor_id = $1 AND ea.status = 'active') as active_clients,
         
+        -- Total equipment instances managed by this vendor
+        (SELECT COUNT(*) FROM equipment_instance ei 
+         WHERE ei.vendor_id = $1 AND ei.deleted_at IS NULL) as total_equipment_instances,
+        
+        -- Count of distinct equipment types managed by this vendor
+        (SELECT COUNT(DISTINCT e.equipment_type) FROM equipment e
+         JOIN equipment_instance ei ON ei.equipment_id = e.id
+         WHERE ei.vendor_id = $1 AND ei.deleted_at IS NULL AND e.deleted_at IS NULL) as equipment_types,
+        
+        -- Open maintenance requests/tickets for this vendor
+        (SELECT COUNT(*) FROM maintenance_ticket mt
+         WHERE mt.vendor_id = $1 AND mt.ticket_status IN ('open', 'assigned', 'in_progress', 'pending_parts')) as open_requests,
+        
+        -- Urgent maintenance requests
+        (SELECT COUNT(*) FROM maintenance_ticket mt
+         WHERE mt.vendor_id = $1 AND mt.priority IN ('urgent', 'critical') 
+         AND mt.ticket_status IN ('open', 'assigned', 'in_progress', 'pending_parts')) as urgent_requests,
+        
+        -- Equipment due for maintenance soon (within 7 days)
         (SELECT COUNT(*) FROM equipment_instance ei
-         JOIN vendor_location vl ON vl.id = ei.vendor_location_id
-         WHERE vl.vendor_id = $1 AND ei.deleted_at IS NULL) as total_equipment,
-         
+         WHERE ei.vendor_id = $1 AND ei.next_maintenance_date <= CURRENT_DATE + INTERVAL '7 days'
+         AND ei.next_maintenance_date IS NOT NULL AND ei.deleted_at IS NULL) as maintenance_due_soon,
+        
+        -- Overdue equipment (past maintenance date)
         (SELECT COUNT(*) FROM equipment_instance ei
-         JOIN vendor_location vl ON vl.id = ei.vendor_location_id
-         WHERE vl.vendor_id = $1 AND ei.status = 'assigned' AND ei.deleted_at IS NULL) as equipment_assigned,
+         WHERE ei.vendor_id = $1 AND ei.next_maintenance_date < CURRENT_DATE
+         AND ei.next_maintenance_date IS NOT NULL AND ei.deleted_at IS NULL) as overdue_maintenance,
          
+        -- Unread notifications for the vendor user
         (SELECT COUNT(*) FROM notification n
-         WHERE n.user_id = $1 AND n.is_read = false) as unread_notifications
+         JOIN vendors v ON v.id = $1
+         WHERE n.user_id = v.user_id AND n.is_read = false) as unread_notifications
     `;
     
     const result = await pool.query(query, [vendorId]);
     const stats = result.rows[0];
 
     return {
-      totalClients: parseInt(stats.total_clients) || 0,
-      totalEquipment: parseInt(stats.total_equipment) || 0,
-      equipmentAssigned: parseInt(stats.equipment_assigned) || 0,
+      activeClients: parseInt(stats.active_clients) || 0,
+      totalEquipmentInstances: parseInt(stats.total_equipment_instances) || 0,
+      equipmentTypes: parseInt(stats.equipment_types) || 0,
+      openRequests: parseInt(stats.open_requests) || 0,
+      urgentRequests: parseInt(stats.urgent_requests) || 0,
+      maintenanceDueSoon: parseInt(stats.maintenance_due_soon) || 0,
+      overdueMaintenance: parseInt(stats.overdue_maintenance) || 0,
       unreadNotifications: parseInt(stats.unread_notifications) || 0
     };
   }
@@ -204,43 +228,117 @@ export class DashboardRepository {
    * Get vendor statistics
    */
   static async getVendorStats(vendorId: number, period: string = '30d') {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Getting vendor stats', { vendorId, period }, 'DASHBOARD_REPO');
+
     const days = this.parsePeriod(period);
     const dateFilter = `created_at >= CURRENT_DATE - INTERVAL '${days} days'`;
 
-    // Equipment assignments over time
-    const equipmentStats = await pool.query(`
-      SELECT 
-        DATE(ea.assigned_at) as date,
-        COUNT(*) as assignments
-      FROM equipment_assignment ea
-      WHERE ea.assigned_by = $1 AND ${dateFilter.replace('created_at', 'ea.assigned_at')}
-      GROUP BY DATE(ea.assigned_at)
-      ORDER BY date DESC
-    `, [vendorId]);
+    try {
+      // Get comprehensive vendor stats
+      const statsQuery = `
+        SELECT 
+          -- Active clients
+          (SELECT COUNT(DISTINCT ea.client_id) FROM equipment_assignment ea 
+           WHERE ea.vendor_id = $1 AND ea.status = 'active') as active_clients,
+          
+          -- Total equipment instances
+          (SELECT COUNT(*) FROM equipment_instance ei 
+           WHERE ei.vendor_id = $1 AND ei.deleted_at IS NULL) as total_equipment_instances,
+          
+          -- Equipment assigned to clients
+          (SELECT COUNT(*) FROM equipment_instance ei 
+           WHERE ei.vendor_id = $1 AND ei.status = 'assigned' AND ei.deleted_at IS NULL) as equipment_assigned,
+          
+          -- Equipment in maintenance
+          (SELECT COUNT(*) FROM equipment_instance ei 
+           WHERE ei.vendor_id = $1 AND ei.status = 'maintenance' AND ei.deleted_at IS NULL) as equipment_maintenance,
+          
+          -- Open maintenance tickets
+          (SELECT COUNT(*) FROM maintenance_ticket mt
+           WHERE mt.vendor_id = $1 AND mt.ticket_status IN ('open', 'assigned', 'in_progress', 'pending_parts')) as open_tickets,
+          
+          -- Urgent tickets
+          (SELECT COUNT(*) FROM maintenance_ticket mt
+           WHERE mt.vendor_id = $1 AND mt.priority IN ('urgent', 'critical') 
+           AND mt.ticket_status IN ('open', 'assigned', 'in_progress', 'pending_parts')) as urgent_tickets,
+          
+          -- Completed tickets in period
+          (SELECT COUNT(*) FROM maintenance_ticket mt
+           WHERE mt.vendor_id = $1 AND mt.ticket_status = 'completed' 
+           AND mt.resolved_at >= CURRENT_DATE - INTERVAL '${days} days') as completed_tickets,
+          
+          -- Equipment due for maintenance
+          (SELECT COUNT(*) FROM equipment_instance ei
+           WHERE ei.vendor_id = $1 AND ei.next_maintenance_date <= CURRENT_DATE + INTERVAL '7 days'
+           AND ei.next_maintenance_date IS NOT NULL AND ei.deleted_at IS NULL) as maintenance_due_soon,
+           
+          -- Revenue in period (if cost tracking is implemented)
+          (SELECT COALESCE(SUM(ea.total_cost), 0) FROM equipment_assignment ea
+           WHERE ea.vendor_id = $1 AND ea.assigned_at >= CURRENT_DATE - INTERVAL '${days} days') as period_revenue
+      `;
 
-    return {
-      equipmentAssignments: equipmentStats.rows,
-      period: { days, start: new Date(Date.now() - days * 24 * 60 * 60 * 1000) }
-    };
+      DebugLogger.database('Vendor Stats Query', statsQuery);
+      const result = await pool.query(statsQuery, [vendorId]);
+      const stats = result.rows[0];
+
+      // Get assignment trend data
+      const trendQuery = `
+        SELECT 
+          DATE(ea.assigned_at) as date,
+          COUNT(*) as assignments,
+          COALESCE(SUM(ea.total_cost), 0) as daily_revenue
+        FROM equipment_assignment ea
+        WHERE ea.vendor_id = $1 AND ea.assigned_at >= CURRENT_DATE - INTERVAL '${days} days'
+        GROUP BY DATE(ea.assigned_at)
+        ORDER BY date DESC
+      `;
+      
+      const trendResult = await pool.query(trendQuery, [vendorId]);
+
+      const formattedStats = {
+        activeClients: parseInt(stats.active_clients) || 0,
+        totalEquipmentInstances: parseInt(stats.total_equipment_instances) || 0,
+        equipmentAssigned: parseInt(stats.equipment_assigned) || 0,
+        equipmentMaintenance: parseInt(stats.equipment_maintenance) || 0,
+        openTickets: parseInt(stats.open_tickets) || 0,
+        urgentTickets: parseInt(stats.urgent_tickets) || 0,
+        completedTickets: parseInt(stats.completed_tickets) || 0,
+        maintenanceDueSoon: parseInt(stats.maintenance_due_soon) || 0,
+        periodRevenue: parseFloat(stats.period_revenue) || 0,
+        assignmentTrend: trendResult.rows,
+        period: { days, start: new Date(Date.now() - days * 24 * 60 * 60 * 1000) }
+      };
+
+      DebugLogger.performance('Vendor stats fetch', startTime, formattedStats);
+      return formattedStats;
+
+    } catch (error) {
+      DebugLogger.error('Error fetching vendor stats', error, { vendorId, period });
+      throw error;
+    }
   }
 
   /**
    * Get vendor insights
    */
   static async getVendorInsights(vendorId: number) {
-    const [clientActivity, equipmentStatus] = await Promise.all([
-      // Most active clients
+    const [clientActivity, equipmentStatus, maintenanceInsights, revenueInsights, equipmentTypes] = await Promise.all([
+      // Most active clients (based on equipment assignments)
       pool.query(`
         SELECT 
           u.id, u.display_name, u.email,
+          cc.company_name,
           COUNT(ea.id) as assignment_count,
-          MAX(ea.assigned_at) as last_assignment
+          MAX(ea.assigned_at) as last_assignment,
+          COALESCE(SUM(ea.total_cost), 0) as total_revenue
         FROM "user" u
+        JOIN client_company cc ON cc.client_id = u.id
         JOIN equipment_assignment ea ON ea.client_id = u.id
-        WHERE ea.assigned_by = $1 
+        WHERE ea.vendor_id = $1 
           AND ea.assigned_at >= CURRENT_DATE - INTERVAL '30 days'
-        GROUP BY u.id, u.display_name, u.email
-        ORDER BY assignment_count DESC
+        GROUP BY u.id, u.display_name, u.email, cc.company_name
+        ORDER BY assignment_count DESC, total_revenue DESC
         LIMIT 5
       `, [vendorId]),
 
@@ -248,18 +346,100 @@ export class DashboardRepository {
       pool.query(`
         SELECT 
           ei.status,
-          COUNT(*) as count
+          COUNT(*) as count,
+          ROUND((COUNT(*) * 100.0 / (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND deleted_at IS NULL)), 2) as percentage
         FROM equipment_instance ei
-        JOIN vendor_location vl ON vl.id = ei.vendor_location_id
-        WHERE vl.vendor_id = $1 AND ei.deleted_at IS NULL
+        WHERE ei.vendor_id = $1 AND ei.deleted_at IS NULL
         GROUP BY ei.status
         ORDER BY count DESC
+      `, [vendorId]),
+
+      // Maintenance insights
+      pool.query(`
+        SELECT 
+          mt.priority,
+          COUNT(*) as ticket_count,
+          AVG(EXTRACT(EPOCH FROM (mt.resolved_at - mt.created_at))/3600) as avg_resolution_hours
+        FROM maintenance_ticket mt
+        WHERE mt.vendor_id = $1 
+          AND mt.created_at >= CURRENT_DATE - INTERVAL '30 days'
+        GROUP BY mt.priority
+        ORDER BY 
+          CASE mt.priority 
+            WHEN 'critical' THEN 1 
+            WHEN 'urgent' THEN 2 
+            WHEN 'high' THEN 3 
+            WHEN 'normal' THEN 4 
+            WHEN 'low' THEN 5 
+          END
+      `, [vendorId]),
+
+      // Revenue trends
+      pool.query(`
+        SELECT 
+          DATE_TRUNC('week', ea.assigned_at) as week_start,
+          COUNT(*) as assignments,
+          COALESCE(SUM(ea.total_cost), 0) as weekly_revenue
+        FROM equipment_assignment ea
+        WHERE ea.vendor_id = $1 
+          AND ea.assigned_at >= CURRENT_DATE - INTERVAL '8 weeks'
+        GROUP BY DATE_TRUNC('week', ea.assigned_at)
+        ORDER BY week_start DESC
+        LIMIT 8
+      `, [vendorId]),
+
+      // Equipment type performance
+      pool.query(`
+        SELECT 
+          e.equipment_type,
+          e.equipment_name,
+          COUNT(ei.id) as total_instances,
+          COUNT(CASE WHEN ei.status = 'assigned' THEN 1 END) as assigned_instances,
+          ROUND((COUNT(CASE WHEN ei.status = 'assigned' THEN 1 END) * 100.0 / NULLIF(COUNT(ei.id), 0)), 2) as utilization_rate,
+          AVG(CASE WHEN mt.resolved_at IS NOT NULL THEN EXTRACT(EPOCH FROM (mt.resolved_at - mt.created_at))/3600 END) as avg_maintenance_hours
+        FROM equipment e
+        JOIN equipment_instance ei ON ei.equipment_id = e.id
+        LEFT JOIN maintenance_ticket mt ON mt.equipment_instance_id = ei.id 
+        WHERE ei.vendor_id = $1 AND ei.deleted_at IS NULL AND e.deleted_at IS NULL
+        GROUP BY e.equipment_type, e.equipment_name, e.id
+        ORDER BY utilization_rate DESC, total_instances DESC
+        LIMIT 10
       `, [vendorId])
     ]);
 
     return {
-      mostActiveClients: clientActivity.rows,
-      equipmentStatusDistribution: equipmentStatus.rows
+      mostActiveClients: clientActivity.rows.map(row => ({
+        id: row.id,
+        displayName: row.display_name,
+        email: row.email,
+        companyName: row.company_name,
+        assignmentCount: parseInt(row.assignment_count),
+        lastAssignment: row.last_assignment,
+        totalRevenue: parseFloat(row.total_revenue)
+      })),
+      equipmentStatusDistribution: equipmentStatus.rows.map(row => ({
+        status: row.status,
+        count: parseInt(row.count),
+        percentage: parseFloat(row.percentage)
+      })),
+      maintenancePerformance: maintenanceInsights.rows.map(row => ({
+        priority: row.priority,
+        ticketCount: parseInt(row.ticket_count),
+        avgResolutionHours: row.avg_resolution_hours ? parseFloat(row.avg_resolution_hours).toFixed(1) : null
+      })),
+      revenuetrends: revenueInsights.rows.map(row => ({
+        weekStart: row.week_start,
+        assignments: parseInt(row.assignments),
+        weeklyRevenue: parseFloat(row.weekly_revenue)
+      })),
+      equipmentPerformance: equipmentTypes.rows.map(row => ({
+        equipmentType: row.equipment_type,
+        equipmentName: row.equipment_name,
+        totalInstances: parseInt(row.total_instances),
+        assignedInstances: parseInt(row.assigned_instances),
+        utilizationRate: parseFloat(row.utilization_rate),
+        avgMaintenanceHours: row.avg_maintenance_hours ? parseFloat(row.avg_maintenance_hours).toFixed(1) : null
+      }))
     };
   }
 
@@ -517,6 +697,125 @@ export class DashboardRepository {
   }
 
   // ========== UTILITY METHODS ==========
+
+  /**
+   * Get vendor ID from user ID
+   */
+  static async getVendorIdFromUserId(userId: number): Promise<number | null> {
+    try {
+      const result = await pool.query('SELECT id FROM vendors WHERE user_id = $1', [userId]);
+      return result.rows.length > 0 ? result.rows[0].id : null;
+    } catch (error) {
+      DebugLogger.error('Error getting vendor ID from user ID', error, { userId });
+      return null;
+    }
+  }
+
+  /**
+   * Get vendor dashboard KPIs according to specification
+   */
+  static async getVendorDashboardKPIs(vendorId: number) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Getting vendor dashboard KPIs', { vendorId }, 'DASHBOARD_REPO');
+
+    try {
+      // Main KPI query based on user specification
+      const kpiQuery = `
+        SELECT 
+          v.company_name,
+          u.display_name,
+          u.avatar_url,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1) AS total_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'compliant') AS compliant_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'expired') AS expired_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'overdue') AS overdue_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'due_soon') AS due_soon_equipment,
+          (SELECT COUNT(*) FROM clients WHERE created_by_vendor_id = $1 AND status = 'active') AS active_clients,
+          (SELECT COUNT(*) FROM maintenance_ticket WHERE vendor_id = $1 AND ticket_status = 'open') AS open_tickets
+        FROM vendors v
+        JOIN "user" u ON v.user_id = u.id
+        WHERE v.id = $1
+      `;
+
+      const result = await pool.query(kpiQuery, [vendorId]);
+      
+      if (result.rows.length === 0) {
+        throw new Error('Vendor not found');
+      }
+
+      const data = result.rows[0];
+      const formattedData = {
+        vendorInfo: {
+          companyName: data.company_name,
+          displayName: data.display_name,
+          avatarUrl: data.avatar_url
+        },
+        kpis: {
+          totalEquipment: parseInt(data.total_equipment) || 0,
+          compliantEquipment: parseInt(data.compliant_equipment) || 0,
+          expiredEquipment: parseInt(data.expired_equipment) || 0,
+          overdueEquipment: parseInt(data.overdue_equipment) || 0,
+          dueSoonEquipment: parseInt(data.due_soon_equipment) || 0,
+          activeClients: parseInt(data.active_clients) || 0,
+          openTickets: parseInt(data.open_tickets) || 0
+        }
+      };
+
+      DebugLogger.performance('Vendor dashboard KPIs fetch', startTime, formattedData);
+      return formattedData;
+
+    } catch (error) {
+      DebugLogger.error('Error fetching vendor dashboard KPIs', error, { vendorId });
+      throw error;
+    }
+  }
+
+  /**
+   * Get vendor recent activity with notifications according to specification
+   */
+  static async getVendorRecentActivityWithNotifications(vendorId: number, limit: number = 10) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Getting vendor recent activity with notifications', { vendorId, limit }, 'DASHBOARD_REPO');
+
+    try {
+      // Activity query based on user specification
+      const activityQuery = `
+        SELECT 'Audit' AS type, al.action_type AS description, al.created_at AS timestamp
+        FROM audit_log al
+        WHERE al.vendor_id = $1
+        UNION
+        SELECT 'Notification' AS type, n.title AS description, n.created_at AS timestamp
+        FROM notification n
+        JOIN vendors v ON n.user_id = v.user_id
+        WHERE v.id = $1
+        ORDER BY timestamp DESC
+        LIMIT $2
+      `;
+
+      const result = await pool.query(activityQuery, [vendorId, limit]);
+      
+      const formattedActivities = result.rows.map(row => ({
+        type: row.type,
+        description: row.description,
+        timestamp: row.timestamp,
+        formattedTimestamp: new Date(row.timestamp).toLocaleString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }).replace(',', ',')
+      }));
+
+      DebugLogger.performance('Vendor recent activity fetch', startTime, { count: formattedActivities.length });
+      return formattedActivities;
+
+    } catch (error) {
+      DebugLogger.error('Error fetching vendor recent activity', error, { vendorId, limit });
+      throw error;
+    }
+  }
 
   /**
    * Parse period string to days
