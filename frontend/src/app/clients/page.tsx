@@ -279,72 +279,44 @@ export default function ClientsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-start">
-          <div className="flex items-center space-x-4">
-            <div className="p-3 bg-red-50 rounded-xl">
-              <svg className="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {/* Page Header */}
+        <div className="flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <svg className="h-8 w-8 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM9 9a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                {vendorInfo?.company_name ? `${vendorInfo.company_name} - Client Management` : 'Client Management'}
-              </h1>
+              <h1 className="text-2xl font-bold text-gray-900">Client Management</h1>
               <p className="text-gray-600 mt-1">
-                {vendorInfo?.user?.display_name ? `Manage your clients, ${vendorInfo.user.display_name}` : 'Manage your clients and their fire safety equipment'}
+                {vendorInfo?.company_name ? `${vendorInfo.company_name} - Manage your clients and their fire safety equipment` : 'Manage your clients and their fire safety equipment'}
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
-            {/* User Avatar */}
-            <div className="flex items-center space-x-3">
-              <div className="flex-shrink-0">
-                {vendorInfo?.user?.avatar_url ? (
-                  <Image
-                    className="h-10 w-10 rounded-full object-cover"
-                    src={vendorInfo.user.avatar_url}
-                    alt={vendorInfo.user.display_name}
-                    width={40}
-                    height={40}
-                  />
-                ) : (
-                  <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                    <span className="text-sm font-medium text-red-600">
-                      {vendorInfo?.user?.first_name?.[0]}{vendorInfo?.user?.last_name?.[0]}
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="hidden md:block">
-                <p className="text-sm font-medium text-gray-900">{vendorInfo?.user?.display_name}</p>
-                <p className="text-xs text-gray-500">{vendorInfo?.company_name}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="btn-primary flex items-center space-x-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add New Client
-            </button>
-          </div>
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Add New Client</span>
+          </button>
         </div>
 
-        {/* KPI Cards */}
+        {/* Stats Cards */}
         {kpis && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
               <div className="flex items-center">
-                <div className="p-2 bg-blue-50 rounded-xl">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex-shrink-0">
+                  <svg className="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM9 9a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Clients</p>
+                  <p className="text-sm font-medium text-gray-500">Total Clients</p>
                   <p className="text-2xl font-bold text-gray-900">{kpis?.totalClients?.toLocaleString() || '0'}</p>
                 </div>
               </div>
@@ -352,13 +324,13 @@ export default function ClientsPage() {
 
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
               <div className="flex items-center">
-                <div className="p-2 bg-green-50 rounded-xl">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex-shrink-0">
+                  <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Active Clients</p>
+                  <p className="text-sm font-medium text-gray-500">Active Clients</p>
                   <p className="text-2xl font-bold text-gray-900">{kpis?.activeClients?.toLocaleString() || '0'}</p>
                 </div>
               </div>
@@ -366,13 +338,13 @@ export default function ClientsPage() {
 
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
               <div className="flex items-center">
-                <div className="p-2 bg-yellow-50 rounded-xl">
-                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex-shrink-0">
+                  <svg className="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Average Compliance</p>
+                  <p className="text-sm font-medium text-gray-500">Average Compliance</p>
                   <p className="text-2xl font-bold text-gray-900">{kpis?.averageCompliance?.toFixed(1) || '0.0'}%</p>
                 </div>
               </div>
@@ -380,68 +352,54 @@ export default function ClientsPage() {
           </div>
         )}
 
-        {/* Filters */}
+        {/* Search and Filters */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.414A1 1 0 013 6.707V4z" />
-            </svg>
-            <h3 className="text-lg font-medium text-gray-900">Filters</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Search */}
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Search Bar */}
+            <div className="flex-1 relative">
+              <svg className="h-5 w-5 absolute left-3 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
                 type="text"
-                placeholder="Search clients..."
+                placeholder="Search clients by company name, email, or location..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className="input-field pl-10"
               />
             </div>
 
-            {/* Status Filter */}
-            <div>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="w-full p-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
-              >
-                <option value="all">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
+            {/* Filters */}
+            <div className="flex gap-3">
+              <div className="relative">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="input-field appearance-none pr-8 min-w-[120px]"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+                <svg className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
 
-            {/* Sort By */}
-            <div>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="w-full p-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
-              >
-                <option value="company_name">Company Name</option>
-                <option value="created_at">Date Created</option>
-                <option value="last_service_date">Last Service</option>
-              </select>
-            </div>
-
-            {/* Clear Filters */}
-            <div>
-              <button
-                onClick={() => {
-                  setSearchTerm('')
-                  setStatusFilter('all')
-                  setSortBy('company_name')
-                  setSortOrder('asc')
-                }}
-                className="w-full py-2 px-4 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                Clear Filters
-              </button>
+              <div className="relative">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="input-field appearance-none pr-8 min-w-[160px]"
+                >
+                  <option value="company_name">Company Name</option>
+                  <option value="created_at">Date Created</option>
+                  <option value="last_service_date">Last Service</option>
+                </select>
+                <svg className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
             </div>
           </div>
         </div>
@@ -461,16 +419,13 @@ export default function ClientsPage() {
                     Company Details
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Business Type
+                    Contact Info
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Contact Information
+                    Performance
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Address
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Status & Equipment
+                    Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Actions
@@ -481,104 +436,68 @@ export default function ClientsPage() {
                 {clients.map((client, index) => (
                   <tr
                     key={client.id}
-                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${index !== clients.length - 1 ? 'border-b border-gray-100' : ''}`}
+                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => handleClientClick(client.id)}
                   >
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4">
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
+                        <div className="flex-shrink-0">
                           <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center">
                             <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                             </svg>
                           </div>
                         </div>
-                        <div className="ml-4">
+                        <div className="ml-3">
                           <div className="text-sm font-medium text-gray-900">{client.company_name}</div>
                           <div className="text-sm text-gray-500">{client.contact_name}</div>
+                          <div className="text-xs text-gray-400">{client.business_type || 'Not specified'}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{client.business_type || 'Not specified'}</div>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">{client.email}</div>
+                      <div className="text-sm text-gray-500">{client.primary_phone || client.phone}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 flex items-center">
-                        <svg className="h-4 w-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        {client.email}
-                      </div>
-                      <div className="text-sm text-gray-500 flex items-center">
-                        <svg className="h-4 w-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                        </svg>
-                        {client.primary_phone || client.phone}
-                      </div>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900">Equipment: {client.equipment_count || 0}</div>
+                    <div className="text-sm text-gray-500">Last Service: {client.last_service_date ? formatDate(client.last_service_date) : 'Never'}</div>
+                  </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        client.status === 'active' || client.is_active
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {client.status || (client.is_active ? 'Active' : 'Inactive')}
+                      </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 flex items-center">
-                        <svg className="h-4 w-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        {client.street_address || client.address}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {client.city}, {client.state} {client.zip_code}
-                      </div>
-                      {client.country && (
-                        <div className="text-sm text-gray-500">{client.country}</div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="space-y-2">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          client.status === 'active' || client.is_active
-                            ? 'text-green-800 bg-green-100' 
-                            : client.status === 'pending'
-                            ? 'text-yellow-800 bg-yellow-100'
-                            : 'text-red-800 bg-red-100'
-                        }`}>
-                          {client.status || (client.is_active ? 'Active' : 'Inactive')}
-                        </span>
-                        <div className="text-sm text-gray-900 flex items-center">
-                          <svg className="h-4 w-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                          </svg>
-                          {client.equipment_count || 0} items
-                        </div>
-                        {client.compliance_status && (
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getComplianceColor(client.compliance_status)}`}>
-                            {client.compliance_status}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end gap-2">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
                         <button
                           onClick={(e) => {
-                            e.stopPropagation();
-                            handleClientClick(client.id);
+                            e.stopPropagation()
+                            handleClientClick(client.id)
                           }}
-                          className="text-red-600 hover:text-red-900 font-medium"
+                          className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
                         >
                           View
                         </button>
+                        <span className="text-gray-300">|</span>
                         <button
                           onClick={(e) => {
-                            e.stopPropagation();
-                            // Add edit functionality later
+                            e.stopPropagation()
+                            // TODO: Handle edit
                           }}
-                          className="text-gray-600 hover:text-gray-900 font-medium"
+                          className="text-gray-600 hover:text-gray-900 text-sm font-medium"
                         >
                           Edit
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                
+              ))}
               </tbody>
             </table>
           </div>

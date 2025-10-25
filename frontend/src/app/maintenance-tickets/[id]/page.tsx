@@ -7,7 +7,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import { useToast } from '@/components/providers/ToastProvider';
 import { useConfirmModal } from '@/components/providers/ConfirmModalProvider';
-import { API_ENDPOINTS } from '@/config/api';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import Link from 'next/link';
 import { 
   ArrowLeftIcon,
@@ -90,7 +90,7 @@ export default function TicketDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const { showToast } = useToast();
-  const { showConfirmModal } = useConfirmModal();
+  const { confirm } = useConfirmModal();
   
   const ticketId = parseInt(params.id as string);
 
@@ -119,11 +119,16 @@ export default function TicketDetailsPage() {
   // Fetch ticket details
   const fetchTicketDetails = async () => {
     try {
-      const response = await fetch(`/api/vendor/tickets/${ticketId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.MAINTENANCE_TICKETS.BY_ID(ticketId);
+
+      logApiCall('GET', url);
+      const response = await fetch(url, { headers });
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -151,11 +156,14 @@ export default function TicketDetailsPage() {
   // Fetch related tickets
   const fetchRelatedTickets = async () => {
     try {
-      const response = await fetch(`/api/vendor/tickets/${ticketId}/related`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.MAINTENANCE_TICKETS.RELATED(ticketId);
+
+      logApiCall('GET', url);
+      const response = await fetch(url, { headers });
 
       if (response.ok) {
         const data = await response.json();
@@ -169,11 +177,14 @@ export default function TicketDetailsPage() {
   // Fetch technicians for dropdown
   const fetchTechnicians = async () => {
     try {
-      const response = await fetch('/api/vendor/tickets/technicians', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.MAINTENANCE_TICKETS.TECHNICIANS;
+
+      logApiCall('GET', url);
+      const response = await fetch(url, { headers });
 
       if (response.ok) {
         const data = await response.json();
@@ -268,12 +279,12 @@ export default function TicketDetailsPage() {
 
   // Close ticket handler
   const handleCloseTicket = async () => {
-    const confirmed = await showConfirmModal(
-      'Close Ticket',
-      'Are you sure you want to close this ticket? This action cannot be undone.',
-      'Close',
-      'destructive'
-    );
+    const confirmed = await confirm({
+      title: 'Close Ticket',
+      message: 'Are you sure you want to close this ticket? This action cannot be undone.',
+      confirmText: 'Close',
+      type: 'danger'
+    });
 
     if (!confirmed) return;
 
@@ -375,43 +386,47 @@ export default function TicketDetailsPage() {
 
   return (
     <DashboardLayout>
-      {/* Header */}
-      <div className="mb-8">
+      <div className="space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center">
+          <div className="flex items-center space-x-4">
             <Link
               href="/maintenance-tickets"
-              className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md"
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
-              <ArrowLeftIcon className="h-6 w-6" />
+              <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Ticket Details - {ticket.ticket_number}
-              </h1>
-              <p className="mt-2 text-lg text-gray-600">
-                {ticket.support_type} ticket for {ticket.client?.company_name || 'System/User support'}
-              </p>
+              <h1 className="text-2xl font-bold text-gray-900">Ticket #{ticket.ticket_number}</h1>
+              <div className="flex items-center space-x-4 mt-1">
+                <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${getStatusBadgeColor(ticket.ticket_status)}`}>
+                  {ticket.ticket_status}
+                </span>
+                <span className="text-sm text-gray-500">
+                  <CalendarIcon className="h-4 w-4 inline mr-1" />
+                  Created {formatDateOnly(ticket.created_at)}
+                </span>
+              </div>
             </div>
           </div>
           
           {/* Action Buttons */}
-          <div className="flex space-x-3">
+          <div className="flex items-center space-x-3">
             {ticket.ticket_status === 'open' && (
               <>
                 <button
                   onClick={() => setShowEditModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center"
+                  className="btn-secondary flex items-center space-x-2"
                 >
-                  <PencilIcon className="h-5 w-5 mr-2" />
-                  Edit
+                  <PencilIcon className="h-4 w-4" />
+                  <span>Edit</span>
                 </button>
                 <button
                   onClick={() => setShowResolveModal(true)}
-                  className="px-4 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 flex items-center"
+                  className="btn-primary flex items-center space-x-2"
                 >
-                  <CheckIcon className="h-5 w-5 mr-2" />
-                  Resolve
+                  <CheckIcon className="h-4 w-4" />
+                  <span>Resolve</span>
                 </button>
               </>
             )}
@@ -419,27 +434,77 @@ export default function TicketDetailsPage() {
               <button
                 onClick={handleCloseTicket}
                 disabled={isClosing}
-                className="px-4 py-2 bg-gray-600 text-white font-medium rounded-md hover:bg-gray-700 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 {isClosing ? (
-                  <LoadingSpinner size="sm" />
+                  <LoadingSpinner />
                 ) : (
-                  <XMarkIcon className="h-5 w-5 mr-2" />
+                  <XMarkIcon className="h-4 w-4" />
                 )}
-                Close
+                <span>Close</span>
               </button>
             )}
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <ClipboardDocumentListIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Type</p>
+                <p className="text-lg font-bold text-gray-900 capitalize">{ticket.support_type}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-yellow-50 rounded-xl">
+                <ExclamationTriangleIcon className="h-6 w-6 text-yellow-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Priority</p>
+                <p className="text-lg font-bold text-gray-900 capitalize">{ticket.priority}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-green-50 rounded-xl">
+                <UserIcon className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Technician</p>
+                <p className="text-lg font-bold text-gray-900">{ticket.assigned_technician_name || 'Unassigned'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-purple-50 rounded-xl">
+                <ClockIcon className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Hours</p>
+                <p className="text-lg font-bold text-gray-900">{ticket.actual_hours || 0}h</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Ticket Information */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <ClipboardDocumentListIcon className="h-6 w-6 mr-2 text-blue-600" />
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+              <ClipboardDocumentListIcon className="h-5 w-5 text-red-600 mr-2" />
               Ticket Information
             </h2>
             
@@ -526,9 +591,9 @@ export default function TicketDetailsPage() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Associated Client */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <BuildingOfficeIcon className="h-6 w-6 mr-2 text-blue-600" />
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+              <BuildingOfficeIcon className="h-5 w-5 text-red-600 mr-2" />
               Associated Client
             </h3>
             
@@ -563,9 +628,9 @@ export default function TicketDetailsPage() {
           </div>
 
           {/* Associated Equipment */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <CogIcon className="h-6 w-6 mr-2 text-blue-600" />
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+              <CogIcon className="h-5 w-5 text-red-600 mr-2" />
               Associated Equipment
             </h3>
             
@@ -601,39 +666,39 @@ export default function TicketDetailsPage() {
 
       {/* Related Tickets */}
       {relatedTickets.length > 0 && (
-        <div className="mt-8 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Related Tickets</h3>
+        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Related Tickets</h3>
           
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Ticket Number
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Equipment
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Issue Description
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Priority
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Scheduled Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {relatedTickets.map((relatedTicket) => (
-                  <tr key={relatedTicket.id} className="hover:bg-gray-50">
+              <tbody className="bg-white">
+                {relatedTickets.map((relatedTicket, index) => (
+                  <tr key={relatedTicket.id} className={`hover:bg-gray-50 transition-colors ${index !== relatedTickets.length - 1 ? 'border-b border-gray-100' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-blue-600">
                         {relatedTicket.ticket_number}
@@ -931,6 +996,7 @@ export default function TicketDetailsPage() {
           </div>
         </div>
       )}
+      </div>
     </DashboardLayout>
   );
 }

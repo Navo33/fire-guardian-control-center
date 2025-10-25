@@ -289,20 +289,23 @@ export default function VendorServiceRequestsPage() {
     <DashboardLayout>
       <div className="space-y-8">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Service Requests</h1>
-            <p className="mt-2 text-gray-600">Manage client service requests and appointments</p>
+        <div className="flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <WrenchScrewdriverIcon className="h-8 w-8 text-gray-900" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Maintenance Tickets</h1>
+              <p className="text-gray-600 mt-1">Manage client service requests and maintenance schedules</p>
+            </div>
           </div>
-          <div className="mt-4 sm:mt-0">
-            <button 
-              onClick={handleCreateRequest}
-              className="btn-primary"
-            >
-              <PlusIcon className="h-5 w-5 mr-2" />
-              Create Request
-            </button>
-          </div>
+          <button 
+            onClick={handleCreateRequest}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <PlusIcon className="h-5 w-5" />
+            <span>Create Ticket</span>
+          </button>
         </div>
 
         {/* Stats Grid */}
@@ -366,7 +369,7 @@ export default function VendorServiceRequestsPage() {
               <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search service requests..."
+                placeholder="Search maintenance tickets by client, equipment, or ticket ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="input-field pl-10"
@@ -421,13 +424,13 @@ export default function VendorServiceRequestsPage() {
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           <div className="px-6 py-5 border-b border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900">
-              Service Requests ({filteredRequests.length})
+              Maintenance Tickets ({filteredRequests.length})
             </h3>
           </div>
 
           {/* Loading State */}
           {isLoading && (
-            <LoadingSpinner text="Loading service requests..." />
+            <LoadingSpinner text="Loading maintenance tickets..." />
           )}
 
           {/* Error State */}
@@ -445,11 +448,11 @@ export default function VendorServiceRequestsPage() {
           {!isLoading && !error && filteredRequests.length === 0 && (
             <div className="text-center py-12">
               <ClipboardDocumentListIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No service requests found</h3>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No maintenance tickets found</h3>
               <p className="mt-1 text-sm text-gray-500">
                 {searchTerm || typeFilter !== 'All' || statusFilter !== 'All' || priorityFilter !== 'All'
                   ? 'Try adjusting your search or filter criteria.'
-                  : 'Get started by creating your first service request.'}
+                  : 'Get started by creating your first maintenance ticket.'}
               </p>
             </div>
           )}
@@ -457,32 +460,33 @@ export default function VendorServiceRequestsPage() {
           {/* Table */}
           {!isLoading && !error && filteredRequests.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                       Request Details
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                       Client & Equipment
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                       Priority & Type
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                       Dates & Technician
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                       Cost & Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white">
                   {filteredRequests.map((request) => (
-                    <tr key={request.id} className="hover:bg-gray-50">
+                    <tr key={request.id} className="border-b border-gray-100 hover:bg-gray-50"
+>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">#{request.id}</div>
                         <div className="text-sm text-gray-600 mt-1 max-w-xs truncate">{request.description}</div>

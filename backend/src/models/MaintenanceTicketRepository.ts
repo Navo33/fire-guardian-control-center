@@ -28,6 +28,7 @@ export interface TicketKPIs {
 }
 
 export interface TicketListItem {
+  id: number;
   ticket_number: string;
   equipment_serial: string;
   client: string;
@@ -121,6 +122,7 @@ export class MaintenanceTicketRepository {
   async getTicketList(vendorId: number, filters: TicketFilters = {}): Promise<TicketListItem[]> {
     let query = `
       SELECT 
+        mt.id,
         mt.ticket_number,
         COALESCE(ei.serial_number, 'N/A') AS equipment_serial,
         COALESCE(c.company_name, 'N/A') AS client,
@@ -396,9 +398,9 @@ export class MaintenanceTicketRepository {
         ei.id AS equipment_id, ei.serial_number, et.type_name AS equipment_name, 
         et.type_name AS equipment_type, ei.compliance_status
       FROM maintenance_ticket mt
-      LEFT JOIN users u ON mt.assigned_technician = u.id
+      LEFT JOIN "user" u ON mt.assigned_technician = u.id
       LEFT JOIN clients c ON mt.client_id = c.id
-      LEFT JOIN users u2 ON c.user_id = u2.id
+      LEFT JOIN "user" u2 ON c.user_id = u2.id
       LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
       LEFT JOIN equipment_type et ON ei.equipment_type_id = et.id
       WHERE mt.id = $1

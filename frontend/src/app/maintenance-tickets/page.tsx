@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
@@ -27,15 +28,15 @@ import {
 interface MaintenanceTicket {
   id: number;
   ticket_number: string;
-  equipment_serial_number?: string;
-  client_name?: string;
+  equipment_serial?: string;
+  client?: string;
   ticket_status: 'open' | 'resolved' | 'closed';
   support_type: 'maintenance' | 'system' | 'user';
   priority: 'low' | 'normal' | 'high';
   issue_description: string;
   scheduled_date?: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
   assigned_technician_name?: string;
 }
 
@@ -89,6 +90,9 @@ interface VendorProfile {
 }
 
 export default function MaintenanceTicketsPage() {
+  const router = useRouter();
+  const { success: showSuccess, error: showError } = useToast();
+  
   // State management
   const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
   const [kpis, setKPIs] = useState<TicketKPIs | null>(null);
@@ -122,8 +126,6 @@ export default function MaintenanceTicketsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalTickets, setTotalTickets] = useState(0);
   const ticketsPerPage = 25;
-
-  const { showToast } = useToast();
 
   // API fetch functions
   const fetchTickets = useCallback(async () => {
@@ -237,6 +239,11 @@ export default function MaintenanceTicketsPage() {
     loadData();
   }, [fetchTickets]);
 
+  // Handle ticket click
+  const handleTicketClick = (ticketId: number) => {
+    router.push(`/maintenance-tickets/${ticketId}`);
+  };
+
   // Create ticket handler
   const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -258,7 +265,7 @@ export default function MaintenanceTicketsPage() {
       }
 
       const data = await response.json();
-      showToast('success', 'Ticket created successfully');
+      showSuccess('Ticket created successfully');
       setShowCreateModal(false);
       setCreateFormData({
         support_type: 'maintenance',
@@ -269,7 +276,7 @@ export default function MaintenanceTicketsPage() {
       // Refresh data
       await Promise.all([fetchTickets(), fetchKPIs()]);
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Failed to create ticket');
+      showError(err instanceof Error ? err.message : 'Failed to create ticket');
     } finally {
       setIsCreating(false);
     }
@@ -348,520 +355,237 @@ export default function MaintenanceTicketsPage() {
 
   return (
     <DashboardLayout>
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {vendorProfile?.company_name} - Maintenance Tickets
-            </h1>
-            <p className="mt-2 text-lg text-gray-600">
-              Manage your tickets, {vendorProfile?.user.display_name}
-            </p>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <WrenchScrewdriverIcon className="h-8 w-8 text-gray-900" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Maintenance Tickets</h1>
+              <p className="text-gray-600 mt-1">
+                {vendorProfile?.company_name ? `${vendorProfile.company_name} - Manage equipment maintenance and service requests` : 'Manage equipment maintenance and service requests'}
+              </p>
+            </div>
           </div>
-          
-          {/* User Avatar */}
-          <div className="flex items-center">
-            {vendorProfile?.user.avatar_url ? (
-              <Image
-                src={vendorProfile.user.avatar_url}
-                alt={vendorProfile.user.display_name}
-                width={48}
-                height={48}
-                className="rounded-full object-cover border-2 border-gray-200"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold text-lg border-2 border-gray-200">
-                {vendorProfile?.user.display_name ? getUserInitials(vendorProfile.user.display_name) : 'VU'}
-              </div>
-            )}
-          </div>
+          <Link
+            href="/maintenance-tickets/create" 
+            className="btn-primary flex items-center space-x-2"
+          >
+            <PlusIcon className="h-5 w-5" />
+            <span>Create Ticket</span>
+          </Link>
         </div>
-      </div>
 
-      {/* KPI Cards */}
-      {kpis && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ClipboardDocumentListIcon className="h-8 w-8 text-blue-600" />
+        {/* Stats Cards */}
+        {kpis && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <ClipboardDocumentListIcon className="h-8 w-8 text-blue-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Tickets</p>
+                  <p className="text-2xl font-bold text-gray-900">{kpis.total_tickets}</p>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Tickets</p>
-                <p className="text-3xl font-bold text-gray-900">{kpis.total_tickets}</p>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <ClockIcon className="h-8 w-8 text-yellow-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Open Tickets</p>
+                  <p className="text-2xl font-bold text-gray-900">{kpis.open_tickets}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <ExclamationTriangleIcon className="h-8 w-8 text-red-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">High Priority</p>
+                  <p className="text-2xl font-bold text-gray-900">{kpis.high_priority_tickets}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <CheckCircleIcon className="h-8 w-8 text-green-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Resolved</p>
+                  <p className="text-2xl font-bold text-gray-900">{kpis.resolved_tickets}</p>
+                </div>
               </div>
             </div>
           </div>
+        )}
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ClockIcon className="h-8 w-8 text-yellow-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Open Tickets</p>
-                <p className="text-3xl font-bold text-gray-900">{kpis.open_tickets}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ExclamationTriangleIcon className="h-8 w-8 text-red-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">High Priority</p>
-                <p className="text-3xl font-bold text-gray-900">{kpis.high_priority_tickets}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <CheckCircleIcon className="h-8 w-8 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Resolved</p>
-                <p className="text-3xl font-bold text-gray-900">{kpis.resolved_tickets}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Filters and Search */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-        <div className="flex flex-col lg:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1">
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+        {/* Search and Filters */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Search Bar */}
+            <div className="flex-1 relative">
+              <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search tickets..."
+                placeholder="Search tickets by number, client, equipment, or description..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="input-field pl-10"
               />
             </div>
+
+            {/* Filters */}
+            <div className="flex gap-3">
+              <div className="relative">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="input-field appearance-none pr-8 min-w-[120px]"
+                >
+                  <option value="all">All Status</option>
+                  <option value="open">Open</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+                <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
+              </div>
+
+              <div className="relative">
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="input-field appearance-none pr-8 min-w-[120px]"
+                >
+                  <option value="all">All Types</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="system">System</option>
+                  <option value="user">User</option>
+                </select>
+                <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
+              </div>
+
+              <div className="relative">
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="input-field appearance-none pr-8 min-w-[120px]"
+                >
+                  <option value="all">All Priority</option>
+                  <option value="high">High</option>
+                  <option value="normal">Normal</option>
+                  <option value="low">Low</option>
+                </select>
+                <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
           </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-3">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="open">Open</option>
-              <option value="resolved">Resolved</option>
-              <option value="closed">Closed</option>
-            </select>
-
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Types</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="system">System</option>
-              <option value="user">User</option>
-            </select>
-
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Priority</option>
-              <option value="high">High</option>
-              <option value="normal">Normal</option>
-              <option value="low">Low</option>
-            </select>
-
-            <button
-              onClick={handleResetFilters}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:ring-2 focus:ring-blue-500"
-            >
-              Reset
-            </button>
-          </div>
-
-          {/* Create Ticket Button */}
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            Create New Ticket
-          </button>
         </div>
-      </div>
+        </div>
 
-      {/* Tickets Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ticket Number
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Equipment
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Client
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Priority
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Issue Description
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Scheduled Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+        {/* Tickets Table */}
+        <div className="bg-white rounded-2xl border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Maintenance Tickets ({tickets.length})
+            </h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Ticket Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Client & Equipment
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Priority & Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Status & Schedule
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
               {tickets.map((ticket) => (
-                <tr key={ticket.id} className="hover:bg-gray-50 cursor-pointer">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-blue-600">
-                      {ticket.ticket_number}
+                <tr 
+                  key={ticket.id} 
+                  className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => handleTicketClick(ticket.id)}
+                >
+                  <td className="px-6 py-4">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                          <WrenchScrewdriverIcon className="h-5 w-5 text-blue-600" />
+                        </div>
+                      </div>
+                      <div className="ml-3">
+                        <div className="text-sm font-medium text-gray-900">#{ticket.ticket_number}</div>
+                        <div className="text-sm text-gray-500">{ticket.issue_description ? truncateText(ticket.issue_description, 50) : 'No description'}</div>
+                      </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {ticket.equipment_serial_number || 'N/A'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {ticket.client_name || 'N/A'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getStatusBadgeColor(ticket.ticket_status)}`}>
-                      {ticket.ticket_status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getTypeBadgeColor(ticket.support_type)}`}>
-                      {ticket.support_type}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityBadgeColor(ticket.priority)}`}>
-                      {ticket.priority}
-                    </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900 max-w-xs">
-                      {truncateText(ticket.issue_description)}
-                    </div>
+                    <div className="text-sm text-gray-900">{ticket.client || 'Unassigned'}</div>
+                    <div className="text-sm text-gray-500">{ticket.equipment_serial ? `Equipment: ${ticket.equipment_serial}` : 'No equipment'}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadgeColor(ticket.priority)}`}>
+                      {ticket.priority}
+                    </span>
+                    <div className="text-sm text-gray-500 mt-1">{ticket.support_type}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(ticket.ticket_status)}`}>
+                      {ticket.ticket_status}
+                    </span>
+                    <div className="text-sm text-gray-500 mt-1">
                       {ticket.scheduled_date ? formatDate(ticket.scheduled_date) : 'Not scheduled'}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Link
-                      href={`/maintenance-tickets/${ticket.id}`}
-                      className="text-blue-600 hover:text-blue-900 text-sm font-medium flex items-center"
-                    >
-                      View Details
-                      <ArrowTopRightOnSquareIcon className="h-4 w-4 ml-1" />
-                    </Link>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center space-x-2">
+                      <Link
+                        href={`/maintenance-tickets/${ticket.id}`}
+                        className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                      >
+                        View
+                      </Link>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          // TODO: Handle edit
+                        }}
+                        className="text-gray-600 hover:text-gray-900 text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-
-        {/* Pagination */}
-        {totalTickets > ticketsPerPage && (
-          <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-            <div className="flex-1 flex justify-between sm:hidden">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(Math.min(Math.ceil(totalTickets / ticketsPerPage), currentPage + 1))}
-                disabled={currentPage >= Math.ceil(totalTickets / ticketsPerPage)}
-                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-gray-700">
-                  Showing{' '}
-                  <span className="font-medium">{((currentPage - 1) * ticketsPerPage) + 1}</span>
-                  {' '}to{' '}
-                  <span className="font-medium">
-                    {Math.min(currentPage * ticketsPerPage, totalTickets)}
-                  </span>
-                  {' '}of{' '}
-                  <span className="font-medium">{totalTickets}</span>
-                  {' '}results
-                </p>
-              </div>
-              <div>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                  <button
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  
-                  {/* Page numbers */}
-                  {Array.from({ length: Math.min(5, Math.ceil(totalTickets / ticketsPerPage)) }, (_, i) => {
-                    const pageNum = currentPage - 2 + i;
-                    if (pageNum < 1 || pageNum > Math.ceil(totalTickets / ticketsPerPage)) return null;
-                    
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                          pageNum === currentPage
-                            ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                            : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                  
-                  <button
-                    onClick={() => setCurrentPage(Math.min(Math.ceil(totalTickets / ticketsPerPage), currentPage + 1))}
-                    disabled={currentPage >= Math.ceil(totalTickets / ticketsPerPage)}
-                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-
-      {/* Create Ticket Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Ticket</h3>
-              
-              <form onSubmit={handleCreateTicket} className="space-y-4">
-                {/* Client Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Client (Optional)
-                  </label>
-                  <select
-                    value={createFormData.client_id || ''}
-                    onChange={(e) => setCreateFormData({
-                      ...createFormData,
-                      client_id: e.target.value ? parseInt(e.target.value) : undefined
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select a client...</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.company_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Equipment Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Equipment (Optional)
-                  </label>
-                  <select
-                    value={createFormData.equipment_instance_id || ''}
-                    onChange={(e) => setCreateFormData({
-                      ...createFormData,
-                      equipment_instance_id: e.target.value ? parseInt(e.target.value) : undefined
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select equipment...</option>
-                    {equipment.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.serial_number} - {item.equipment_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Support Type */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Support Type *
-                  </label>
-                  <select
-                    value={createFormData.support_type}
-                    onChange={(e) => setCreateFormData({
-                      ...createFormData,
-                      support_type: e.target.value as 'maintenance' | 'system' | 'user'
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="maintenance">Maintenance</option>
-                    <option value="system">System</option>
-                    <option value="user">User</option>
-                  </select>
-                </div>
-
-                {/* Priority */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Priority *
-                  </label>
-                  <select
-                    value={createFormData.priority}
-                    onChange={(e) => setCreateFormData({
-                      ...createFormData,
-                      priority: e.target.value as 'low' | 'normal' | 'high'
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="low">Low</option>
-                    <option value="normal">Normal</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-
-                {/* Issue Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Issue Description *
-                  </label>
-                  <textarea
-                    value={createFormData.issue_description}
-                    onChange={(e) => setCreateFormData({
-                      ...createFormData,
-                      issue_description: e.target.value
-                    })}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Describe the issue in detail..."
-                    required
-                    minLength={10}
-                    maxLength={1000}
-                  />
-                  <p className="mt-1 text-sm text-gray-500">
-                    {createFormData.issue_description.length}/1000 characters
-                  </p>
-                </div>
-
-                {/* Scheduled Date */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Scheduled Date (Optional)
-                  </label>
-                  <input
-                    type="date"
-                    value={createFormData.scheduled_date || ''}
-                    onChange={(e) => setCreateFormData({
-                      ...createFormData,
-                      scheduled_date: e.target.value || undefined
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                {/* Assigned Technician */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Assigned Technician (Optional)
-                  </label>
-                  <select
-                    value={createFormData.assigned_technician || ''}
-                    onChange={(e) => setCreateFormData({
-                      ...createFormData,
-                      assigned_technician: e.target.value ? parseInt(e.target.value) : undefined
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select a technician...</option>
-                    {technicians.map((tech) => (
-                      <option key={tech.id} value={tech.id}>
-                        {tech.display_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Modal Actions */}
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowCreateModal(false);
-                      setCreateFormData({
-                        support_type: 'maintenance',
-                        issue_description: '',
-                        priority: 'normal'
-                      });
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-2 focus:ring-blue-500"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isCreating || !createFormData.issue_description.trim()}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                  >
-                    {isCreating ? (
-                      <>
-                        <LoadingSpinner size="sm" />
-                        <span className="ml-2">Creating...</span>
-                      </>
-                    ) : (
-                      'Create Ticket'
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
     </DashboardLayout>
   );
 }
