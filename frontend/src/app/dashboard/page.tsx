@@ -902,7 +902,7 @@ function VendorDashboardComponent({ user }: { user: User }) {
                   </Link>
                   
                   <Link 
-                    href="/service-requests"
+                    href="/maintenance-tickets"
                     className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
                   >
                     <div className="p-2 bg-orange-50 rounded-lg">

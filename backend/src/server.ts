@@ -26,6 +26,7 @@ import profileRoutes from './routes/profile';
 import settingsRoutes from './routes/settings';
 import equipmentRoutes from './routes/equipment';
 import clientRoutes from './routes/clients';
+import maintenanceTicketRoutes from './routes/maintenanceTickets';
 
 // Load environment variables
 dotenv.config();
@@ -194,6 +195,7 @@ app.use('/api/profile', securityMiddleware, profileRoutes);
 app.use('/api/settings', securityMiddleware, settingsRoutes);
 app.use('/api/equipment', securityMiddleware, equipmentRoutes);
 app.use('/api/vendor/clients', securityMiddleware, clientRoutes);
+app.use('/api/vendor/tickets', securityMiddleware, maintenanceTicketRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
