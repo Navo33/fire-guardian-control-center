@@ -108,6 +108,21 @@ export const API_ENDPOINTS = {
     EQUIPMENT: (id: string | number) => `${API_BASE_URL}/vendor/clients/${id}/equipment`,
     MAINTENANCE: (id: string | number) => `${API_BASE_URL}/vendor/clients/${id}/maintenance`,
   },
+
+  // Maintenance Tickets (Vendor-specific)
+  MAINTENANCE_TICKETS: {
+    KPIS: `${API_BASE_URL}/vendor/tickets/kpis`,
+    LIST: `${API_BASE_URL}/vendor/tickets`,
+    CREATE: `${API_BASE_URL}/vendor/tickets`,
+    BY_ID: (id: string | number) => `${API_BASE_URL}/vendor/tickets/${id}`,
+    UPDATE: (id: string | number) => `${API_BASE_URL}/vendor/tickets/${id}`,
+    RESOLVE: (id: string | number) => `${API_BASE_URL}/vendor/tickets/${id}/resolve`,
+    CLOSE: (id: string | number) => `${API_BASE_URL}/vendor/tickets/${id}/close`,
+    RELATED: (id: string | number) => `${API_BASE_URL}/vendor/tickets/${id}/related`,
+    CLIENTS: `${API_BASE_URL}/vendor/tickets/clients`,
+    EQUIPMENT: `${API_BASE_URL}/vendor/tickets/equipment`,
+    TECHNICIANS: `${API_BASE_URL}/vendor/tickets/technicians`,
+  },
 };
 
 /**

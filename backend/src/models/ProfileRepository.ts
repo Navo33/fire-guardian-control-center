@@ -65,14 +65,14 @@ export class ProfileRepository {
         u.created_at,
         u.updated_at,
         r.role_name,
-        vc.id as vendor_id,
-        vc.company_name as vendor_company_name,
-        cc.id as client_id,
-        cc.company_name as client_company_name
+        v.id as vendor_id,
+        v.company_name as vendor_company_name,
+        c.id as client_id,
+        c.company_name as client_company_name
       FROM "user" u
       LEFT JOIN role r ON u.role_id = r.id
-      LEFT JOIN vendor_company vc ON u.id = vc.vendor_id AND u.user_type = 'vendor'
-      LEFT JOIN client_company cc ON u.id = cc.client_id AND u.user_type = 'client'
+      LEFT JOIN vendors v ON u.id = v.user_id AND u.user_type = 'vendor'
+      LEFT JOIN clients c ON u.id = c.user_id AND u.user_type = 'client'
       WHERE u.id = $1 AND u.deleted_at IS NULL
     `;
 

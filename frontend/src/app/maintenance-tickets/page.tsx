@@ -5,6 +5,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import { useToast } from '@/components/providers/ToastProvider';
+import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
@@ -46,6 +47,22 @@ interface TicketKPIs {
   high_priority_tickets: number;
   overdue_tickets: number;
   avg_resolution_time_hours?: number;
+}
+
+interface ClientOption {
+  id: number;
+  company_name: string;
+}
+
+interface EquipmentOption {
+  id: number;
+  serial_number: string;
+  equipment_name: string;
+}
+
+interface TechnicianOption {
+  id: number;
+  display_name: string;
 }
 
 interface DropdownOption {
@@ -97,9 +114,9 @@ export default function MaintenanceTicketsPage() {
   });
   
   // Dropdown data
-  const [clients, setClients] = useState<DropdownOption[]>([]);
-  const [equipment, setEquipment] = useState<DropdownOption[]>([]);
-  const [technicians, setTechnicians] = useState<DropdownOption[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [equipment, setEquipment] = useState<EquipmentOption[]>([]);
+  const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -121,7 +138,7 @@ export default function MaintenanceTicketsPage() {
       if (typeFilter !== 'all') params.append('support_type', typeFilter);
       if (priorityFilter !== 'all') params.append('priority', priorityFilter);
 
-      const response = await fetch(`/api/vendor/tickets?${params}`, {
+      const response = await fetch(`${API_ENDPOINTS.MAINTENANCE_TICKETS.LIST}?${params}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -139,7 +156,7 @@ export default function MaintenanceTicketsPage() {
 
   const fetchKPIs = async () => {
     try {
-      const response = await fetch('/api/vendor/tickets/kpis', {
+      const response = await fetch(API_ENDPOINTS.MAINTENANCE_TICKETS.KPIS, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -156,7 +173,7 @@ export default function MaintenanceTicketsPage() {
 
   const fetchVendorProfile = async () => {
     try {
-      const response = await fetch('/api/profile', {
+      const response = await fetch(API_ENDPOINTS.PROFILE.GET, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -174,13 +191,13 @@ export default function MaintenanceTicketsPage() {
   const fetchDropdownData = async () => {
     try {
       const [clientsRes, equipmentRes, techniciansRes] = await Promise.all([
-        fetch('/api/vendor/tickets/clients', {
+        fetch(API_ENDPOINTS.MAINTENANCE_TICKETS.CLIENTS, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         }),
-        fetch('/api/vendor/tickets/equipment', {
+        fetch(API_ENDPOINTS.MAINTENANCE_TICKETS.EQUIPMENT, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         }),
-        fetch('/api/vendor/tickets/technicians', {
+        fetch(API_ENDPOINTS.MAINTENANCE_TICKETS.TECHNICIANS, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         })
       ]);
@@ -226,7 +243,7 @@ export default function MaintenanceTicketsPage() {
     setIsCreating(true);
 
     try {
-      const response = await fetch('/api/vendor/tickets', {
+      const response = await fetch(API_ENDPOINTS.MAINTENANCE_TICKETS.CREATE, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -680,7 +697,7 @@ export default function MaintenanceTicketsPage() {
                     <option value="">Select a client...</option>
                     {clients.map((client) => (
                       <option key={client.id} value={client.id}>
-                        {client.name}
+                        {client.company_name}
                       </option>
                     ))}
                   </select>
@@ -702,7 +719,7 @@ export default function MaintenanceTicketsPage() {
                     <option value="">Select equipment...</option>
                     {equipment.map((item) => (
                       <option key={item.id} value={item.id}>
-                        {item.name}
+                        {item.serial_number} - {item.equipment_name}
                       </option>
                     ))}
                   </select>
@@ -803,7 +820,7 @@ export default function MaintenanceTicketsPage() {
                     <option value="">Select a technician...</option>
                     {technicians.map((tech) => (
                       <option key={tech.id} value={tech.id}>
-                        {tech.name}
+                        {tech.display_name}
                       </option>
                     ))}
                   </select>

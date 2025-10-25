@@ -20,26 +20,48 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
     const profile = await ProfileRepository.getProfile(userId);
 
     if (!profile) {
-      return res.status(404).json({ 
-        success: false, 
+      return res.status(404).json({
+        success: false,
         message: 'Profile not found' 
       });
     }
 
+    // Transform the profile data to match frontend expectations
+    const responseData = {
+      id: profile.id,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      displayName: profile.displayName,
+      email: profile.email,
+      phone: profile.phone,
+      avatarUrl: profile.avatarUrl,
+      userType: profile.userType,
+      roleId: profile.roleId,
+      roleName: profile.roleName,
+      lastPasswordChange: profile.lastPasswordChange,
+      lastLogin: profile.lastLogin,
+      createdAt: profile.createdAt,
+      updatedAt: profile.updatedAt,
+      // For vendor profile structure expected by maintenance tickets page
+      company_name: profile.vendorCompanyName || profile.clientCompanyName || '',
+      user: {
+        display_name: profile.displayName,
+        avatar_url: profile.avatarUrl
+      }
+    };
+
     res.json({
       success: true,
-      data: profile
+      data: responseData
     });
   } catch (error) {
     console.error('Error fetching profile:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Failed to fetch profile' 
     });
   }
-});
-
-/**
+});/**
  * Update current user's profile
  * PUT /api/profile
  */

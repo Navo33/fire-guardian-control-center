@@ -232,7 +232,7 @@ export class MaintenanceTicketRepository {
       SELECT id, company_name
       FROM clients
       WHERE created_by_vendor_id = $1
-      AND is_active = true
+      AND status = 'active'
       ORDER BY company_name
     `;
     
@@ -245,9 +245,9 @@ export class MaintenanceTicketRepository {
    */
   async getEquipmentForDropdown(vendorId: number): Promise<{id: number, serial_number: string, equipment_name: string}[]> {
     const query = `
-      SELECT ei.id, ei.serial_number, et.type_name as equipment_name
+      SELECT ei.id, ei.serial_number, e.equipment_name as equipment_name
       FROM equipment_instance ei
-      JOIN equipment_type et ON ei.equipment_type_id = et.id
+      JOIN equipment e ON ei.equipment_id = e.id
       WHERE ei.vendor_id = $1
       AND ei.deleted_at IS NULL
       ORDER BY ei.serial_number
@@ -262,11 +262,12 @@ export class MaintenanceTicketRepository {
    */
   async getTechniciansForDropdown(vendorId: number): Promise<{id: number, display_name: string}[]> {
     const query = `
-      SELECT u.id, u.display_name
-      FROM users u
-      JOIN vendors v ON u.id = v.user_id
+      SELECT u.id, 
+             COALESCE(u.display_name, CONCAT(u.first_name, ' ', u.last_name)) as display_name
+      FROM vendors v
+      JOIN "user" u ON v.user_id = u.id
       WHERE v.id = $1
-      AND u.user_type = 'vendor'
+      AND v.status = 'active'
       ORDER BY u.display_name
     `;
     

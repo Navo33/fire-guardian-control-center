@@ -12,6 +12,22 @@ import { DashboardRepository } from '../models/DashboardRepository';
 
 export class MaintenanceTicketController extends BaseController {
 
+  constructor() {
+    super();
+    // Bind all methods to preserve 'this' context
+    this.getTicketKPIs = this.getTicketKPIs.bind(this);
+    this.getTickets = this.getTickets.bind(this);
+    this.getClientsForDropdown = this.getClientsForDropdown.bind(this);
+    this.getEquipmentForDropdown = this.getEquipmentForDropdown.bind(this);
+    this.getTechniciansForDropdown = this.getTechniciansForDropdown.bind(this);
+    this.createTicket = this.createTicket.bind(this);
+    this.getTicketDetails = this.getTicketDetails.bind(this);
+    this.updateTicket = this.updateTicket.bind(this);
+    this.resolveTicket = this.resolveTicket.bind(this);
+    this.closeTicket = this.closeTicket.bind(this);
+    this.getRelatedTickets = this.getRelatedTickets.bind(this);
+  }
+
   /**
    * Get vendor ID for the authenticated user
    */
@@ -100,7 +116,7 @@ export class MaintenanceTicketController extends BaseController {
    * Get clients for Create Ticket modal dropdown
    * GET /api/vendor/tickets/clients
    */
-  async getClientsForDropdown(req: Request, res: Response): Promise<void> {
+  getClientsForDropdown = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const vendorId = await this.getVendorId(req as AuthenticatedRequest);
       
@@ -116,13 +132,13 @@ export class MaintenanceTicketController extends BaseController {
       console.error('Error fetching clients for dropdown:', error);
       ApiResponseUtil.internalError(res, 'Failed to fetch clients');
     }
-  }
+  });
 
   /**
    * Get equipment for Create Ticket modal dropdown
    * GET /api/vendor/tickets/equipment
    */
-  async getEquipmentForDropdown(req: Request, res: Response): Promise<void> {
+  getEquipmentForDropdown = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const vendorId = await this.getVendorId(req as AuthenticatedRequest);
       
@@ -138,13 +154,13 @@ export class MaintenanceTicketController extends BaseController {
       console.error('Error fetching equipment for dropdown:', error);
       ApiResponseUtil.internalError(res, 'Failed to fetch equipment');
     }
-  }
+  });
 
   /**
    * Get technicians for Create Ticket modal dropdown
    * GET /api/vendor/tickets/technicians
    */
-  async getTechniciansForDropdown(req: Request, res: Response): Promise<void> {
+  getTechniciansForDropdown = this.asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const vendorId = await this.getVendorId(req as AuthenticatedRequest);
       
@@ -160,7 +176,7 @@ export class MaintenanceTicketController extends BaseController {
       console.error('Error fetching technicians for dropdown:', error);
       ApiResponseUtil.internalError(res, 'Failed to fetch technicians');
     }
-  }
+  });
 
   /**
    * Create new maintenance ticket

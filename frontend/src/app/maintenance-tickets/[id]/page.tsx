@@ -7,6 +7,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import { useToast } from '@/components/providers/ToastProvider';
 import { useConfirmModal } from '@/components/providers/ConfirmModalProvider';
+import { API_ENDPOINTS } from '@/config/api';
 import Link from 'next/link';
 import { 
   ArrowLeftIcon,
