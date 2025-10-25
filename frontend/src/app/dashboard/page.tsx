@@ -937,19 +937,72 @@ function VendorDashboardComponent({ user }: { user: User }) {
 }
 
 // ============================================================================
-// CLIENT DASHBOARD - Placeholder for future implementation
+// CLIENT DASHBOARD - Full implementation with API integration
 // ============================================================================
 function ClientDashboardComponent({ user }: { user: User }) {
+  const [kpis, setKpis] = useState({
+    total_equipment: 0,
+    compliant_equipment: 0,
+    open_tickets: 0
+  });
+  const [activity, setActivity] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const toast = useToast();
+
+  useEffect(() => {
+    fetchClientDashboard();
+  }, []);
+
+  const fetchClientDashboard = async () => {
+    try {
+      setIsLoading(true);
+      const headers = getAuthHeaders();
+
+      // Fetch KPIs
+      const kpisResponse = await fetch(API_ENDPOINTS.CLIENT.DASHBOARD.KPIS, { headers });
+      if (kpisResponse.ok) {
+        const kpisData = await kpisResponse.json();
+        setKpis(kpisData.data);
+      }
+
+      // Fetch recent activity
+      const activityResponse = await fetch(API_ENDPOINTS.CLIENT.DASHBOARD.ACTIVITY, { headers });
+      if (activityResponse.ok) {
+        const activityData = await activityResponse.json();
+        setActivity(activityData.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching client dashboard:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <LoadingSpinner text="Loading dashboard..." />
+      </DashboardLayout>
+    );
+  }
+
+  const complianceRate = kpis.total_equipment > 0 
+    ? Math.round((kpis.compliant_equipment / kpis.total_equipment) * 100) 
+    : 0;
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Client Dashboard</h1>
-          <p className="text-gray-600 mt-1">Welcome back, {user.display_name}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Client Dashboard</h1>
+            <p className="text-gray-600 mt-1">Welcome back, {user.display_name}</p>
+          </div>
         </div>
 
-        {/* Stats Grid */}
+        {/* KPI Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
             <div className="flex items-center">
@@ -957,8 +1010,8 @@ function ClientDashboardComponent({ user }: { user: User }) {
                 <FireIcon className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">My Equipment</p>
-                <p className="text-2xl font-bold text-gray-900">--</p>
+                <p className="text-sm font-medium text-gray-600">Total Equipment</p>
+                <p className="text-2xl font-bold text-gray-900">{kpis.total_equipment}</p>
               </div>
             </div>
           </div>
@@ -969,20 +1022,8 @@ function ClientDashboardComponent({ user }: { user: User }) {
                 <ShieldCheckIcon className="h-6 w-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Active Equipment</p>
-                <p className="text-2xl font-bold text-gray-900">--</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-orange-50 rounded-xl">
-                <WrenchScrewdriverIcon className="h-6 w-6 text-orange-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Due for Service</p>
-                <p className="text-2xl font-bold text-gray-900">--</p>
+                <p className="text-sm font-medium text-gray-600">Compliant</p>
+                <p className="text-2xl font-bold text-gray-900">{kpis.compliant_equipment}</p>
               </div>
             </div>
           </div>
@@ -990,22 +1031,109 @@ function ClientDashboardComponent({ user }: { user: User }) {
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
             <div className="flex items-center">
               <div className="p-3 bg-blue-50 rounded-xl">
-                <ClipboardDocumentListIcon className="h-6 w-6 text-blue-600" />
+                <ChartBarIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Open Requests</p>
-                <p className="text-2xl font-bold text-gray-900">--</p>
+                <p className="text-sm font-medium text-gray-600">Compliance Rate</p>
+                <p className="text-2xl font-bold text-gray-900">{complianceRate}%</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-orange-50 rounded-xl">
+                <ClipboardDocumentListIcon className="h-6 w-6 text-orange-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Open Tickets</p>
+                <p className="text-2xl font-bold text-gray-900">{kpis.open_tickets}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Coming Soon Message */}
-        <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4">
-          <p className="text-purple-800">
-            <strong>Client Dashboard:</strong> Equipment overview, service request management, and maintenance history features are coming soon!
-          </p>
+        {/* Quick Links */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Links</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Link 
+              href="/client/equipment"
+              className="flex items-center space-x-3 p-4 rounded-xl border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all"
+            >
+              <div className="p-2 bg-purple-50 rounded-lg">
+                <FireIcon className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">View Equipment</p>
+                <p className="text-xs text-gray-500">See all your equipment</p>
+              </div>
+            </Link>
+
+            <Link 
+              href="/client/tickets"
+              className="flex items-center space-x-3 p-4 rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50 transition-all"
+            >
+              <div className="p-2 bg-orange-50 rounded-lg">
+                <ClipboardDocumentListIcon className="h-6 w-6 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">View Tickets</p>
+                <p className="text-xs text-gray-500">Track maintenance requests</p>
+              </div>
+            </Link>
+
+            <Link 
+              href="/client/reports"
+              className="flex items-center space-x-3 p-4 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all"
+            >
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <ChartBarIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">View Reports</p>
+                <p className="text-xs text-gray-500">Compliance reports</p>
+              </div>
+            </Link>
+          </div>
         </div>
+
+        {/* Recent Activity */}
+        {activity.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
+            <div className="space-y-3">
+              {activity.slice(0, 5).map((item, index) => (
+                <div key={index} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50">
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${
+                      item.event_type === 'Ticket' ? 'bg-orange-50' : 'bg-blue-50'
+                    }`}>
+                      {item.event_type === 'Ticket' ? (
+                        <ClipboardDocumentListIcon className="h-5 w-5 text-orange-600" />
+                      ) : (
+                        <ClockIcon className="h-5 w-5 text-blue-600" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{item.event}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                    item.status === 'open' || item.status === 'Unread' 
+                      ? 'bg-orange-100 text-orange-800' 
+                      : 'bg-green-100 text-green-800'
+                  }`}>
+                    {item.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );
