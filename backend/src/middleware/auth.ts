@@ -130,6 +130,11 @@ export const requireSuperAdmin = requireRole(['admin']);
 export const requireVendorOrAdmin = requireRole(['admin', 'vendor']);
 
 /**
+ * Middleware to check if user is a client
+ */
+export const requireClient = requireRole(['client']);
+
+/**
  * Middleware to extract IP address from request
  */
 export const extractIPAddress = (req: Request): string => {

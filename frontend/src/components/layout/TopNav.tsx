@@ -64,12 +64,12 @@ export default function TopNav({ user, onMenuToggle, isMobileMenuOpen }: TopNavP
 
   const handleProfileClick = () => {
     setIsDropdownOpen(false);
-    router.push('/dashboard/profile');
+    router.push('/profile');
   };
 
   const handleSettingsClick = () => {
     setIsDropdownOpen(false);
-    router.push('/dashboard/settings');
+    router.push('/settings');
   };
 
   return (

@@ -115,3 +115,5 @@ CONSISTENCY_UPDATE_SUMMARY.md
 VENDOR_PATTERN_APPLIED.md
 frontend/docs/error-loading-consistency.md
 frontend/docs/toast-notification-system.md
+frontend/docs/toast-modal-integration-summary.md
+frontend/docs/toast-modal-usage.md

@@ -258,7 +258,7 @@ function UserDetailContent() {
       }
 
       // Redirect to users list
-      router.push('/dashboard/users');
+      router.push('/users');
     } catch (err) {
       console.error('Error deleting user:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete user');
@@ -301,7 +301,7 @@ function UserDetailContent() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link
-              href="/dashboard/users"
+              href="/users"
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
@@ -714,7 +714,7 @@ function UserDetailContent() {
                       
                       <div className="pt-4 border-t border-gray-200">
                         <Link
-                          href={`/dashboard/users/${user.vendor.id}`}
+                          href={`/users/${user.vendor.id}`}
                           className="inline-flex items-center space-x-2 text-red-600 hover:text-red-800 font-medium"
                         >
                           <span>View Vendor Details</span>

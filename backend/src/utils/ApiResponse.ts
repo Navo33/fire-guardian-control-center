@@ -103,6 +103,13 @@ export class ApiResponseUtil {
   }
 
   /**
+   * Send bad request response
+   */
+  static badRequest(res: Response, message: string = 'Bad request'): void {
+    this.error(res, message, HttpStatus.BAD_REQUEST, 'BAD_REQUEST');
+  }
+
+  /**
    * Send unauthorized response
    */
   static unauthorized(res: Response, message: string = 'Authentication required'): void {

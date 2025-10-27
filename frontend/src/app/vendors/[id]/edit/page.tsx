@@ -95,7 +95,7 @@ function EditVendorContent() {
       fetchVendorData();
       fetchSpecializations();
     } else {
-      router.push('/dashboard/vendors');
+      router.push('/vendors');
     }
   }, [vendorId, router]);
 
@@ -188,7 +188,7 @@ function EditVendorContent() {
 
       if (result.success) {
         // Redirect back to vendor details page
-        router.push(`/dashboard/vendors/${vendorId}`);
+        router.push(`/vendors/${vendorId}`);
       } else {
         throw new Error(result.message || 'Failed to update vendor');
       }
@@ -229,7 +229,7 @@ function EditVendorContent() {
         <div className="text-center py-12">
           <p className="text-red-600">{error}</p>
           <Link
-            href="/dashboard/vendors"
+            href="/vendors"
             className="mt-4 inline-block text-red-600 hover:text-red-700"
           >
             Back to Vendors
@@ -246,7 +246,7 @@ function EditVendorContent() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link
-              href={`/dashboard/vendors/${vendorId}`}
+              href={`/vendors/${vendorId}`}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
@@ -579,7 +579,7 @@ function EditVendorContent() {
               )}
             </button>
             <Link
-              href={`/dashboard/vendors/${vendorId}`}
+              href={`/vendors/${vendorId}`}
               className="btn-secondary flex items-center space-x-2"
             >
               <span>Cancel</span>
