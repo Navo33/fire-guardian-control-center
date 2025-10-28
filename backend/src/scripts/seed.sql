@@ -118,7 +118,8 @@ INSERT INTO public.system_settings (
   (7, 'maintenance_reminder_days',   '30',  'number',  'Days before maintenance to send reminders',    '2025-10-25 11:25:00+05:30', 1),
   (8, 'expiry_reminder_days',        '60',  'number',  'Days before expiry to send reminders',         '2025-10-25 11:25:00+05:30', 1),
   (9, 'vendor_equipment_limit',      '1000','number',  'Maximum equipment instances per vendor',       '2025-10-25 11:25:00+05:30', 1),
-  (10,'compliance_alert_threshold',  '90',  'number',  'Compliance alert threshold % for admin reports','2025-10-25 11:25:00+05:30', 1);
+  (10,'compliance_alert_threshold',  '90',  'number',  'Compliance alert threshold % for admin reports','2025-10-25 11:25:00+05:30', 1)
+ON CONFLICT (id) DO NOTHING;
 
 -- --------------------------------------------------------------
 -- 4. role
