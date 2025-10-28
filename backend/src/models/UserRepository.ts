@@ -261,34 +261,28 @@ export class UserRepository {
         u.id, u.first_name, u.last_name, u.display_name, u.email, 
         u.user_type, u.is_locked, u.last_login, u.created_at,
         
-        -- Company details
-        vc.company_name, vc.business_type, vc.license_number,
-        
-        -- Contact details
-        vcon.contact_person_name, vcon.contact_title, vcon.primary_email, vcon.primary_phone,
-        
-        -- Address details
-        va.street_address, va.city, va.state, va.zip_code, va.country,
+        -- Company details from vendors table
+        v.company_name, v.business_type, v.license_number,
+        v.primary_phone, v.street_address, v.city, v.state, v.zip_code, v.country,
+        v.status as vendor_status,
         
         -- Equipment count
-        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = u.id AND deleted_at IS NULL) as equipment_count,
+        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = v.id AND deleted_at IS NULL) as equipment_count,
         
         -- Client assignments count  
-        (SELECT COUNT(DISTINCT client_id) FROM equipment_assignment WHERE vendor_id = u.id) as client_count,
+        (SELECT COUNT(DISTINCT client_id) FROM equipment_assignment WHERE vendor_id = v.id) as client_count,
         
         -- Specializations (comma-separated)
         (SELECT STRING_AGG(s.name, ', ') 
          FROM vendor_specialization vs 
          JOIN specialization s ON s.id = vs.specialization_id 
-         WHERE vs.vendor_id = u.id) as specializations,
+         WHERE vs.vendor_id = v.id) as specializations,
          
         -- Last activity (most recent from audit log)
         (SELECT MAX(created_at) FROM audit_log WHERE changed_by = u.id) as last_activity
          
       FROM "user" u
-      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
-      LEFT JOIN vendor_contact vcon ON vcon.vendor_id = u.id
-      LEFT JOIN vendor_address va ON va.vendor_id = u.id
+      INNER JOIN vendors v ON v.user_id = u.id
       WHERE u.user_type = 'vendor' AND u.deleted_at IS NULL
       ORDER BY u.created_at DESC
       LIMIT $1
@@ -361,17 +355,18 @@ export class UserRepository {
         r.role_name as role_name,
         CASE 
           WHEN u.user_type = 'vendor' THEN (
-            SELECT COUNT(*) FROM vendor_company vc WHERE vc.vendor_id = u.id
+            SELECT COUNT(*) FROM vendors v WHERE v.user_id = u.id
           )
           WHEN u.user_type = 'client' THEN (
-            SELECT COUNT(*) FROM client_company cc WHERE cc.client_id = u.id
+            SELECT COUNT(*) FROM clients c WHERE c.user_id = u.id
           )
           ELSE 0
         END as companies_count,
         CASE 
           WHEN u.user_type = 'vendor' THEN (
             SELECT COUNT(*) FROM equipment_instance ei 
-            WHERE ei.vendor_id = u.id AND ei.deleted_at IS NULL
+            JOIN vendors v ON v.id = ei.vendor_id
+            WHERE v.user_id = u.id AND ei.deleted_at IS NULL
           )
           ELSE 0
         END as equipment_count,
@@ -478,8 +473,8 @@ export class UserRepository {
         COUNT(DISTINCT ei.id) as total_equipment,
         COUNT(DISTINCT CASE WHEN u.created_at > NOW() - INTERVAL '7 days' THEN u.id END) as recently_joined
       FROM "user" u
-      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
-      LEFT JOIN equipment_instance ei ON ei.vendor_id = u.id AND ei.deleted_at IS NULL
+      LEFT JOIN vendors v ON v.user_id = u.id
+      LEFT JOIN equipment_instance ei ON ei.vendor_id = v.id AND ei.deleted_at IS NULL
       WHERE u.user_type = 'vendor' AND u.deleted_at IS NULL
     `;
     
@@ -543,68 +538,50 @@ export class UserRepository {
    * Get vendor-specific details
    */
   private static async getVendorDetails(userId: number, baseInfo: any): Promise<any> {
-    // Get vendor company information (only columns that exist in database)
-    const vendorCompanyQuery = `
+    // Get vendor information from the vendors table
+    const vendorQuery = `
       SELECT 
-        company_name, business_type, license_number, 
-        tax_id, website, established_year, 
-        employee_count, annual_revenue
-      FROM vendor_company
-      WHERE vendor_id = $1
+        v.company_name, v.business_type, v.license_number, 
+        v.primary_phone, v.street_address, v.city, v.state, 
+        v.zip_code, v.country, v.status,
+        v.created_at as company_created_at, v.updated_at as company_updated_at
+      FROM vendors v
+      WHERE v.user_id = $1
     `;
-    const vendorCompanyResult = await pool.query(vendorCompanyQuery, [userId]);
+    const vendorResult = await pool.query(vendorQuery, [userId]);
 
-    // Get vendor contact information (only columns that exist in database)
-    const vendorContactQuery = `
-      SELECT 
-        contact_person_name, contact_title, primary_email, 
-        primary_phone
-      FROM vendor_contact
-      WHERE vendor_id = $1
-    `;
-    const vendorContactResult = await pool.query(vendorContactQuery, [userId]);
-
-    // Get vendor address information (only columns that exist in database)
-    const vendorAddressQuery = `
-      SELECT 
-        street_address, city, state, 
-        zip_code, country
-      FROM vendor_address
-      WHERE vendor_id = $1
-    `;
-    const vendorAddressResult = await pool.query(vendorAddressQuery, [userId]);
-
-    // Get vendor specializations (only columns that exist in database)
+    // Get vendor specializations (using vendor ID from vendors table)
     const specializationsQuery = `
       SELECT 
         s.id, s.name, s.description, s.category
       FROM vendor_specialization vs
       JOIN specialization s ON s.id = vs.specialization_id
-      WHERE vs.vendor_id = $1
+      JOIN vendors v ON v.id = vs.vendor_id
+      WHERE v.user_id = $1
     `;
     const specializationsResult = await pool.query(specializationsQuery, [userId]);
 
-    // Get equipment count
+    // Get equipment count (using vendor ID from vendors table)
     const equipmentCountQuery = `
       SELECT COUNT(*) as equipment_count
-      FROM equipment_instance
-      WHERE vendor_id = $1 AND deleted_at IS NULL
+      FROM equipment_instance ei
+      JOIN vendors v ON v.id = ei.vendor_id
+      WHERE v.user_id = $1 AND ei.deleted_at IS NULL
     `;
     const equipmentCountResult = await pool.query(equipmentCountQuery, [userId]);
 
-    // Get client count
+    // Get client count (using vendor ID from vendors table)
     const clientCountQuery = `
-      SELECT COUNT(DISTINCT client_id) as client_count
-      FROM equipment_assignment
-      WHERE vendor_id = $1
+      SELECT COUNT(DISTINCT ea.client_id) as client_count
+      FROM equipment_assignment ea
+      JOIN vendors v ON v.id = ea.vendor_id
+      WHERE v.user_id = $1
     `;
     const clientCountResult = await pool.query(clientCountQuery, [userId]);
 
     return {
       ...baseInfo,
-      company: vendorCompanyResult.rows[0] || null,
-      contact: vendorContactResult.rows[0] || null,
-      addresses: vendorAddressResult.rows,
+      vendor: vendorResult.rows[0] || null,
       specializations: specializationsResult.rows,
       equipment_count: parseInt(equipmentCountResult.rows[0]?.equipment_count || 0),
       client_count: parseInt(clientCountResult.rows[0]?.client_count || 0)
@@ -615,73 +592,43 @@ export class UserRepository {
    * Get client-specific details
    */
   private static async getClientDetails(userId: number, baseInfo: any): Promise<any> {
-    // Get client company information (only columns that exist in database)
-    const clientCompanyQuery = `
+    // Get client information from the clients table
+    const clientQuery = `
       SELECT 
-        company_name, business_type
-      FROM client_company
-      WHERE client_id = $1
+        c.company_name, c.business_type, c.primary_phone,
+        c.street_address, c.city, c.state, c.zip_code, c.country,
+        c.status, c.created_at as company_created_at, c.updated_at as company_updated_at,
+        v.company_name as created_by_vendor_name
+      FROM clients c
+      LEFT JOIN vendors v ON v.id = c.created_by_vendor_id
+      WHERE c.user_id = $1
     `;
-    const clientCompanyResult = await pool.query(clientCompanyQuery, [userId]);
+    const clientResult = await pool.query(clientQuery, [userId]);
 
-    // Get client contact information (only columns that exist in database)
-    const clientContactQuery = `
-      SELECT 
-        contact_person_name, contact_title, primary_email, 
-        primary_phone
-      FROM client_contact
-      WHERE client_id = $1
-    `;
-    const clientContactResult = await pool.query(clientContactQuery, [userId]);
-
-    // Get client address information (only columns that exist in database)
-    const clientAddressQuery = `
-      SELECT 
-        street_address, city, state, 
-        zip_code, country
-      FROM client_address
-      WHERE client_id = $1
-    `;
-    const clientAddressResult = await pool.query(clientAddressQuery, [userId]);
-
-    // Get vendor information (who created this client account)
-    const vendorQuery = `
-      SELECT 
-        u.id, u.display_name, u.email,
-        vc.company_name as vendor_company
-      FROM client_company cc
-      JOIN "user" u ON u.id = cc.created_by_vendor_id
-      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
-      WHERE cc.client_id = $1 AND u.deleted_at IS NULL
-    `;
-    const vendorResult = await pool.query(vendorQuery, [userId]);
-
-    // Get equipment borrowed by this client (only columns that exist in database)
+    // Get equipment assigned to this client (using proper table relationships)
     const equipmentQuery = `
       SELECT 
         e.equipment_name, e.equipment_code, e.equipment_type, e.manufacturer,
         ei.serial_number, ei.status,
         ea.assigned_at, ea.status as assignment_status,
         ea.start_date, ea.end_date,
-        u.display_name as vendor_name,
-        vc.company_name as vendor_company
+        v.company_name as vendor_company,
+        u.display_name as vendor_name
       FROM equipment_assignment ea
       JOIN assignment_item ai ON ai.assignment_id = ea.id
       JOIN equipment_instance ei ON ei.id = ai.equipment_instance_id
       JOIN equipment e ON e.id = ei.equipment_id
-      JOIN "user" u ON u.id = ea.vendor_id
-      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
-      WHERE ea.client_id = $1 AND ea.status = 'active'
+      JOIN vendors v ON v.id = ea.vendor_id
+      JOIN "user" u ON u.id = v.user_id
+      JOIN clients c ON c.id = ea.client_id
+      WHERE c.user_id = $1 AND ea.status = 'active'
       ORDER BY ea.assigned_at DESC
     `;
     const equipmentResult = await pool.query(equipmentQuery, [userId]);
 
     return {
       ...baseInfo,
-      company: clientCompanyResult.rows[0] || null,
-      contact: clientContactResult.rows[0] || null,
-      addresses: clientAddressResult.rows,
-      vendor: vendorResult.rows[0] || null,  // Single vendor who created this client
+      client: clientResult.rows[0] || null,
       equipment: equipmentResult.rows
     };
   }

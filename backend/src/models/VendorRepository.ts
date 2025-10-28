@@ -43,9 +43,9 @@ export class VendorRepository {
         u.last_name ILIKE $${paramCount} OR 
         u.display_name ILIKE $${paramCount} OR 
         u.email ILIKE $${paramCount} OR
-        vc.company_name ILIKE $${paramCount} OR
-        va.city ILIKE $${paramCount} OR
-        va.state ILIKE $${paramCount}
+        v.company_name ILIKE $${paramCount} OR
+        v.city ILIKE $${paramCount} OR
+        v.state ILIKE $${paramCount}
       )`;
       queryParams.push(`%${filters.search}%`);
     }
@@ -60,7 +60,7 @@ export class VendorRepository {
     // Add specialization filter
     if (filters.specialization) {
       paramCount++;
-      whereClause += ` AND u.id IN (
+      whereClause += ` AND v.id IN (
         SELECT vs.vendor_id 
         FROM vendor_specialization vs 
         JOIN specialization s ON vs.specialization_id = s.id 
@@ -80,31 +80,25 @@ export class VendorRepository {
         u.id, u.first_name, u.last_name, u.display_name, u.email, 
         u.user_type, u.is_locked, u.last_login, u.created_at,
         
-        -- Company details
-        vc.company_name, vc.business_type, vc.license_number,
+        -- Company details from vendors table
+        v.company_name, v.business_type, v.license_number,
+        v.primary_phone, v.street_address, v.city, v.state, v.zip_code, v.country,
+        v.status as vendor_status,
         
-        -- Contact details
-        vcon.contact_person_name, vcon.contact_title, vcon.primary_email, vcon.primary_phone,
+        -- Equipment count (using vendor ID from vendors table)
+        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = v.id AND deleted_at IS NULL) as equipment_count,
         
-        -- Address details
-        va.street_address, va.city, va.state, va.zip_code, va.country,
-        
-        -- Equipment count
-        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = u.id AND deleted_at IS NULL) as equipment_count,
-        
-        -- Client assignments count  
-        (SELECT COUNT(DISTINCT client_id) FROM equipment_assignment WHERE vendor_id = u.id) as client_count,
+        -- Client assignments count (using vendor ID from vendors table)
+        (SELECT COUNT(DISTINCT client_id) FROM equipment_assignment WHERE vendor_id = v.id) as client_count,
         
         -- Specializations (comma-separated)
         (SELECT STRING_AGG(s.name, ', ') 
          FROM vendor_specialization vs 
          JOIN specialization s ON s.id = vs.specialization_id 
-         WHERE vs.vendor_id = u.id) as specializations
+         WHERE vs.vendor_id = v.id) as specializations
          
       FROM "user" u
-      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
-      LEFT JOIN vendor_contact vcon ON vcon.vendor_id = u.id
-      LEFT JOIN vendor_address va ON va.vendor_id = u.id
+      INNER JOIN vendors v ON v.user_id = u.id
       ${whereClause}
       ORDER BY ${orderBy} ${orderDirection}
       LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
@@ -157,9 +151,9 @@ export class VendorRepository {
         u.last_name ILIKE $${paramCount} OR 
         u.display_name ILIKE $${paramCount} OR 
         u.email ILIKE $${paramCount} OR
-        vc.company_name ILIKE $${paramCount} OR
-        va.city ILIKE $${paramCount} OR
-        va.state ILIKE $${paramCount}
+        v.company_name ILIKE $${paramCount} OR
+        v.city ILIKE $${paramCount} OR
+        v.state ILIKE $${paramCount}
       )`;
       queryParams.push(`%${filters.search}%`);
     }
@@ -174,7 +168,7 @@ export class VendorRepository {
     // Add specialization filter
     if (filters.specialization) {
       paramCount++;
-      whereClause += ` AND u.id IN (
+      whereClause += ` AND v.id IN (
         SELECT vs.vendor_id 
         FROM vendor_specialization vs 
         JOIN specialization s ON vs.specialization_id = s.id 
@@ -186,8 +180,7 @@ export class VendorRepository {
     const query = `
       SELECT COUNT(DISTINCT u.id) 
       FROM "user" u
-      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
-      LEFT JOIN vendor_address va ON va.vendor_id = u.id
+      INNER JOIN vendors v ON v.user_id = u.id
       ${whereClause}
     `;
 
@@ -215,24 +208,17 @@ export class VendorRepository {
         u.id, u.first_name, u.last_name, u.display_name, u.email, 
         u.user_type, u.is_locked, u.last_login, u.created_at,
         
-        -- Company details
-        vc.company_name, vc.business_type, vc.license_number,
+        -- Company details from vendors table
+        v.company_name, v.business_type, v.license_number,
+        v.primary_phone, v.street_address, v.city, v.state, v.zip_code, v.country,
+        v.status as vendor_status,
         
-        -- Contact details
-        vcon.contact_person_name, vcon.contact_title, vcon.primary_email as contact_primary_email,
-        vcon.primary_phone,
-        
-        -- Address details
-        va.street_address, va.city, va.state, va.zip_code, va.country,
-        
-        -- Aggregated counts
-        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = u.id AND deleted_at IS NULL) as equipment_count,
-        (SELECT COUNT(*) FROM equipment_assignment ea WHERE ea.vendor_id = u.id) as assignments_count
+        -- Aggregated counts (using vendor ID from vendors table)
+        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = v.id AND deleted_at IS NULL) as equipment_count,
+        (SELECT COUNT(*) FROM equipment_assignment ea WHERE ea.vendor_id = v.id) as assignments_count
          
       FROM "user" u
-      LEFT JOIN vendor_company vc ON vc.vendor_id = u.id
-      LEFT JOIN vendor_contact vcon ON vcon.vendor_id = u.id
-      LEFT JOIN vendor_address va ON va.vendor_id = u.id
+      INNER JOIN vendors v ON v.user_id = u.id
       WHERE u.id = $1 AND u.user_type = 'vendor' AND u.deleted_at IS NULL
     `;
 
@@ -248,12 +234,13 @@ export class VendorRepository {
 
       const row = result.rows[0];
 
-      // Get specializations
+      // Get specializations (using vendor ID from vendors table)
       const specializationQuery = `
         SELECT s.name 
         FROM vendor_specialization vs
         JOIN specialization s ON s.id = vs.specialization_id
-        WHERE vs.vendor_id = $1
+        JOIN vendors v ON v.id = vs.vendor_id
+        WHERE v.user_id = $1
       `;
       
       const specializationResult = await pool.query(specializationQuery, [id]);
@@ -272,29 +259,30 @@ export class VendorRepository {
         last_login: row.last_login,
         created_at: row.created_at,
         
-        company: row.company_name ? {
+        // Maintain compatibility with existing interface
+        company: {
           vendor_id: row.id,
           company_name: row.company_name,
           business_type: row.business_type,
           license_number: row.license_number
-        } : undefined,
+        },
         
-        contact: row.contact_person_name ? {
+        contact: {
           vendor_id: row.id,
-          contact_person_name: row.contact_person_name,
-          contact_title: row.contact_title,
-          primary_email: row.contact_primary_email,
+          contact_person_name: row.display_name || `${row.first_name} ${row.last_name}`,
+          contact_title: '',
+          primary_email: row.email,
           primary_phone: row.primary_phone
-        } : undefined,
+        },
         
-        address: row.street_address ? {
+        address: {
           vendor_id: row.id,
           street_address: row.street_address,
           city: row.city,
           state: row.state,
           zip_code: row.zip_code,
           country: row.country
-        } : undefined,
+        },
         
         specializations: specializations,
         
@@ -344,67 +332,33 @@ export class VendorRepository {
       const userResult = await client.query(userQuery, userValues);
       const newUser = userResult.rows[0];
 
-      // Step 2: Create vendor company record
-      const companyQuery = `
-        INSERT INTO vendor_company (
-          vendor_id, company_name, business_type, license_number
+      // Step 2: Create vendor record in vendors table
+      const vendorQuery = `
+        INSERT INTO vendors (
+          user_id, company_name, business_type, license_number,
+          primary_phone, street_address, city, state, zip_code, country
         )
-        VALUES ($1, $2, $3, $4)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *
       `;
 
-      const companyValues = [
+      const vendorValues = [
         newUser.id,
         vendorData.companyName,
         vendorData.businessType,
-        vendorData.licenseNumber || null
-      ];
-
-      DebugLogger.database('CREATE_VENDOR_COMPANY', companyQuery, companyValues);
-      const companyResult = await client.query(companyQuery, companyValues);
-
-      // Step 3: Create vendor contact record
-      const contactQuery = `
-        INSERT INTO vendor_contact (
-          vendor_id, contact_person_name, contact_title, primary_email, primary_phone
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING *
-      `;
-
-      const contactValues = [
-        newUser.id,
-        vendorData.contactPersonName,
-        vendorData.contactTitle || null,
-        vendorData.primaryEmail,
-        vendorData.primaryPhone
-      ];
-
-      DebugLogger.database('CREATE_VENDOR_CONTACT', contactQuery, contactValues);
-      const contactResult = await client.query(contactQuery, contactValues);
-
-      // Step 4: Create vendor address record
-      const addressQuery = `
-        INSERT INTO vendor_address (
-          vendor_id, street_address, city, state, zip_code, country
-        )
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING *
-      `;
-
-      const addressValues = [
-        newUser.id,
-        vendorData.streetAddress,
-        vendorData.city,
-        vendorData.state,
-        vendorData.zipCode,
+        vendorData.licenseNumber || null,
+        vendorData.primaryPhone || null,
+        vendorData.streetAddress || null,
+        vendorData.city || null,
+        vendorData.state || null,
+        vendorData.zipCode || null,
         vendorData.country || 'Sri Lanka'
       ];
 
-      DebugLogger.database('CREATE_VENDOR_ADDRESS', addressQuery, addressValues);
-      const addressResult = await client.query(addressQuery, addressValues);
+      DebugLogger.database('CREATE_VENDOR_RECORD', vendorQuery, vendorValues);
+      const vendorResult = await client.query(vendorQuery, vendorValues);
 
-      // Step 5: Handle specializations
+      // Step 3: Handle specializations
       if (vendorData.specializations && vendorData.specializations.length > 0) {
         // Get specialization IDs
         const specializationQuery = `
@@ -414,25 +368,45 @@ export class VendorRepository {
         DebugLogger.database('GET_SPECIALIZATIONS', specializationQuery, [vendorData.specializations]);
         const specializationResult = await client.query(specializationQuery, [vendorData.specializations]);
         
-        // Insert vendor specializations
+        // Insert vendor specializations (using vendor.id from vendors table)
+        const vendorRecord = vendorResult.rows[0];
         for (const spec of specializationResult.rows) {
           const vendorSpecQuery = `
             INSERT INTO vendor_specialization (vendor_id, specialization_id)
             VALUES ($1, $2)
           `;
-          await client.query(vendorSpecQuery, [newUser.id, spec.id]);
+          await client.query(vendorSpecQuery, [vendorRecord.id, spec.id]);
         }
       }
 
       await client.query('COMMIT');
 
       // Return the complete vendor object
+      const vendorRecord = vendorResult.rows[0];
       const detailedVendor: DetailedVendor = {
         ...newUser,
-        company: companyResult.rows[0],
-        contact: contactResult.rows[0],
-        address: addressResult.rows[0],
-        specializations: vendorData.specializations
+        company: {
+          vendor_id: newUser.id,
+          company_name: vendorRecord.company_name,
+          business_type: vendorRecord.business_type,
+          license_number: vendorRecord.license_number
+        },
+        contact: {
+          vendor_id: newUser.id,
+          contact_person_name: newUser.display_name || `${newUser.first_name} ${newUser.last_name}`,
+          contact_title: '',
+          primary_email: newUser.email,
+          primary_phone: vendorRecord.primary_phone
+        },
+        address: {
+          vendor_id: newUser.id,
+          street_address: vendorRecord.street_address,
+          city: vendorRecord.city,
+          state: vendorRecord.state,
+          zip_code: vendorRecord.zip_code,
+          country: vendorRecord.country
+        },
+        specializations: vendorData.specializations || []
       };
 
       DebugLogger.database('CREATE_VENDOR_SUCCESS', undefined, undefined, detailedVendor);

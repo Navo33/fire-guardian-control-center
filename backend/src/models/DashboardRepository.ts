@@ -328,16 +328,16 @@ export class DashboardRepository {
       pool.query(`
         SELECT 
           u.id, u.display_name, u.email,
-          cc.company_name,
+          c.company_name,
           COUNT(ea.id) as assignment_count,
           MAX(ea.assigned_at) as last_assignment,
           COALESCE(SUM(ea.total_cost), 0) as total_revenue
         FROM "user" u
-        JOIN client_company cc ON cc.client_id = u.id
-        JOIN equipment_assignment ea ON ea.client_id = u.id
+        JOIN clients c ON c.user_id = u.id
+        JOIN equipment_assignment ea ON ea.client_id = c.id
         WHERE ea.vendor_id = $1 
           AND ea.assigned_at >= CURRENT_DATE - INTERVAL '30 days'
-        GROUP BY u.id, u.display_name, u.email, cc.company_name
+        GROUP BY u.id, u.display_name, u.email, c.company_name
         ORDER BY assignment_count DESC, total_revenue DESC
         LIMIT 5
       `, [vendorId]),
