@@ -222,7 +222,6 @@ CREATE TABLE public.equipment (
     weight_kg numeric(8,2),
     dimensions varchar(100),
     warranty_years int2,
-    price numeric(12,2),
     default_lifespan_years int2,
     created_at timestamptz DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz DEFAULT CURRENT_TIMESTAMP,

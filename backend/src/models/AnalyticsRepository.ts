@@ -288,7 +288,7 @@ class AnalyticsRepository {
         SELECT 
           u.id as vendor_id,
           u.first_name || ' ' || u.last_name as vendor_name,
-          COALESCE(vc.company_name, 'Unknown Company') as company_name,
+          COALESCE(v.company_name, 'Unknown Company') as company_name,
           COUNT(DISTINCT ei.id) as total_equipment,
           COUNT(DISTINCT ea.id) as total_assignments,
           COUNT(DISTINCT CASE WHEN ea.status = 'active' THEN ea.id END) as active_assignments,
@@ -296,14 +296,14 @@ class AnalyticsRepository {
           COUNT(DISTINCT ea.client_id) as total_clients,
           ARRAY_AGG(DISTINCT s.name) FILTER (WHERE s.name IS NOT NULL) as specializations
         FROM "user" u
-        LEFT JOIN vendor_company vc ON u.id = vc.vendor_id
-        LEFT JOIN vendor_specialization vs ON u.id = vs.vendor_id
+        INNER JOIN vendors v ON v.user_id = u.id
+        LEFT JOIN vendor_specialization vs ON v.id = vs.vendor_id
         LEFT JOIN specialization s ON vs.specialization_id = s.id
-        LEFT JOIN equipment_instance ei ON ei.assigned_to = u.id
+        LEFT JOIN equipment_instance ei ON ei.vendor_id = v.id
         LEFT JOIN assignment_item ai ON ei.id = ai.equipment_instance_id
         LEFT JOIN equipment_assignment ea ON ai.assignment_id = ea.id
         WHERE ${whereConditions.join(' AND ')}
-        GROUP BY u.id, u.first_name, u.last_name, vc.company_name
+        GROUP BY u.id, u.first_name, u.last_name, v.company_name
         ORDER BY total_assignments DESC, total_equipment DESC
       `;
 
@@ -507,14 +507,14 @@ class AnalyticsRepository {
     try {
       const query = `
         SELECT 
-          vc.id,
-          vc.company_name as name,
-          COUNT(DISTINCT vc.vendor_id) as vendor_count
-        FROM vendor_company vc
-        INNER JOIN "user" u ON vc.vendor_id = u.id
+          v.id,
+          v.company_name as name,
+          COUNT(DISTINCT v.user_id) as vendor_count
+        FROM vendors v
+        INNER JOIN "user" u ON v.user_id = u.id
         WHERE u.deleted_at IS NULL
-        GROUP BY vc.id, vc.company_name
-        ORDER BY vc.company_name
+        GROUP BY v.id, v.company_name
+        ORDER BY v.company_name
       `;
 
       const result = await this.pool.query(query);
