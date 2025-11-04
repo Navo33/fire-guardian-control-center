@@ -6,6 +6,8 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import { useToast } from '@/components/providers/ToastProvider';
 import { useConfirmModal } from '@/components/providers/ConfirmModalProvider';
+import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
+import DebugLogger from '@/utils/DebugLogger';
 import { 
   ClipboardDocumentListIcon,
   MagnifyingGlassIcon,
@@ -56,96 +58,123 @@ export default function VendorServiceRequestsPage() {
   const toast = useToast();
   const confirmModal = useConfirmModal();
   
-  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([
-    {
-      id: 1,
-      client_name: 'Royal Hotels Ltd',
-      client_id: 1,
-      equipment_type: 'Fire Extinguisher',
-      equipment_location: 'Lobby - Ground Floor',
-      request_type: 'Maintenance',
-      priority: 'High',
-      status: 'Open',
-      description: 'Annual maintenance required for ABC powder fire extinguisher',
-      requested_date: '2024-10-20',
-      estimated_cost: 2500,
-      assigned_technician: 'Pradeep Silva'
-    },
-    {
-      id: 2,
-      client_name: 'Tech Innovations',
-      client_id: 2,
-      equipment_type: 'Fire Alarm System',
-      equipment_location: 'Server Room - 2nd Floor',
-      request_type: 'Inspection',
-      priority: 'Medium',
-      status: 'In Progress',
-      description: 'Quarterly inspection of addressable fire alarm system',
-      requested_date: '2024-10-18',
-      scheduled_date: '2024-10-24',
-      estimated_cost: 5000,
-      assigned_technician: 'Kumara Perera'
-    },
-    {
-      id: 3,
-      client_name: 'City Mall',
-      client_id: 3,
-      equipment_type: 'Sprinkler System',
-      equipment_location: 'Food Court Area',
-      request_type: 'Repair',
-      priority: 'Urgent',
-      status: 'Open',
-      description: 'Sprinkler head damaged, immediate replacement required',
-      requested_date: '2024-10-22',
-      estimated_cost: 3500
-    },
-    {
-      id: 4,
-      client_name: 'Green Valley Resort',
-      client_id: 4,
-      equipment_type: 'Emergency Lighting',
-      equipment_location: 'Exit Routes - All Floors',
-      request_type: 'Installation',
-      priority: 'Medium',
-      status: 'Completed',
-      description: 'Install LED emergency lighting units at all exit points',
-      requested_date: '2024-10-15',
-      scheduled_date: '2024-10-20',
-      completed_date: '2024-10-22',
-      estimated_cost: 12000,
-      actual_cost: 11500,
-      assigned_technician: 'Nimal Fernando'
-    },
-    {
-      id: 5,
-      client_name: 'Office Complex Pvt Ltd',
-      client_id: 5,
-      equipment_type: 'Fire Door',
-      equipment_location: 'Stairwell B - 3rd Floor',
-      request_type: 'Repair',
-      priority: 'High',
-      status: 'In Progress',
-      description: 'Fire door closer mechanism faulty, not closing properly',
-      requested_date: '2024-10-21',
-      scheduled_date: '2024-10-25',
-      estimated_cost: 1500,
-      assigned_technician: 'Pradeep Silva'
-    }
-  ]);
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
 
-  const [serviceStats] = useState<ServiceRequestStats>({
-    totalRequests: 156,
-    openRequests: 23,
-    inProgressRequests: 8,
-    completedThisMonth: 45,
-    urgentRequests: 3,
-    averageResponseTime: 2.5,
-    customerSatisfaction: 4.6,
-    monthlyRevenue: 385000
+  const [serviceStats, setServiceStats] = useState<ServiceRequestStats>({
+    totalRequests: 0,
+    openRequests: 0,
+    inProgressRequests: 0,
+    completedThisMonth: 0,
+    urgentRequests: 0,
+    averageResponseTime: 0,
+    customerSatisfaction: 0,
+    monthlyRevenue: 0
   });
 
   const requestTypes = ['All', 'Inspection', 'Maintenance', 'Repair', 'Installation', 'Emergency'];
   const priorities = ['All', 'Low', 'Medium', 'High', 'Urgent'];
+
+  // Fetch service requests data (using maintenance tickets API)
+  const fetchServiceRequests = async () => {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.ui('ServiceRequests', 'fetchServiceRequests started');
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+
+      // Fetch maintenance tickets as service requests
+      logApiCall('GET', API_ENDPOINTS.MAINTENANCE_TICKETS.LIST);
+      const response = await fetch(API_ENDPOINTS.MAINTENANCE_TICKETS.LIST, { headers });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch service requests: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      DebugLogger.api('GET', API_ENDPOINTS.MAINTENANCE_TICKETS.LIST, undefined, result, response.status);
+
+      if (result.success) {
+        // Transform maintenance tickets to service requests format
+        const transformedRequests = result.data.map((ticket: any) => ({
+          id: ticket.id,
+          client_name: ticket.client || 'Unknown Client',
+          client_id: ticket.client_id || 0,
+          equipment_type: ticket.equipment_serial || 'Unknown Equipment',
+          equipment_location: 'Location not specified',
+          request_type: ticket.support_type === 'maintenance' ? 'Maintenance' : 'System',
+          priority: ticket.priority === 'low' ? 'Low' : 
+                   ticket.priority === 'normal' ? 'Medium' : 
+                   ticket.priority === 'high' ? 'High' : 'Medium',
+          status: ticket.ticket_status === 'open' ? 'Open' : 
+                 ticket.ticket_status === 'resolved' ? 'Completed' : 'In Progress',
+          description: ticket.issue_description || 'No description provided',
+          requested_date: ticket.created_at ? new Date(ticket.created_at).toISOString().split('T')[0] : '',
+          scheduled_date: ticket.scheduled_date ? new Date(ticket.scheduled_date).toISOString().split('T')[0] : undefined,
+          assigned_technician: ticket.assigned_technician_name,
+          estimated_cost: 0
+        }));
+
+        setServiceRequests(transformedRequests);
+        DebugLogger.log('Service requests loaded successfully', { count: transformedRequests.length }, 'SERVICE_REQUESTS');
+      } else {
+        throw new Error(result.message || 'Failed to load service requests');
+      }
+
+      DebugLogger.performance('Service requests fetch', startTime);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load service requests';
+      DebugLogger.error('Service requests fetch failed', err, { errorMessage });
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch service statistics
+  const fetchServiceStats = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const headers = getAuthHeaders();
+
+      // Fetch KPIs from maintenance tickets
+      logApiCall('GET', API_ENDPOINTS.MAINTENANCE_TICKETS.KPIS);
+      const response = await fetch(API_ENDPOINTS.MAINTENANCE_TICKETS.KPIS, { headers });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setServiceStats({
+            totalRequests: result.data.total_tickets || 0,
+            openRequests: result.data.open_tickets || 0,
+            inProgressRequests: 0, // Not available from current API
+            completedThisMonth: result.data.resolved_tickets || 0,
+            urgentRequests: result.data.high_priority_tickets || 0,
+            averageResponseTime: result.data.avg_resolution_time_hours || 0,
+            customerSatisfaction: 4.5, // Default value
+            monthlyRevenue: 0 // Not available from current API
+          });
+        }
+      }
+    } catch (err) {
+      DebugLogger.error('Failed to fetch service stats', err);
+    }
+  };
+
+  // Initialize data on component mount
+  useEffect(() => {
+    fetchServiceRequests();
+    fetchServiceStats();
+  }, []);
 
   // Filter requests based on search and filters
   const filteredRequests = serviceRequests.filter(request => {

@@ -194,7 +194,8 @@ INSERT INTO public.vendors (
   (2, 3, 'ProGuard Fire Systems',   'Fire Protection Equipment','FS-2018-045', '+94 11 345 6789', '78 Duplication Road',    'Colombo',   'Western Province', '00400', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
   (3, 4, 'FireShield Technologies','Fire Safety Technology',   'FS-2020-089', '+94 81 456 7890', '12 Station Road',        'Kandy',     'Central Province','20000', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
   (4, 9, 'SafeHomes Solutions',     'Home Safety Services',     'FS-2021-123', '+94 71 234 5678', '22 Lake Road',           'Kurunegala','North Western',   '60000', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (5,12, 'SafeHomes Pro',           'Home Safety Consulting',   'FS-2022-456', '+94 71 456 7890', '55 River Road',          'Matara',    'Southern',        '81000', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30');
+  (5,12, 'SafeHomes Pro',           'Home Safety Consulting',   'FS-2022-456', '+94 71 456 7890', '55 River Road',          'Matara',    'Southern',        '81000', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30')
+ON CONFLICT (id) DO NOTHING;
 
 -- --------------------------------------------------------------
 -- 9. clients
