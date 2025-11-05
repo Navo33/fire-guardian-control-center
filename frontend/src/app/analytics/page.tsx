@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RequireRole from '@/components/auth/RequireRole';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -36,6 +36,10 @@ import {
   Area,
   AreaChart
 } from 'recharts';
+
+// PDF Export libraries
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // Types for our analytics data
 interface SystemMetrics {
@@ -153,6 +157,8 @@ export default function SystemAnalyticsPage() {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   // Filter states
   const [filters, setFilters] = useState<AnalyticsFilters>({
@@ -258,27 +264,258 @@ export default function SystemAnalyticsPage() {
     });
   };
 
-  // Export data function
-  const exportData = () => {
+  // Export data function - PDF Export
+  const exportData = async () => {
     if (!analyticsData) return;
     
-    const dataToExport = {
-      generatedAt: new Date().toISOString(),
-      filters: filters,
-      systemMetrics: analyticsData.systemMetrics,
-      vendorMetrics: analyticsData.vendorMetrics,
-      equipmentMetrics: analyticsData.equipmentMetrics,
-      clientMetrics: analyticsData.clientMetrics,
-      timeSeriesData: analyticsData.timeSeriesData
-    };
-
-    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `analytics-report-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    setExportingPDF(true);
+    
+    try {
+      // Create PDF document
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = 210;
+      const pageHeight = 297;
+      
+      // Add header with Fire Guardian branding (using regular text instead of emojis)
+      pdf.setFontSize(20);
+      pdf.setTextColor(220, 38, 38); // Fire Guardian red
+      pdf.text('Fire Guardian Control Center', 20, 25);
+      
+      pdf.setFontSize(16);
+      pdf.setTextColor(25, 39, 52); // Dark blue
+      pdf.text('Analytics & Performance Report', 20, 35);
+      
+      pdf.setFontSize(12);
+      pdf.setTextColor(107, 114, 128); // Gray
+      pdf.text(`Generated: ${new Date().toLocaleString()}`, 20, 45);
+      
+      // Filter information
+      let currentY = 55;
+      if (filters.startDate || filters.endDate || filters.selectedCompanies.length > 0) {
+        pdf.text('Report Filters:', 20, currentY);
+        currentY += 7;
+        if (filters.startDate) {
+          pdf.text(`Start Date: ${filters.startDate}`, 25, currentY);
+          currentY += 7;
+        }
+        if (filters.endDate) {
+          pdf.text(`End Date: ${filters.endDate}`, 25, currentY);
+          currentY += 7;
+        }
+        if (filters.selectedCompanies.length > 0) {
+          pdf.text(`Filtered Companies: ${filters.selectedCompanies.length} selected`, 25, currentY);
+          currentY += 7;
+        }
+        currentY += 10;
+      }
+      
+      // System Metrics Summary
+      pdf.setFontSize(16);
+      pdf.setTextColor(25, 39, 52);
+      pdf.text('System Overview', 20, currentY);
+      currentY += 12;
+      
+      // Create a nice table-like layout for metrics
+      pdf.setFontSize(11);
+      pdf.setTextColor(55, 65, 81);
+      
+      const metrics = analyticsData.systemMetrics;
+      const metricsData = [
+        ['Total Vendors', metrics.totalVendors.toString()],
+        ['Total Clients', metrics.totalClients.toString()],
+        ['Total Equipment', metrics.totalEquipment.toString()],
+        ['Active Assignments', metrics.activeAssignments.toString()],
+        ['Pending Returns', metrics.pendingReturns.toString()],
+        ['Critical Alerts', (metrics.criticalAlerts || 0).toString()]
+      ];
+      
+      metricsData.forEach(([label, value], index) => {
+        const row = Math.floor(index / 2);
+        const col = index % 2;
+        const x = 20 + (col * 85);
+        const y = currentY + (row * 12);
+        
+        pdf.setTextColor(107, 114, 128);
+        pdf.text(label + ':', x, y);
+        pdf.setTextColor(25, 39, 52);
+        pdf.text(value, x + 50, y);
+      });
+      
+      currentY += 50;
+      
+      // Vendor Performance Section
+      pdf.setFontSize(16);
+      pdf.setTextColor(25, 39, 52);
+      pdf.text('Top Performing Vendors', 20, currentY);
+      currentY += 12;
+      
+      // Table headers
+      pdf.setFontSize(10);
+      pdf.setTextColor(107, 114, 128);
+      pdf.text('Company Name', 20, currentY);
+      pdf.text('Equipment', 90, currentY);
+      pdf.text('Clients', 125, currentY);
+      pdf.text('Assignments', 155, currentY);
+      currentY += 8;
+      
+      // Draw a line under headers
+      pdf.setDrawColor(229, 231, 235);
+      pdf.line(20, currentY - 2, 185, currentY - 2);
+      
+      // Vendor data
+      pdf.setFontSize(9);
+      analyticsData.vendorMetrics.slice(0, 10).forEach((vendor, index) => {
+        pdf.setTextColor(55, 65, 81);
+        const name = vendor.companyName.length > 20 ? vendor.companyName.substring(0, 20) + '...' : vendor.companyName;
+        pdf.text(`${index + 1}. ${name}`, 20, currentY);
+        pdf.text(vendor.totalEquipment.toString(), 95, currentY);
+        pdf.text(vendor.totalClients.toString(), 130, currentY);
+        pdf.text(vendor.activeAssignments.toString(), 165, currentY);
+        currentY += 7;
+      });
+      
+      currentY += 15;
+      
+      // Equipment Status Summary
+      if (analyticsData.equipmentMetrics && analyticsData.equipmentMetrics.length > 0) {
+        if (currentY > 240) {
+          pdf.addPage();
+          currentY = 30;
+        }
+        
+        pdf.setFontSize(16);
+        pdf.setTextColor(25, 39, 52);
+        pdf.text('Equipment Status Distribution', 20, currentY);
+        currentY += 12;
+        
+        pdf.setFontSize(10);
+        analyticsData.equipmentMetrics.slice(0, 8).forEach((equipment) => {
+          pdf.setTextColor(107, 114, 128);
+          const name = equipment.equipmentName.length > 25 ? equipment.equipmentName.substring(0, 25) + '...' : equipment.equipmentName;
+          pdf.text(`${name}:`, 20, currentY);
+          pdf.setTextColor(25, 39, 52);
+          pdf.text(`${equipment.totalInstances} units`, 80, currentY);
+          if (equipment.utilizationRate !== undefined) {
+            pdf.text(`(${equipment.utilizationRate.toFixed(1)}% utilized)`, 125, currentY);
+          }
+          currentY += 8;
+        });
+      }
+      
+      // Capture charts if available
+      if (exportRef.current) {
+        try {
+          console.log('Attempting to capture charts...');
+          
+          // Scroll the element into view to ensure it's visible
+          exportRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          
+          // Wait longer for charts to fully render and animations to complete
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          const canvas = await html2canvas(exportRef.current, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: false,
+            backgroundColor: '#f9fafb',
+            logging: false,
+            height: exportRef.current.scrollHeight,
+            width: exportRef.current.scrollWidth,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: exportRef.current.scrollWidth,
+            windowHeight: exportRef.current.scrollHeight,
+            onclone: (clonedDoc: Document) => {
+              // Ensure all SVG elements are properly rendered
+              const svgElements = clonedDoc.querySelectorAll('svg');
+              svgElements.forEach(svg => {
+                svg.style.backgroundColor = 'white';
+              });
+            }
+          });
+          
+          console.log(`Charts captured successfully - Canvas: ${canvas.width}x${canvas.height}`);
+          
+          // Add new page for charts
+          pdf.addPage();
+          
+          pdf.setFontSize(16);
+          pdf.setTextColor(25, 39, 52);
+          pdf.text('Analytics Charts', 20, 25);
+          
+          const imgData = canvas.toDataURL('image/png', 0.95);
+          const imgWidth = 170;
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+          
+          // Add the chart image - split into multiple pages if too tall
+          let remainingHeight = imgHeight;
+          let sourceY = 0;
+          let pageY = 35;
+          
+          while (remainingHeight > 0) {
+            const pageHeight = Math.min(remainingHeight, 240);
+            pdf.addImage(imgData, 'PNG', 20, pageY, imgWidth, pageHeight, undefined, 'FAST', sourceY);
+            
+            remainingHeight -= pageHeight;
+            sourceY += pageHeight * (canvas.height / imgHeight);
+            
+            if (remainingHeight > 0) {
+              pdf.addPage();
+              pageY = 20;
+            }
+          }
+          
+          console.log('Charts added to PDF successfully');
+          
+        } catch (chartError) {
+          console.error('Error capturing charts:', chartError);
+          // Add a note that charts couldn't be captured
+          pdf.addPage();
+          pdf.setFontSize(16);
+          pdf.setTextColor(25, 39, 52);
+          pdf.text('Analytics Charts', 20, 25);
+          pdf.setFontSize(12);
+          pdf.setTextColor(107, 114, 128);
+          pdf.text('Charts could not be captured at this time.', 20, 40);
+          pdf.text('Please view charts in the web interface.', 20, 50);
+          pdf.text(`Error: ${chartError instanceof Error ? chartError.message : 'Unknown error'}`, 20, 60);
+        }
+      } else {
+        console.warn('Chart reference not found');
+        // Add a note about missing charts
+        pdf.addPage();
+        pdf.setFontSize(16);
+        pdf.setTextColor(25, 39, 52);
+        pdf.text('Analytics Charts', 20, 25);
+        pdf.setFontSize(12);
+        pdf.setTextColor(107, 114, 128);
+        pdf.text('Chart container not found.', 20, 40);
+      }
+      
+      // Footer
+      const totalPages = (pdf as any).internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(156, 163, 175);
+        pdf.text(`Fire Guardian Control Center - Page ${i} of ${totalPages}`, 20, 290);
+        pdf.text(`Generated on ${new Date().toLocaleDateString()}`, 150, 290);
+      }
+      
+      // Save the PDF
+      const fileName = `fire-guardian-analytics-report-${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+      
+      // Show success message
+      console.log('PDF report generated successfully!');
+      alert(`PDF report "${fileName}" generated and downloaded successfully!`);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF report. Please try again.');
+    } finally {
+      setExportingPDF(false);
+    }
   };
 
   return (
@@ -299,10 +536,18 @@ export default function SystemAnalyticsPage() {
           <div className="mt-4 sm:mt-0">
             <button
               onClick={exportData}
-              className="btn-primary flex items-center space-x-2"
+              disabled={exportingPDF}
+              className={`btn-primary flex items-center space-x-2 ${exportingPDF ? 'opacity-50 cursor-not-allowed' : 'hover:bg-orange-600'} transition-all duration-200`}
             >
-              <ArrowDownTrayIcon className="h-5 w-5" />
-              <span>Export Report</span>
+              {exportingPDF ? (
+                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <ArrowDownTrayIcon className="h-5 w-5" />
+              )}
+              <span>{exportingPDF ? 'Generating PDF...' : 'Export PDF Report'}</span>
             </button>
           </div>
         </div>
@@ -331,15 +576,19 @@ export default function SystemAnalyticsPage() {
         {!loading && !error && analyticsData && (
           <>
             {/* Filters Panel - Vendor-style Inline Layout */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <div className="flex flex-col lg:flex-row gap-3">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+              <div className="flex flex-col lg:flex-row gap-4">
                 {/* Date Range Filters */}
                 <div className="flex-1 relative">
                   <CalendarIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
                   <input
                     type="date"
                     value={filters.startDate}
-                    onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                    onChange={(e) => {
+                      e.preventDefault();
+                      setFilters(prev => ({ ...prev, startDate: e.target.value }));
+                    }}
+                    onFocus={(e) => e.target.showPicker?.()}
                     className="input-field pl-10"
                     placeholder="Start Date"
                   />
@@ -350,7 +599,11 @@ export default function SystemAnalyticsPage() {
                   <input
                     type="date"
                     value={filters.endDate}
-                    onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                    onChange={(e) => {
+                      e.preventDefault();
+                      setFilters(prev => ({ ...prev, endDate: e.target.value }));
+                    }}
+                    onFocus={(e) => e.target.showPicker?.()}
                     className="input-field pl-10"
                     placeholder="End Date"
                   />
@@ -367,7 +620,7 @@ export default function SystemAnalyticsPage() {
                         selectedCompanies: value ? [parseInt(value)] : []
                       }));
                     }}
-                    className="input-field appearance-none pr-8 min-w-[180px]"
+                    className="input-field appearance-none pr-8 min-w-[200px]"
                   >
                     <option value="">All Companies</option>
                     {analyticsData.companies.map((company: any) => (
@@ -484,15 +737,21 @@ export default function SystemAnalyticsPage() {
           </div>
         </div>
 
-        {/* Time Series Chart */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Activity Trends Over Time</h3>
+        {/* Charts Section for PDF Export */}
+        <div ref={exportRef} className="space-y-8 bg-gray-50 p-6 rounded-2xl" style={{ minHeight: '800px' }}>
+          <div className="text-xs text-gray-500 bg-white px-3 py-1 rounded-full inline-block">
+            Analytics Charts Section
+          </div>
+          
+          {/* Time Series Chart */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+          <h3 className="text-lg font-medium text-gray-900 mb-6">Activity Trends Over Time</h3>
           {analyticsData.timeSeriesData.length > 0 ? (
-            <div className="h-80">
+            <div className="h-96">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
                   data={analyticsData.timeSeriesData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 40 }}
                 >
                   <defs>
                     <linearGradient id="vendorsGradient" x1="0" y1="0" x2="0" y2="1">
@@ -517,6 +776,8 @@ export default function SystemAnalyticsPage() {
                     dataKey="date" 
                     tick={{ fontSize: 11 }}
                     tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    interval="preserveStartEnd"
+                    tickMargin={10}
                   />
                   <YAxis 
                     tick={{ fontSize: 11 }} 
@@ -581,30 +842,31 @@ export default function SystemAnalyticsPage() {
         </div>
 
         {/* Vendor Performance Chart */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Top Vendor Performance</h3>
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+          <h3 className="text-lg font-medium text-gray-900 mb-6">Top Vendor Performance</h3>
           {analyticsData.vendorMetrics.length > 0 ? (
-            <div className="h-80">
+            <div className="h-96">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart 
                   data={analyticsData.vendorMetrics
                     .sort((a: any, b: any) => b.totalEquipment - a.totalEquipment)
                     .slice(0, 8)
                   }
-                  margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                  margin={{ top: 20, right: 30, left: 40, bottom: 120 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis 
                     dataKey="companyName" 
-                    tick={{ fontSize: 10 }}
+                    tick={{ fontSize: 10, textAnchor: 'end' }}
                     angle={-45}
-                    textAnchor="end"
                     height={100}
                     interval={0}
+                    tickMargin={10}
                   />
                   <YAxis 
                     tick={{ fontSize: 12 }} 
                     domain={[0, 'dataMax + 5']}
+                    allowDecimals={false}
                   />
                   <Tooltip 
                     contentStyle={{
@@ -613,8 +875,10 @@ export default function SystemAnalyticsPage() {
                       borderRadius: '8px',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                     }}
+                    formatter={(value: any, name: any) => [value, name]}
+                    labelStyle={{ color: '#374151', fontWeight: 'bold' }}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   <Bar 
                     dataKey="totalEquipment" 
                     fill={COLORS.primary} 
@@ -648,9 +912,9 @@ export default function SystemAnalyticsPage() {
         </div>
 
         {/* System Alerts Overview */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">System Alerts Overview</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+          <h3 className="text-lg font-medium text-gray-900 mb-6">System Alerts Overview</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="text-center p-4 bg-red-50 rounded-lg border border-red-100">
               <div className="text-3xl font-bold" style={{ color: COLORS.danger }}>{analyticsData.systemMetrics?.criticalAlerts || 0}</div>
               <div className="text-sm font-medium text-red-700">Critical Alerts</div>
@@ -666,11 +930,11 @@ export default function SystemAnalyticsPage() {
           </div>
           
           {analyticsData.alertTrends && analyticsData.alertTrends.length > 0 ? (
-            <div className="h-80">
+            <div className="h-96">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
                   data={analyticsData.alertTrends}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 40 }}
                 >
                   <defs>
                     <linearGradient id="criticalGradient" x1="0" y1="0" x2="0" y2="1">
@@ -746,10 +1010,10 @@ export default function SystemAnalyticsPage() {
         </div>
 
         {/* Equipment Status Distribution */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Equipment Status Distribution</h3>
-            <div className="h-64">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+            <h3 className="text-lg font-medium text-gray-900 mb-6">Equipment Status Distribution</h3>
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -761,8 +1025,8 @@ export default function SystemAnalyticsPage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
+                    label={({ name, percent }: any) => `${name}\n${(percent * 100).toFixed(0)}%`}
+                    outerRadius={100}
                     fill="#8884d8"
                     dataKey="value"
                   >
@@ -788,8 +1052,8 @@ export default function SystemAnalyticsPage() {
           </div>
 
           {/* Recent Activity Summary */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Activity Summary</h3>
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+            <h3 className="text-lg font-medium text-gray-900 mb-6">Activity Summary</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between py-2 border-b border-gray-100">
                 <span className="text-sm text-gray-600">Most Active Vendor:</span>
@@ -904,11 +1168,11 @@ export default function SystemAnalyticsPage() {
             </div>
           </div>
         </div>
-          </>
+        </div> {/* Close Charts Section ref wrapper */}
+        </>
         )}
-
-        </div>
-      </DashboardLayout>
+      </div>
+    </DashboardLayout>
     </RequireRole>
   );
 }
