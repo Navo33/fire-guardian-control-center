@@ -8,6 +8,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import { useToast } from '@/components/providers/ToastProvider';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
+import AddEquipmentTypeModal from '@/components/modals/AddEquipmentTypeModal';
 import {
   FireIcon,
   MagnifyingGlassIcon,
@@ -24,17 +25,22 @@ import {
 // Types
 interface EquipmentType {
   id: number;
+  // New formatted fields from SQL query
+  equipment_details: string;
+  category_type: string;
+  code: string;
+  total_active_instances: number;
+  lifespan: string;
+  description: string;
+  specifications: any;
+  // Original fields for compatibility
   equipment_code: string;
   equipment_name: string;
   equipment_type: string;
   manufacturer: string;
   model: string;
-  description?: string;
   default_lifespan_years: number;
-  specifications: any;
-  instance_count: number;
   created_at: string;
-  updated_at: string;
 }
 
 // Main Equipment Management Page
@@ -42,10 +48,12 @@ const EquipmentManagementPage: React.FC = () => {
   const router = useRouter();
   const { showToast } = useToast();
   const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([]);
+  const [stats, setStats] = useState<{ equipment_types: number; total_instances: number; categories: number; avg_lifespan: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Fetch equipment types
   const fetchEquipmentTypes = async () => {
@@ -85,8 +93,32 @@ const EquipmentManagementPage: React.FC = () => {
     }
   };
 
+  // Fetch stats for summary cards
+  const fetchEquipmentStats = async () => {
+    try {
+      const headers = getAuthHeaders();
+      logApiCall('GET', API_ENDPOINTS.EQUIPMENT.STATS);
+      const response = await fetch(API_ENDPOINTS.EQUIPMENT.STATS, { headers });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch equipment stats: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setStats(data.data || null);
+      } else {
+        throw new Error(data.message || 'Failed to fetch equipment stats');
+      }
+    } catch (err) {
+      console.error('Error fetching equipment stats:', err);
+      // keep stats null so UI falls back to local calculation
+    }
+  };
+
   useEffect(() => {
     fetchEquipmentTypes();
+    fetchEquipmentStats();
   }, []);
 
   // Filter equipment types
@@ -118,9 +150,7 @@ const EquipmentManagementPage: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
-            <div className="p-2 bg-red-50 rounded-xl">
-              <FireIcon className="h-6 w-6 text-red-600" />
-            </div>
+              <FireIcon className="h-8 w-8 text-gray-900" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Equipment Management</h1>
               <p className="text-gray-600">Manage your equipment types and create instances for clients</p>
@@ -128,7 +158,7 @@ const EquipmentManagementPage: React.FC = () => {
           </div>
           <div className="flex items-center space-x-3">
             <button
-              onClick={() => {/* TODO: Add create equipment type modal */}}
+              onClick={() => setIsAddModalOpen(true)}
               className="btn-primary flex items-center space-x-2"
             >
               <PlusIcon className="w-5 h-5" />
@@ -146,7 +176,7 @@ const EquipmentManagementPage: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Equipment Types</p>
-                <p className="text-2xl font-bold text-gray-900">{equipmentTypes.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats?.equipment_types ?? equipmentTypes.length}</p>
               </div>
             </div>
           </div>
@@ -159,7 +189,7 @@ const EquipmentManagementPage: React.FC = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Total Instances</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {equipmentTypes.reduce((total, type) => total + (type.instance_count || 0), 0)}
+                  {stats?.total_instances ?? equipmentTypes.reduce((total, type) => total + (type.total_active_instances || 0), 0)}
                 </p>
               </div>
             </div>
@@ -172,7 +202,7 @@ const EquipmentManagementPage: React.FC = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Categories</p>
-                <p className="text-2xl font-bold text-gray-900">{categories.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats?.categories ?? categories.length}</p>
               </div>
             </div>
           </div>
@@ -185,10 +215,12 @@ const EquipmentManagementPage: React.FC = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Avg Lifespan</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {equipmentTypes.length > 0 
-                    ? Math.round(equipmentTypes.reduce((total, type) => total + (type.default_lifespan_years || 0), 0) / equipmentTypes.length)
-                    : 0
-                  } years
+                  {typeof stats?.avg_lifespan === 'number'
+                    ? `${stats.avg_lifespan} years`
+                    : (equipmentTypes.length > 0 
+                        ? `${Math.round(equipmentTypes.reduce((total, type) => total + (type.default_lifespan_years || 0), 0) / equipmentTypes.length)} years`
+                        : '0 years')
+                  }
                 </p>
               </div>
             </div>
@@ -299,11 +331,8 @@ const EquipmentManagementPage: React.FC = () => {
                             </div>
                           </div>
                           <div>
-                            <div className="text-sm font-semibold text-gray-900">
-                              {equipment.equipment_name}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {equipment.manufacturer} - {equipment.model}
+                            <div className="text-sm font-semibold text-gray-900 whitespace-pre-line">
+                              {equipment.equipment_details}
                             </div>
                           </div>
                         </div>
@@ -313,10 +342,10 @@ const EquipmentManagementPage: React.FC = () => {
                       <td className="px-6 py-4">
                         <div className="space-y-1.5">
                           <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {equipment.equipment_type}
+                            {equipment.category_type}
                           </span>
                           <div className="text-xs text-gray-500">
-                            Code: {equipment.equipment_code}
+                            {equipment.code}
                           </div>
                         </div>
                       </td>
@@ -325,12 +354,12 @@ const EquipmentManagementPage: React.FC = () => {
                       <td className="px-6 py-4">
                         <div className="space-y-1">
                           <div className="flex items-center text-xs text-gray-600">
-                            <span className="font-medium mr-1">{equipment.instance_count || 0}</span>
-                            <span className="text-gray-500">Total</span>
+                            <span className="font-medium mr-1">{equipment.total_active_instances}</span>
+                            <span className="text-gray-500">Total Active</span>
                           </div>
                           <div className="flex items-center text-xs text-green-600">
                             <FireIcon className="h-3 w-3 mr-1" />
-                            <span className="font-medium">Active Instances</span>
+                            <span className="font-medium">Instances</span>
                           </div>
                         </div>
                       </td>
@@ -339,10 +368,10 @@ const EquipmentManagementPage: React.FC = () => {
                       <td className="px-6 py-4">
                         <div className="space-y-0.5">
                           <div className="text-xs text-gray-600">
-                            <span className="font-medium">Lifespan:</span> {equipment.default_lifespan_years} years
+                            {equipment.lifespan}
                           </div>
                           <div className="text-xs text-gray-500 max-w-xs truncate">
-                            {equipment.description || 'No description available'}
+                            {equipment.description}
                           </div>
                         </div>
                       </td>
@@ -384,6 +413,17 @@ const EquipmentManagementPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Add Equipment Type Modal */}
+      <AddEquipmentTypeModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSuccess={() => {
+          setIsAddModalOpen(false);
+          fetchEquipmentTypes(); // Refresh the list
+          fetchEquipmentStats(); // Refresh the stats
+        }}
+      />
     </DashboardLayout>
     </RequireRole>
   );

@@ -98,6 +98,7 @@ temp/
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
 backend/DATABASE_DEPLOYMENT_GUIDE.md
 backend/DEPLOYMENT_MIGRATION_COMPLETE.md
 backend/DATABASE_SCHEMA_OPTIMIZATION.md
@@ -106,14 +107,8 @@ PROFILE_MANAGEMENT_TEST_PLAN.md
 REFACTORING_STATUS.md
 URL_REFACTORING_PLAN.md
 URL_REFACTORING_COMPLETE.md
-backend/docs/API_ENDPOINTS.md
-backend/docs/API_TESTING_REFERENCE.md
-backend/docs/Fire-Guardian-API.postman_collection.json
-backend/docs/POSTMAN_GUIDE.md
-backend/src/server.ts
 CONSISTENCY_UPDATE_SUMMARY.md
 VENDOR_PATTERN_APPLIED.md
-frontend/docs/error-loading-consistency.md
-frontend/docs/toast-notification-system.md
-frontend/docs/toast-modal-integration-summary.md
-frontend/docs/toast-modal-usage.md
+backend/docs/
+frontend/docs/
+documentation/

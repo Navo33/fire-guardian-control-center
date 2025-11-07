@@ -6,6 +6,7 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import AssignEquipmentModal from '@/components/modals/AssignEquipmentModal';
 import { useToast } from '@/components/providers/ToastProvider';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import { 
@@ -112,6 +113,7 @@ export default function ClientDetailPage() {
     zip_code: '',
     country: ''
   });
+  const [isAssignEquipmentModalOpen, setIsAssignEquipmentModalOpen] = useState(false);
 
   // Fetch client details
   const fetchClientDetails = async () => {
@@ -369,19 +371,20 @@ export default function ClientDetailPage() {
           
           <div className="flex items-center space-x-3">
             <button
+              onClick={() => setIsAssignEquipmentModalOpen(true)}
+              className="btn-primary flex items-center space-x-2"
+            >
+              <WrenchScrewdriverIcon className="h-4 w-4" />
+              <span>Assign Equipment</span>
+            </button>
+            <button
               onClick={() => setIsEditing(!isEditing)}
               className="btn-secondary flex items-center space-x-2"
             >
               <PencilIcon className="h-4 w-4" />
               <span>{isEditing ? 'Cancel' : 'Edit'}</span>
             </button>
-            <Link
-              href={`/maintenance-tickets/create?client_id=${client.id}`}
-              className="btn-primary flex items-center space-x-2"
-            >
-              <WrenchScrewdriverIcon className="h-4 w-4" />
-              <span>Create Ticket</span>
-            </Link>
+            
             <button
               onClick={handleDeleteClient}
               className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-full hover:bg-red-100 transition-colors"
@@ -770,13 +773,7 @@ export default function ClientDetailPage() {
                   <h3 className="text-lg font-medium text-gray-900">
                     Equipment ({equipment.length})
                   </h3>
-                  <Link
-                    href={`/equipment/assign?client_id=${client.id}`}
-                    className="btn-primary flex items-center space-x-2"
-                  >
-                    <FireIcon className="h-4 w-4" />
-                    <span>Assign Equipment</span>
-                  </Link>
+                  
                 </div>
                 
                 {equipment.length > 0 ? (
@@ -986,6 +983,19 @@ export default function ClientDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Assign Equipment Modal */}
+      <AssignEquipmentModal
+        isOpen={isAssignEquipmentModalOpen}
+        onClose={() => setIsAssignEquipmentModalOpen(false)}
+        onSuccess={() => {
+          setIsAssignEquipmentModalOpen(false);
+          fetchClientDetails(); // Refresh client data
+          fetchClientEquipment(); // Refresh equipment data
+        }}
+        clientId={clientId}
+        clientName={client?.company_name || 'Client'}
+      />
     </DashboardLayout>
   );
 }
