@@ -450,30 +450,42 @@ export class EquipmentRepository {
 
     try {
       const query = `
-        INSERT INTO equipment_instance (
-          equipment_id, serial_number, vendor_id, status, purchase_date, 
-          warranty_expiry, expiry_date, next_maintenance_date, 
-          maintenance_interval_days, location, notes, created_at, updated_at
+        INSERT INTO public.equipment_instance (
+          equipment_id,
+          serial_number,
+          vendor_id,
+          purchase_date,
+          warranty_expiry,
+          location,
+          status,
+          maintenance_interval_days
         ) VALUES (
-          $1, $2, $3, 'available', $4, 
-          $5, 
-          $4::date + (SELECT default_lifespan_years * INTERVAL '1 year' FROM equipment WHERE id = $1),
-          $4::date + ($6 * INTERVAL '1 day'), 
-          $6, $7, $8, 
-          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          $1,                              -- equipment.id
+          $2,                              -- serial_number
+          $3,                              -- vendor.id
+          $4::date,                        -- purchase_date
+          $5::date,                        -- warranty_expiry
+          $6,                              -- location
+          'available',                     -- status (default)
+          $7                               -- maintenance_interval_days
         )
-        RETURNING id, serial_number
+        RETURNING 
+          id,
+          serial_number,
+          status,
+          expiry_date,                     -- auto-calculated by trigger
+          next_maintenance_date,           -- auto-set
+          compliance_status
       `;
 
       const queryParams = [
-        data.equipment_id,
-        data.serial_number,
-        data.vendor_id,
-        data.purchase_date,
-        data.warranty_expiry || null,
-        data.maintenance_interval_days,
-        data.location || null,
-        data.notes || null
+        data.equipment_id,                // $1
+        data.serial_number,               // $2
+        data.vendor_id,                   // $3
+        data.purchase_date,               // $4
+        data.warranty_expiry || null,     // $5
+        data.location || null,            // $6
+        data.maintenance_interval_days || 365  // $7
       ];
 
       DebugLogger.database('Add Equipment Instance Query', query);

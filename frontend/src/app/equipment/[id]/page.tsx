@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import RequireRole from '@/components/auth/RequireRole';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import CreateInstanceModal from '@/components/modals/CreateInstanceModal';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall, API_BASE_URL } from '@/config/api';
 import DebugLogger from '@/utils/DebugLogger';
 import { 
@@ -723,6 +724,20 @@ export default function EquipmentDetailsPage() {
             </div>
           </div>
         </div>
+
+        {/* Create Instance Modal */}
+        {equipmentType && (
+          <CreateInstanceModal
+            isOpen={isCreateInstanceModalOpen}
+            onClose={() => setIsCreateInstanceModalOpen(false)}
+            onSuccess={() => {
+              setIsCreateInstanceModalOpen(false);
+              fetchEquipmentTypeDetails(); // Refresh the data
+            }}
+            equipmentId={equipmentId}
+            equipmentName={equipmentType.equipment_name}
+          />
+        )}
       </DashboardLayout>
     </RequireRole>
   );
