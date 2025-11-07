@@ -12,50 +12,82 @@ export interface ClientListItem {
   business_type: string;
   status: 'active' | 'inactive' | 'pending';
   primary_phone: string;
+  contact_name: string;
   address: string;
   email: string;
+  phone: string;
   created_at: string;
+  equipment_count: number;
+  last_service_date: string | null;
 }
 
 export interface ClientDetail {
   id: number;
+  // User fields
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  email: string;
+  phone: string;
+  last_login: string | null;
+  is_active: boolean;
+  // Client fields
   company_name: string;
   business_type: string;
   status: 'active' | 'inactive' | 'pending';
   primary_phone: string;
-  email: string;
   street_address: string;
   city: string;
+  state: string;
   zip_code: string;
   country: string;
   created_at: string;
   created_by_vendor: string;
+  // Equipment metrics
+  equipment_count: number;
   total_equipment: number;
   compliant_equipment: number;
   expired_equipment: number;
   overdue_equipment: number;
   due_soon_equipment: number;
+  compliance_score: number;
   compliance_percentage: number;
+  // Maintenance metrics
+  last_service_date: string | null;
+  total_maintenance_requests: number;
+  pending_requests: number;
+  vendor?: {
+    id: number;
+    display_name: string;
+    company_name: string;
+    email: string;
+  };
 }
 
 export interface ClientEquipment {
   id: number;
-  serial_number: string;
   equipment_name: string;
   equipment_type: string;
-  compliance_status: string;
-  next_maintenance_date: string | null;
+  serial_number: string;
+  model: string;
+  status: 'active' | 'maintenance' | 'retired';
+  condition_rating: number;
+  last_inspection_date: string | null;
+  next_inspection_date: string | null;
+  assigned_date: string;
 }
 
 export interface ClientMaintenanceHistory {
   id: number;
   ticket_number: string;
-  equipment_serial: string;
-  issue_description: string;
-  ticket_status: string;
-  priority: string;
+  service_type: string;
+  description: string;
+  status: 'open' | 'in_progress' | 'completed' | 'cancelled';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
   scheduled_date: string | null;
-  created_at: string;
+  completed_date: string | null;
+  technician_name: string | null;
+  cost: number | null;
 }
 
 export interface CreateClientData {
@@ -170,7 +202,7 @@ export class ClientRepository {
     const params: any[] = [vendorId];
     let paramIndex = 2;
 
-    if (status) {
+    if (status && status !== 'all') {
       conditions.push(`c.status = $${paramIndex}`);
       params.push(status);
       paramIndex++;
@@ -191,7 +223,7 @@ export class ClientRepository {
       JOIN "user" u ON c.user_id = u.id
       WHERE ${whereClause}
     `;
-    const countResult = await this.pool.query(countQuery, params.slice(0, paramIndex - 1));
+    const countResult = await this.pool.query(countQuery, params);
     const totalCount = parseInt(countResult.rows[0].total);
 
     // Get paginated results
@@ -202,9 +234,19 @@ export class ClientRepository {
         c.business_type,
         c.status,
         c.primary_phone,
+        CONCAT(u.first_name, ' ', u.last_name) AS contact_name,
         CONCAT(c.street_address, ', ', c.city, ', ', c.zip_code) AS address,
         u.email,
-        c.created_at
+        u.phone,
+        c.created_at,
+        -- Equipment count
+        (SELECT COUNT(*) 
+         FROM equipment_instance ei 
+         WHERE ei.assigned_to = c.id AND ei.deleted_at IS NULL) AS equipment_count,
+        -- Last service date
+        (SELECT MAX(mt.resolved_at) 
+         FROM maintenance_ticket mt 
+         WHERE mt.client_id = c.id AND mt.ticket_status = 'resolved') AS last_service_date
       FROM clients c
       JOIN "user" u ON c.user_id = u.id
       WHERE ${whereClause}
@@ -212,8 +254,9 @@ export class ClientRepository {
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 
-    params.push(limit, offset);
-    const dataResult = await this.pool.query(dataQuery, params);
+    // Add limit and offset to params
+    const dataParams = [...params, limit, offset];
+    const dataResult = await this.pool.query(dataQuery, dataParams);
 
     const totalPages = Math.ceil(totalCount / limit);
     const pagination: PaginationInfo = {
@@ -238,13 +281,25 @@ export class ClientRepository {
     const query = `
       SELECT 
         c.id, c.company_name, c.business_type, c.status, c.primary_phone,
-        u.email, c.street_address, c.city, c.zip_code, c.country, 
+        -- User details
+        u.first_name, u.last_name, u.display_name, u.email, u.phone, u.last_login,
+        -- Client address
+        c.street_address, c.city, c.state, c.zip_code, c.country, 
         c.created_at, v.company_name AS created_by_vendor,
+        -- User active status (using opposite of deleted_at)
+        CASE WHEN u.deleted_at IS NULL THEN true ELSE false END AS is_active,
+        -- Vendor details
+        v.id AS vendor_id,
+        vu.email AS vendor_email,
+        CONCAT(vu.first_name, ' ', vu.last_name) AS vendor_display_name,
+        v.company_name AS vendor_company_name,
+        -- Equipment counts
         (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.deleted_at IS NULL) AS total_equipment,
         (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.compliance_status = 'compliant' AND ei.deleted_at IS NULL) AS compliant_equipment,
         (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.compliance_status = 'expired' AND ei.deleted_at IS NULL) AS expired_equipment,
         (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.compliance_status = 'overdue' AND ei.deleted_at IS NULL) AS overdue_equipment,
         (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.compliance_status = 'due_soon' AND ei.deleted_at IS NULL) AS due_soon_equipment,
+        -- Compliance percentage
         (SELECT 
           COALESCE(
             ROUND(
@@ -255,17 +310,80 @@ export class ClientRepository {
             0
           )
          FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.deleted_at IS NULL
-        ) AS compliance_percentage
+        ) AS compliance_percentage,
+        -- Maintenance statistics
+        (SELECT MAX(mt.resolved_at) 
+         FROM maintenance_ticket mt 
+         WHERE mt.client_id = c.id AND mt.ticket_status = 'resolved') AS last_service_date,
+        (SELECT COUNT(*) 
+         FROM maintenance_ticket mt 
+         WHERE mt.client_id = c.id) AS total_maintenance_requests,
+        (SELECT COUNT(*) 
+         FROM maintenance_ticket mt 
+         WHERE mt.client_id = c.id AND mt.ticket_status IN ('open', 'in_progress')) AS pending_requests
       FROM clients c
       JOIN "user" u ON c.user_id = u.id
       JOIN vendors v ON c.created_by_vendor_id = v.id
+      JOIN "user" vu ON v.user_id = vu.id
       WHERE c.id = $1
       AND c.created_by_vendor_id = $2
       AND u.deleted_at IS NULL
+      AND vu.deleted_at IS NULL
     `;
 
     const result = await this.pool.query(query, [clientId, vendorId]);
-    return result.rows[0] || null;
+    
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    
+    // Transform the result to include all required fields
+    const clientDetail: ClientDetail = {
+      id: row.id,
+      // User fields
+      first_name: row.first_name,
+      last_name: row.last_name,
+      display_name: row.display_name,
+      email: row.email,
+      phone: row.phone,
+      last_login: row.last_login,
+      is_active: row.is_active,
+      // Client fields
+      company_name: row.company_name,
+      business_type: row.business_type,
+      status: row.status,
+      primary_phone: row.primary_phone,
+      street_address: row.street_address,
+      city: row.city,
+      state: row.state,
+      zip_code: row.zip_code,
+      country: row.country,
+      created_at: row.created_at,
+      created_by_vendor: row.created_by_vendor,
+      // Equipment metrics
+      equipment_count: parseInt(row.total_equipment) || 0,
+      total_equipment: parseInt(row.total_equipment) || 0,
+      compliant_equipment: parseInt(row.compliant_equipment) || 0,
+      expired_equipment: parseInt(row.expired_equipment) || 0,
+      overdue_equipment: parseInt(row.overdue_equipment) || 0,
+      due_soon_equipment: parseInt(row.due_soon_equipment) || 0,
+      compliance_score: parseFloat(row.compliance_percentage) || 0,
+      compliance_percentage: parseFloat(row.compliance_percentage) || 0,
+      // Maintenance metrics
+      last_service_date: row.last_service_date,
+      total_maintenance_requests: parseInt(row.total_maintenance_requests) || 0,
+      pending_requests: parseInt(row.pending_requests) || 0,
+      vendor: {
+        id: row.vendor_id,
+        display_name: row.vendor_display_name,
+        company_name: row.vendor_company_name,
+        email: row.vendor_email
+      }
+    };
+
+    return clientDetail;
   }
 
   /**
@@ -275,11 +393,15 @@ export class ClientRepository {
     const query = `
       SELECT 
         ei.id,
-        ei.serial_number, 
-        e.equipment_name, 
-        e.equipment_type, 
-        ei.compliance_status, 
-        ei.next_maintenance_date
+        e.equipment_name,
+        e.equipment_type,
+        ei.serial_number,
+        e.model,
+        ei.status,
+        ei.condition_rating,
+        ei.last_maintenance_date AS last_inspection_date,
+        ei.next_maintenance_date AS next_inspection_date,
+        ei.assigned_at AS assigned_date
       FROM equipment_instance ei
       JOIN equipment e ON ei.equipment_id = e.id
       WHERE ei.assigned_to = $1
@@ -299,15 +421,18 @@ export class ClientRepository {
     const query = `
       SELECT 
         mt.id,
-        mt.ticket_number, 
-        COALESCE(ei.serial_number, 'N/A') AS equipment_serial,
-        mt.issue_description, 
-        mt.ticket_status, 
-        mt.priority, 
+        mt.ticket_number,
+        mt.support_type AS service_type,
+        mt.issue_description AS description,
+        mt.ticket_status AS status,
+        mt.priority,
         mt.scheduled_date,
-        mt.created_at
+        mt.resolved_at AS completed_date,
+        CONCAT(u.first_name, ' ', u.last_name) AS technician_name,
+        mt.actual_hours AS cost
       FROM maintenance_ticket mt
       LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
+      LEFT JOIN "user" u ON mt.assigned_technician = u.id
       WHERE mt.client_id = $1
       AND mt.vendor_id = $2
       ORDER BY mt.created_at DESC

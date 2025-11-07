@@ -455,6 +455,7 @@ export default function ClientDetailPage() {
             <nav className="flex space-x-8 px-6">
               {[
                 { id: 'overview', name: 'Overview', icon: UserIcon },
+                { id: 'vendor', name: 'Vendor Details', icon: BuildingOfficeIcon },
                 { id: 'equipment', name: 'Equipment', icon: FireIcon },
                 { id: 'maintenance', name: 'Maintenance History', icon: WrenchScrewdriverIcon }
               ].map((tab) => (
@@ -673,6 +674,92 @@ export default function ClientDetailPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Vendor Details Tab */}
+            {activeTab === 'vendor' && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-6 flex items-center">
+                  <BuildingOfficeIcon className="h-5 w-5 text-red-600 mr-2" />
+                  Vendor Information
+                </h3>
+                
+                {client.vendor ? (
+                  <div className="bg-gray-50 rounded-lg p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Vendor Company
+                        </label>
+                        <p className="text-sm text-gray-900 font-medium">{client.vendor.company_name}</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Contact Person
+                        </label>
+                        <p className="text-sm text-gray-900">{client.vendor.display_name}</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Email
+                        </label>
+                        <p className="text-sm text-gray-900">
+                          <a 
+                            href={`mailto:${client.vendor.email}`}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            {client.vendor.email}
+                          </a>
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Vendor ID
+                        </label>
+                        <p className="text-sm text-gray-900">#{client.vendor.id}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <div className="flex items-center space-x-4">
+                        <Link
+                          href={`/vendors/${client.vendor.id}`}
+                          className="btn-primary flex items-center space-x-2"
+                        >
+                          <UserGroupIcon className="h-4 w-4" />
+                          <span>View Vendor Profile</span>
+                        </Link>
+                        
+                        <Link
+                          href={`/vendors/${client.vendor.id}/contact`}
+                          className="btn-secondary flex items-center space-x-2"
+                        >
+                          <EnvelopeIcon className="h-4 w-4" />
+                          <span>Contact Vendor</span>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <BuildingOfficeIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h4 className="text-lg font-medium text-gray-900 mb-2">No Vendor Assigned</h4>
+                    <p className="text-sm text-gray-500 mb-4">
+                      This client is not currently assigned to any vendor.
+                    </p>
+                    <Link
+                      href={`/clients/${client.id}/assign-vendor`}
+                      className="inline-flex items-center text-red-600 hover:text-red-800 font-medium"
+                    >
+                      <span>Assign Vendor</span>
+                      <span className="ml-1">→</span>
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 

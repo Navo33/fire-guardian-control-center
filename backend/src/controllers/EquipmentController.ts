@@ -37,7 +37,7 @@ export class EquipmentController extends BaseController {
         return ApiResponseUtil.notFound(res, 'Vendor profile not found');
       }
 
-      const { page = '1', limit = '25', status, compliance_status, search } = req.query;
+      const { page = '1', limit = '25', status, compliance_status, search, equipment_type_id } = req.query;
 
       const pagination: PaginationQuery = {
         page: parseInt(page as string),
@@ -47,7 +47,8 @@ export class EquipmentController extends BaseController {
       const filters: EquipmentFilters = {
         status: status as string,
         compliance_status: compliance_status as string,
-        search: search as string
+        search: search as string,
+        equipment_type_id: equipment_type_id ? parseInt(equipment_type_id as string) : undefined
       };
 
       DebugLogger.log('Fetching equipment list', { vendorId, pagination, filters }, 'EQUIPMENT');
@@ -93,7 +94,7 @@ export class EquipmentController extends BaseController {
 
   /**
    * GET /api/equipment/types
-   * Get equipment types for Add Equipment modal
+   * Get equipment types catalog with filtering and instance counts
    */
   getEquipmentTypes = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!this.requireAuth(req, res)) return;
@@ -110,16 +111,29 @@ export class EquipmentController extends BaseController {
         return ApiResponseUtil.forbidden(res, 'Access denied. Vendor access required.');
       }
 
-      DebugLogger.log('Fetching equipment types', { userId }, 'EQUIPMENT');
+      // Get vendor ID from user ID
+      const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+      if (!vendorId) {
+        return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+      }
 
-      const equipmentTypes = await EquipmentRepository.getEquipmentTypes();
+      const { search, category } = req.query;
+      const filters = {
+        search: search as string,
+        category: category as string
+      };
+
+      DebugLogger.log('Fetching equipment types', { userId, vendorId, filters }, 'EQUIPMENT');
+
+      const equipmentTypes = await EquipmentRepository.getEquipmentTypes(vendorId, filters);
 
       DebugLogger.log('Equipment types retrieved successfully', { 
-        userId, 
+        userId,
+        vendorId,
         count: equipmentTypes.length 
       }, 'EQUIPMENT');
       
-      this.logAction('EQUIPMENT_TYPES_ACCESSED', userId);
+      this.logAction('EQUIPMENT_TYPES_ACCESSED', userId, { vendorId, filters });
 
       DebugLogger.performance('Equipment types fetch', startTime, { count: equipmentTypes.length });
       ApiResponseUtil.success(res, equipmentTypes, 'Equipment types retrieved successfully');

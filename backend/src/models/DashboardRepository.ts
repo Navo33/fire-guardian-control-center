@@ -773,11 +773,11 @@ export class DashboardRepository {
           v.company_name,
           u.display_name,
           u.avatar_url,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1) AS total_equipment,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'compliant') AS compliant_equipment,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'expired') AS expired_equipment,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'overdue') AS overdue_equipment,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'due_soon') AS due_soon_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND deleted_at IS NULL) AS total_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'compliant' AND deleted_at IS NULL) AS compliant_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'expired' AND deleted_at IS NULL) AS expired_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'overdue' AND deleted_at IS NULL) AS overdue_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'due_soon' AND deleted_at IS NULL) AS due_soon_equipment,
           (SELECT COUNT(*) FROM clients WHERE created_by_vendor_id = $1 AND status = 'active') AS active_clients,
           (SELECT COUNT(*) FROM maintenance_ticket WHERE vendor_id = $1 AND ticket_status = 'open') AS open_tickets
         FROM vendors v
