@@ -33,6 +33,31 @@ router.get('/', equipmentController.getEquipmentList);
 router.get('/types', equipmentController.getEquipmentTypes);
 
 /**
+ * @route POST /api/equipment/types
+ * @desc Create new equipment type
+ * @access Vendor/Admin
+ * @body equipment_code - Unique equipment code
+ * @body equipment_name - Name of the equipment
+ * @body equipment_type - Category type
+ * @body manufacturer - Equipment manufacturer
+ * @body model - Equipment model
+ * @body description - Optional description
+ * @body specifications - JSON specifications object
+ * @body weight_kg - Weight in kilograms
+ * @body dimensions - Physical dimensions
+ * @body warranty_years - Warranty period
+ * @body default_lifespan_years - Default lifespan
+ */
+router.post('/types', equipmentController.createEquipmentType);
+
+/**
+ * @route GET /api/equipment/stats
+ * @desc Get aggregated equipment statistics for management page
+ * @access Vendor/Admin
+ */
+router.get('/stats', equipmentController.getEquipmentStats);
+
+/**
  * @route GET /api/equipment/clients
  * @desc Get clients for assignment modal
  * @access Vendor
@@ -55,9 +80,9 @@ router.post('/', equipmentController.addEquipmentInstance);
 
 /**
  * @route GET /api/equipment/:id
- * @desc Get equipment instance details
- * @access Vendor
- * @param id - Equipment instance ID
+ * @desc Get equipment type details with comprehensive metrics
+ * @access Vendor/Admin
+ * @param id - Equipment type ID
  */
 router.get('/:id', equipmentController.getEquipmentDetails);
 

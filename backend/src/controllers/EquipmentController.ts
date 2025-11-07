@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { BaseController } from './BaseController';
-import { EquipmentRepository, EquipmentFilters, CreateEquipmentInstanceData, UpdateEquipmentInstanceData, AssignEquipmentData } from '../models/EquipmentRepository';
+import { EquipmentRepository, EquipmentFilters, CreateEquipmentInstanceData, UpdateEquipmentInstanceData, AssignEquipmentData, CreateEquipmentTypeData } from '../models/EquipmentRepository';
 import { DashboardRepository } from '../models/DashboardRepository';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { DebugLogger } from '../utils/DebugLogger';
@@ -32,7 +32,7 @@ export class EquipmentController extends BaseController {
       }
 
       // Get vendor ID from user ID
-      const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+  const vendorId = (await DashboardRepository.getVendorIdFromUserId(userId)) ?? undefined;
       if (!vendorId) {
         return ApiResponseUtil.notFound(res, 'Vendor profile not found');
       }
@@ -148,6 +148,46 @@ export class EquipmentController extends BaseController {
   });
 
   /**
+   * GET /api/equipment/stats
+   * Get aggregated equipment statistics for the management page
+   */
+  getEquipmentStats = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.api('GET', '/api/equipment/stats', req.query);
+
+    try {
+      const userId = req.user!.userId;
+      const userType = req.user!.user_type;
+
+      if (userType !== 'vendor' && userType !== 'admin') {
+        DebugLogger.error('Unauthorized user attempted to access equipment stats', { userId, userType });
+        return ApiResponseUtil.forbidden(res, 'Access denied. Vendor or Admin access required.');
+      }
+
+      // vendorId is optional for this aggregate; we keep signature for future vendor-scoped stats
+      const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+
+      DebugLogger.log('Fetching equipment stats', { userId, vendorId }, 'EQUIPMENT');
+
+      const stats = await EquipmentRepository.getEquipmentStats(vendorId || undefined);
+
+      this.logAction('EQUIPMENT_STATS_ACCESSED', userId, { vendorId });
+
+      DebugLogger.performance('Equipment stats fetch', startTime, { stats });
+      ApiResponseUtil.success(res, stats, 'Equipment statistics retrieved successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error getting equipment stats', error, { userId: req.user?.userId });
+      this.logAction('EQUIPMENT_STATS_ERROR', req.user?.userId, { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
    * POST /api/equipment
    * Add new equipment instance
    */
@@ -234,7 +274,7 @@ export class EquipmentController extends BaseController {
 
   /**
    * GET /api/equipment/:id
-   * Get equipment instance details
+   * Get equipment type details with comprehensive metrics and instance data
    */
   getEquipmentDetails = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!this.requireAuth(req, res)) return;
@@ -245,45 +285,42 @@ export class EquipmentController extends BaseController {
     try {
       const userId = req.user!.userId;
       const userType = req.user!.user_type;
-      const equipmentInstanceId = parseInt(req.params.id);
+      const equipmentId = parseInt(req.params.id);
 
-      if (userType !== 'vendor') {
-        DebugLogger.error('Non-vendor user attempted to access equipment details', { userId, userType });
-        return ApiResponseUtil.forbidden(res, 'Access denied. Vendor access required.');
+      if (userType !== 'vendor' && userType !== 'admin') {
+        DebugLogger.error('Unauthorized user attempted to access equipment details', { userId, userType });
+        return ApiResponseUtil.forbidden(res, 'Access denied. Vendor or Admin access required.');
       }
 
-      if (isNaN(equipmentInstanceId)) {
-        return ApiResponseUtil.badRequest(res, 'Invalid equipment instance ID');
+      if (isNaN(equipmentId)) {
+        return ApiResponseUtil.badRequest(res, 'Invalid equipment ID');
       }
 
-      // Get vendor ID from user ID
-      const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
-      if (!vendorId) {
-        return ApiResponseUtil.notFound(res, 'Vendor profile not found');
-      }
+      // Get vendor ID from user ID (optional for admins)
+      const vendorId = (await DashboardRepository.getVendorIdFromUserId(userId)) ?? undefined;
 
-      DebugLogger.log('Fetching equipment details', { vendorId, equipmentInstanceId }, 'EQUIPMENT');
+      DebugLogger.log('Fetching equipment type details', { vendorId, equipmentId }, 'EQUIPMENT');
 
-      const equipmentDetails = await EquipmentRepository.getEquipmentInstanceDetails(equipmentInstanceId, vendorId);
+      const equipmentDetails = await EquipmentRepository.getEquipmentTypeDetails(equipmentId, vendorId);
 
       if (!equipmentDetails) {
-        return ApiResponseUtil.notFound(res, 'Equipment instance not found');
+        return ApiResponseUtil.notFound(res, 'Equipment type not found');
       }
 
-      DebugLogger.log('Equipment details retrieved successfully', { 
+      DebugLogger.log('Equipment type details retrieved successfully', { 
         vendorId, 
-        equipmentInstanceId,
-        serialNumber: equipmentDetails.serial_number
+        equipmentId,
+        name: equipmentDetails.name
       }, 'EQUIPMENT');
       
-      this.logAction('EQUIPMENT_DETAILS_ACCESSED', userId, { vendorId, equipmentInstanceId });
+      this.logAction('EQUIPMENT_TYPE_DETAILS_ACCESSED', userId, { vendorId, equipmentId });
 
-      DebugLogger.performance('Equipment details fetch', startTime, { vendorId, equipmentInstanceId });
-      ApiResponseUtil.success(res, equipmentDetails, 'Equipment details retrieved successfully');
+      DebugLogger.performance('Equipment type details fetch', startTime, { vendorId, equipmentId });
+      ApiResponseUtil.success(res, equipmentDetails, 'Equipment type details retrieved successfully');
 
     } catch (error) {
-      DebugLogger.error('Error getting equipment details', error, { userId: req.user?.userId });
-      this.logAction('EQUIPMENT_DETAILS_ERROR', req.user?.userId, { 
+      DebugLogger.error('Error getting equipment type details', error, { userId: req.user?.userId });
+      this.logAction('EQUIPMENT_TYPE_DETAILS_ERROR', req.user?.userId, { 
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       return ApiResponseUtil.internalError(res);
@@ -673,6 +710,92 @@ export class EquipmentController extends BaseController {
       this.logAction('EQUIPMENT_CLIENTS_ERROR', req.user?.userId, { 
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * POST /api/equipment/types
+   * Create new equipment type
+   */
+  createEquipmentType = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.api('POST', '/api/equipment/types', req.body);
+
+    try {
+      const userId = req.user!.userId;
+      const userType = req.user!.user_type;
+
+      if (userType !== 'vendor' && userType !== 'admin') {
+        DebugLogger.error('Unauthorized user attempted to create equipment type', { userId, userType });
+        return ApiResponseUtil.forbidden(res, 'Access denied. Vendor or Admin access required.');
+      }
+
+      const {
+        equipment_code,
+        equipment_name,
+        description,
+        equipment_type,
+        manufacturer,
+        model,
+        specifications,
+        weight_kg,
+        dimensions,
+        warranty_years,
+        default_lifespan_years
+      } = req.body;
+
+      // Validate required fields
+      if (!equipment_code || !equipment_name || !equipment_type || !manufacturer || !model) {
+        return ApiResponseUtil.badRequest(res, 'Missing required fields: equipment_code, equipment_name, equipment_type, manufacturer, model');
+      }
+
+      const equipmentTypeData: CreateEquipmentTypeData = {
+        equipment_code,
+        equipment_name,
+        description,
+        equipment_type,
+        manufacturer,
+        model,
+        specifications,
+        weight_kg: weight_kg ? parseFloat(weight_kg) : undefined,
+        dimensions,
+        warranty_years: warranty_years ? parseInt(warranty_years) : undefined,
+        default_lifespan_years: default_lifespan_years ? parseInt(default_lifespan_years) : undefined
+      };
+
+      const newEquipmentType = await EquipmentRepository.createEquipmentType(equipmentTypeData);
+
+      this.logAction('EQUIPMENT_TYPE_CREATED', userId, { 
+        equipmentTypeId: newEquipmentType.id,
+        equipment_code: newEquipmentType.equipment_code 
+      });
+
+      DebugLogger.performance('Equipment type creation', startTime, { 
+        equipmentTypeId: newEquipmentType.id 
+      });
+      
+      ApiResponseUtil.created(res, newEquipmentType, 'Equipment type created successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error creating equipment type', error, { 
+        userId: req.user?.userId,
+        body: req.body 
+      });
+      
+      this.logAction('EQUIPMENT_TYPE_CREATE_ERROR', req.user?.userId, { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+
+      // Handle specific database errors
+      if (error instanceof Error) {
+        if (error.message.includes('duplicate key') || error.message.includes('unique constraint')) {
+          return ApiResponseUtil.badRequest(res, 'Equipment code already exists');
+        }
+      }
+
       return ApiResponseUtil.internalError(res);
     }
   });
