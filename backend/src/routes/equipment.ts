@@ -65,6 +65,17 @@ router.get('/stats', equipmentController.getEquipmentStats);
 router.get('/clients', equipmentController.getClientsForAssignment);
 
 /**
+ * @route POST /api/equipment/assign
+ * @desc Assign equipment instances to a client
+ * @access Vendor
+ * @body client_id - Client user ID
+ * @body equipment_instances - Array of instance IDs
+ * @body assignment_date - Assignment date
+ * @body notes - Assignment notes (optional)
+ */
+router.post('/assign', equipmentController.bulkAssignEquipment);
+
+/**
  * @route POST /api/equipment
  * @desc Add new equipment instance
  * @access Vendor

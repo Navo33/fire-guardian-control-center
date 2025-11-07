@@ -35,6 +35,14 @@ export interface AssignEquipmentData {
   total_cost: number;
 }
 
+export interface BulkAssignEquipmentData {
+  vendor_id: number;
+  client_id: number;
+  equipment_instances: number[];
+  assignment_date: string;
+  notes?: string;
+}
+
 export interface CreateEquipmentTypeData {
   equipment_code: string;
   equipment_name: string;
@@ -918,6 +926,86 @@ export class EquipmentRepository {
     } catch (error) {
       DebugLogger.error('Error creating equipment type', error, { data });
       throw error;
+    }
+  }
+
+  /**
+   * Bulk assign multiple equipment instances to a client
+   */
+  static async bulkAssignEquipmentToClient(data: BulkAssignEquipmentData) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Bulk assigning equipment to client', { data }, 'EQUIPMENT_REPO');
+
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Generate assignment number
+      const assignment_number = await this.generateAssignmentNumber();
+
+      // Create equipment assignment
+      const assignmentQuery = `
+        INSERT INTO equipment_assignment (
+          client_id, vendor_id, assignment_number, status, 
+          start_date, notes, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, 'active', 
+          $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ) RETURNING id
+      `;
+
+      const assignmentResult = await client.query(assignmentQuery, [
+        data.client_id,
+        data.vendor_id,
+        assignment_number,
+        data.assignment_date,
+        data.notes || null
+      ]);
+
+      const assignmentId = assignmentResult.rows[0].id;
+
+      // Create assignment items for each equipment instance
+      const itemPromises = data.equipment_instances.map(async (instanceId) => {
+        const itemQuery = `
+          INSERT INTO assignment_item (
+            assignment_id, equipment_instance_id, quantity
+          ) VALUES ($1, $2, 1)
+        `;
+        
+        return client.query(itemQuery, [assignmentId, instanceId]);
+      });
+
+      await Promise.all(itemPromises);
+
+      // Update equipment instance statuses to 'assigned' and set assigned_to
+      const updateInstancesQuery = `
+        UPDATE equipment_instance 
+        SET status = 'assigned', assigned_to = $1, assigned_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ANY($2::int[])
+      `;
+      
+      await client.query(updateInstancesQuery, [data.client_id, data.equipment_instances]);
+
+      await client.query('COMMIT');
+
+      DebugLogger.performance('Bulk equipment assignment', startTime);
+      
+      return {
+        assignment_id: assignmentId,
+        assignment_number,
+        client_id: data.client_id,
+        equipment_count: data.equipment_instances.length,
+        assignment_date: data.assignment_date,
+        status: 'active'
+      };
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      DebugLogger.error('Error in bulk equipment assignment', error, { data });
+      throw error;
+    } finally {
+      client.release();
     }
   }
 }

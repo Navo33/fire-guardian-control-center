@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { BaseController } from './BaseController';
-import { EquipmentRepository, EquipmentFilters, CreateEquipmentInstanceData, UpdateEquipmentInstanceData, AssignEquipmentData, CreateEquipmentTypeData } from '../models/EquipmentRepository';
+import { EquipmentRepository, EquipmentFilters, CreateEquipmentInstanceData, UpdateEquipmentInstanceData, AssignEquipmentData, BulkAssignEquipmentData, CreateEquipmentTypeData } from '../models/EquipmentRepository';
 import { DashboardRepository } from '../models/DashboardRepository';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { DebugLogger } from '../utils/DebugLogger';
@@ -266,6 +266,81 @@ export class EquipmentController extends BaseController {
     } catch (error) {
       DebugLogger.error('Error adding equipment instance', error, { userId: req.user?.userId });
       this.logAction('EQUIPMENT_INSTANCE_ADD_ERROR', req.user?.userId, { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * POST /api/equipment/assign
+   * Assign multiple equipment instances to a client (bulk assignment)
+   */
+  bulkAssignEquipment = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.api('POST', '/api/equipment/assign', req.body);
+
+    try {
+      const userId = req.user!.userId;
+      const userType = req.user!.user_type;
+
+      if (userType !== 'vendor') {
+        DebugLogger.error('Non-vendor user attempted to assign equipment', { userId, userType });
+        return ApiResponseUtil.forbidden(res, 'Access denied. Vendor access required.');
+      }
+
+      // Get vendor ID from user ID
+      const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+      if (!vendorId) {
+        return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+      }
+
+      const {
+        client_id,
+        equipment_instances,
+        assignment_date,
+        notes
+      } = req.body;
+
+      // Validation
+      if (!client_id || !equipment_instances || !Array.isArray(equipment_instances) || equipment_instances.length === 0 || !assignment_date) {
+        return ApiResponseUtil.badRequest(res, 'Missing required fields: client_id, equipment_instances (array), assignment_date');
+      }
+
+      const assignmentData: BulkAssignEquipmentData = {
+        vendor_id: vendorId,
+        client_id: parseInt(client_id),
+        equipment_instances: equipment_instances.map(id => parseInt(id)),
+        assignment_date,
+        notes
+      };
+
+      DebugLogger.log('Assigning equipment to client', { vendorId, assignmentData }, 'EQUIPMENT');
+
+      const assignment = await EquipmentRepository.bulkAssignEquipmentToClient(assignmentData);
+
+      DebugLogger.log('Equipment assigned successfully', { 
+        vendorId, 
+        assignmentId: assignment.assignment_id,
+        clientId: assignment.client_id,
+        instanceCount: equipment_instances.length
+      }, 'EQUIPMENT');
+      
+      this.logAction('EQUIPMENT_ASSIGNED', userId, { 
+        vendorId, 
+        assignmentId: assignment.assignment_id,
+        clientId: assignment.client_id,
+        instanceCount: equipment_instances.length
+      });
+
+      DebugLogger.performance('Equipment assignment', startTime, { vendorId, assignmentId: assignment.assignment_id });
+      ApiResponseUtil.success(res, assignment, 'Equipment assigned successfully', 201);
+
+    } catch (error) {
+      DebugLogger.error('Error assigning equipment', error, { userId: req.user?.userId });
+      this.logAction('EQUIPMENT_ASSIGN_ERROR', req.user?.userId, { 
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       return ApiResponseUtil.internalError(res);
