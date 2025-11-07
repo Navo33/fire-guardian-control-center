@@ -88,6 +88,8 @@ export const API_ENDPOINTS = {
     LIST: `${API_BASE_URL}/equipment`,
     CREATE: `${API_BASE_URL}/equipment`,
     TYPES: `${API_BASE_URL}/equipment/types`,
+    CREATE_TYPE: `${API_BASE_URL}/equipment/types`,
+    STATS: `${API_BASE_URL}/equipment/stats`,
     CLIENTS: `${API_BASE_URL}/equipment/clients`,
     BY_ID: (id: string | number) => `${API_BASE_URL}/equipment/${id}`,
     UPDATE: (id: string | number) => `${API_BASE_URL}/equipment/${id}`,
