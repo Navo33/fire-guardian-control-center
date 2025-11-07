@@ -21,7 +21,7 @@
     "db:deploy:migrate": "ts-node src/scripts/deployMigrations.ts migrate",
     "db:deploy:backup": "ts-node src/scripts/deployMigrations.ts backup",
     "heroku-postbuild": "npm run build && npm run db:deploy:migrate",
-    "railway-postbuild": "npm run build && npm run db:deploy:migrate", 
+    "railway-postbuild": "npm run build && npm run db:deploy:migrate",
     "render-postbuild": "npm run build && npm run db:deploy:migrate",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -42,6 +42,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
+    "node-fetch": "^2.7.0",
     "pg": "^8.16.3",
     "recharts": "^3.2.1",
     "uuid": "^10.0.0"
