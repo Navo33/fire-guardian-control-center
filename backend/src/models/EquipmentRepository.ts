@@ -6,6 +6,7 @@ export interface EquipmentFilters {
   status?: string;
   compliance_status?: string;
   search?: string;
+  equipment_type_id?: number;
 }
 
 export interface CreateEquipmentInstanceData {
@@ -79,17 +80,26 @@ export class EquipmentRepository {
         queryParams.push(`%${filters.search}%`);
       }
 
+      // Add equipment type filter
+      if (filters.equipment_type_id) {
+        paramCount++;
+        whereClause += ` AND ei.equipment_id = $${paramCount}`;
+        queryParams.push(filters.equipment_type_id);
+      }
+
       const query = `
         SELECT 
           ei.id,
           ei.serial_number,
           e.equipment_name,
-          e.equipment_type,
+          e.equipment_type AS equipment_category,
           ei.status,
           ei.compliance_status,
+          ei.location,
           ei.next_maintenance_date,
-          ei.expiry_date,
-          COALESCE(c.company_name, 'Unassigned') AS client
+          ei.expiry_date AS warranty_expiry,
+          ei.created_at,
+          COALESCE(c.company_name, 'Unassigned') AS assigned_client
         FROM equipment_instance ei
         JOIN equipment e ON ei.equipment_id = e.id
         LEFT JOIN clients c ON ei.assigned_to = c.id
@@ -142,6 +152,13 @@ export class EquipmentRepository {
         queryParams.push(`%${filters.search}%`);
       }
 
+      // Add equipment type filter
+      if (filters.equipment_type_id) {
+        paramCount++;
+        whereClause += ` AND ei.equipment_id = $${paramCount}`;
+        queryParams.push(filters.equipment_type_id);
+      }
+
       const query = `
         SELECT COUNT(*) as count
         FROM equipment_instance ei
@@ -161,25 +178,58 @@ export class EquipmentRepository {
   /**
    * Get equipment types for Add Equipment modal
    */
-  static async getEquipmentTypes() {
+  static async getEquipmentTypes(vendorId?: number, filters: { search?: string, category?: string } = {}) {
     const startTime = DebugLogger.startTimer();
-    DebugLogger.log('Getting equipment types', {}, 'EQUIPMENT_REPO');
+    DebugLogger.log('Getting equipment types', { vendorId, filters }, 'EQUIPMENT_REPO');
 
     try {
+      let whereClause = 'WHERE e.deleted_at IS NULL';
+      const queryParams: any[] = [];
+      let paramCount = 0;
+
+      // Add search filter
+      if (filters.search) {
+        paramCount++;
+        whereClause += ` AND (e.equipment_name ILIKE $${paramCount} OR e.equipment_code ILIKE $${paramCount} OR e.manufacturer ILIKE $${paramCount})`;
+        queryParams.push(`%${filters.search}%`);
+      }
+
+      // Add category filter
+      if (filters.category) {
+        paramCount++;
+        whereClause += ` AND e.equipment_type = $${paramCount}`;
+        queryParams.push(filters.category);
+      }
+
       const query = `
-        SELECT id, equipment_name
-        FROM equipment
-        WHERE deleted_at IS NULL
-        ORDER BY equipment_name
+        SELECT 
+          e.id,
+          e.equipment_code,
+          e.equipment_name,
+          e.description,
+          e.equipment_type,
+          e.manufacturer,
+          e.model,
+          e.specifications,
+          e.weight_kg,
+          e.dimensions,
+          e.warranty_years,
+          e.default_lifespan_years,
+          e.created_at,
+          -- Count how many instances exist of this type
+          (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.equipment_id = e.id AND ei.deleted_at IS NULL) AS instance_count
+        FROM equipment e
+        ${whereClause}
+        ORDER BY e.equipment_name
       `;
 
-      const result = await pool.query(query);
+      const result = await pool.query(query, queryParams);
 
       DebugLogger.performance('Equipment types fetch', startTime, { count: result.rows.length });
       return result.rows;
 
     } catch (error) {
-      DebugLogger.error('Error fetching equipment types', error);
+      DebugLogger.error('Error fetching equipment types', error, { vendorId, filters });
       throw error;
     }
   }

@@ -574,37 +574,203 @@ function VendorDetailsContent() {
                     <UserIcon className="h-5 w-5 text-red-600 mr-2" />
                     Contact Information
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Contact Person</label>
-                        <p className="text-sm text-gray-900">{vendor.contact?.contact_person_name || 'N/A'}</p>
-                        <p className="text-xs text-gray-500">{vendor.contact?.contact_title || ''}</p>
+                  
+                  {isEditing ? (
+                    /* Edit Form */
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Personal Information */}
+                        <div className="space-y-4">
+                          <h4 className="text-md font-medium text-gray-800">Personal Information</h4>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                            <input
+                              type="text"
+                              value={editForm.first_name}
+                              onChange={(e) => setEditForm({...editForm, first_name: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                            <input
+                              type="text"
+                              value={editForm.last_name}
+                              onChange={(e) => setEditForm({...editForm, last_name: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input
+                              type="email"
+                              value={editForm.email}
+                              onChange={(e) => setEditForm({...editForm, email: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Company Information */}
+                        <div className="space-y-4">
+                          <h4 className="text-md font-medium text-gray-800">Company Information</h4>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                            <input
+                              type="text"
+                              value={editForm.company_name}
+                              onChange={(e) => setEditForm({...editForm, company_name: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Business Type</label>
+                            <input
+                              type="text"
+                              value={editForm.business_type}
+                              onChange={(e) => setEditForm({...editForm, business_type: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">License Number</label>
+                            <input
+                              type="text"
+                              value={editForm.license_number}
+                              onChange={(e) => setEditForm({...editForm, license_number: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Primary Email</label>
-                        <p className="text-sm text-gray-900">{vendor.contact?.primary_email || vendor.email}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Primary Phone</label>
-                        <p className="text-sm text-gray-900">{vendor.phone || 'N/A'}</p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Contact Information */}
+                        <div className="space-y-4">
+                          <h4 className="text-md font-medium text-gray-800">Contact Details</h4>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                            <input
+                              type="text"
+                              value={editForm.contact_person_name}
+                              onChange={(e) => setEditForm({...editForm, contact_person_name: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Contact Title</label>
+                            <input
+                              type="text"
+                              value={editForm.contact_title}
+                              onChange={(e) => setEditForm({...editForm, contact_title: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Primary Phone</label>
+                            <input
+                              type="tel"
+                              value={editForm.primary_phone}
+                              onChange={(e) => setEditForm({...editForm, primary_phone: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Secondary Phone</label>
+                            <input
+                              type="tel"
+                              value={editForm.secondary_phone}
+                              onChange={(e) => setEditForm({...editForm, secondary_phone: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Address Information */}
+                        <div className="space-y-4">
+                          <h4 className="text-md font-medium text-gray-800">Address</h4>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+                            <input
+                              type="text"
+                              value={editForm.street_address}
+                              onChange={(e) => setEditForm({...editForm, street_address: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                            <input
+                              type="text"
+                              value={editForm.city}
+                              onChange={(e) => setEditForm({...editForm, city: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                            <input
+                              type="text"
+                              value={editForm.state}
+                              onChange={(e) => setEditForm({...editForm, state: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
+                            <input
+                              type="text"
+                              value={editForm.zip_code}
+                              onChange={(e) => setEditForm({...editForm, zip_code: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Address</label>
-                        {vendor.address ? (
-                          <>
-                            <p className="text-sm text-gray-900">{vendor.address.street_address}</p>
-                            <p className="text-sm text-gray-900">{vendor.address.city}, {vendor.address.state} {vendor.address.zip_code}</p>
-                            <p className="text-sm text-gray-900">{vendor.address.country}</p>
-                          </>
-                        ) : (
-                          <p className="text-sm text-gray-900">N/A</p>
-                        )}
+                  ) : (
+                    /* View Mode */
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Contact Person</label>
+                          <p className="text-sm text-gray-900">{vendor.contact?.contact_person_name || 'N/A'}</p>
+                          <p className="text-xs text-gray-500">{vendor.contact?.contact_title || ''}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Primary Email</label>
+                          <p className="text-sm text-gray-900">{vendor.contact?.primary_email || vendor.email}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Primary Phone</label>
+                          <p className="text-sm text-gray-900">{vendor.phone || 'N/A'}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Address</label>
+                          {vendor.address ? (
+                            <>
+                              <p className="text-sm text-gray-900">{vendor.address.street_address}</p>
+                              <p className="text-sm text-gray-900">{vendor.address.city}, {vendor.address.state} {vendor.address.zip_code}</p>
+                              <p className="text-sm text-gray-900">{vendor.address.country}</p>
+                            </>
+                          ) : (
+                            <p className="text-sm text-gray-500">No address specified</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Company</label>
+                          <p className="text-sm text-gray-900">{vendor.company?.company_name || 'N/A'}</p>
+                          <p className="text-xs text-gray-500">{vendor.company?.business_type || ''}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">License Number</label>
+                          <p className="text-sm text-gray-900">{vendor.company?.license_number || 'N/A'}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Business Information */}

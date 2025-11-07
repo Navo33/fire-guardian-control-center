@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../config/api';
 import { useToast } from '../providers/ToastProvider';
 import { handleApiError, TOAST_MESSAGES } from '../../utils/toastUtils';
+import DebugLogger from '../../utils/DebugLogger';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import {
   XMarkIcon,
@@ -64,6 +65,8 @@ interface AddVendorModalProps {
 export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }: AddVendorModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [specializationOptions, setSpecializationOptions] = useState<string[]>([]);
+  const [isLoadingSpecializations, setIsLoadingSpecializations] = useState(false);
   const toast = useToast();
 
   const {
@@ -92,6 +95,13 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
     }
   }, [watchEmail, setValue]);
 
+  // Fetch specializations when modal opens
+  useEffect(() => {
+    if (isOpen && specializationOptions.length === 0) {
+      fetchSpecializations();
+    }
+  }, [isOpen]);
+
   const businessTypes = [
     'Private Limited',
     'LLC',
@@ -111,18 +121,61 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
     'Sabaragamuwa Province'
   ];
 
-  const specializationOptions = [
-    'Fire Extinguishers',
-    'Sprinkler Systems',
-    'Fire Alarms',
-    'Emergency Lighting',
-    'Fire Suppression Systems',
-    'Exit Signs',
-    'Emergency Equipment',
-    'Fire Safety Inspections',
-    'Fire Safety Training',
-    'Hazmat Services'
-  ];
+  // Fetch specializations from API
+  const fetchSpecializations = async () => {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.ui('AddVendorModal', 'fetchSpecializations started');
+    
+    try {
+      setIsLoadingSpecializations(true);
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+
+      logApiCall('GET', API_ENDPOINTS.VENDORS.SPECIALIZATIONS);
+      const response = await fetch(API_ENDPOINTS.VENDORS.SPECIALIZATIONS, { headers });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch specializations: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      DebugLogger.api('GET', API_ENDPOINTS.VENDORS.SPECIALIZATIONS, undefined, result, response.status);
+
+      if (result.success) {
+        // Extract specialization names from the API response
+        const specializations = result.data.map((spec: any) => spec.name || spec);
+        setSpecializationOptions(specializations);
+        DebugLogger.log('Specializations loaded successfully', { count: specializations.length }, 'VENDOR_MODAL');
+      } else {
+        throw new Error(result.message || 'Failed to load specializations');
+      }
+
+      DebugLogger.performance('Specializations fetch', startTime);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load specializations';
+      DebugLogger.error('Specializations fetch failed', err, { errorMessage });
+      // Use fallback specializations if API fails
+      setSpecializationOptions([
+        'Fire Extinguishers',
+        'Sprinkler Systems', 
+        'Fire Alarms',
+        'Emergency Lighting',
+        'Fire Suppression Systems',
+        'Exit Signs',
+        'Emergency Equipment',
+        'Fire Safety Inspections',
+        'Fire Safety Training',
+        'Hazmat Services'
+      ]);
+    } finally {
+      setIsLoadingSpecializations(false);
+    }
+  };
 
   const handleSpecializationChange = (specialization: string, checked: boolean) => {
     const current = watchSpecializations || [];

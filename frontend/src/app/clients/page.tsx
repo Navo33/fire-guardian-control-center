@@ -150,8 +150,15 @@ export default function ClientsPage() {
       }
 
       const data = await response.json()
+      console.log('KPIs response:', data)
+      
       if (data.success) {
-        setKpis(data.data)
+        // Transform the backend response to match frontend interface
+        setKpis({
+          totalClients: parseInt(data.data.total_clients) || 0,
+          activeClients: parseInt(data.data.active_clients) || 0,
+          averageCompliance: parseFloat(data.data.avg_compliance_percentage) || 0
+        })
       } else {
         throw new Error(data.message || 'Failed to fetch KPIs')
       }
@@ -187,10 +194,19 @@ export default function ClientsPage() {
         throw new Error(`Failed to fetch clients: ${response.statusText}`)
       }
 
-      const data: ClientListResponse = await response.json()
-      if (data) {
-        setClients(data.clients || [])
-        setPagination(data.pagination || pagination)
+      const response_data = await response.json()
+      console.log('Client list response:', response_data)
+      
+      if (response_data.success && response_data.data) {
+        setClients(response_data.data.clients || [])
+        setPagination({
+          currentPage: response_data.data.pagination.page || 1,
+          totalPages: response_data.data.pagination.totalPages || 1,
+          totalItems: response_data.data.pagination.totalCount || 0,
+          itemsPerPage: response_data.data.pagination.limit || 20
+        })
+      } else {
+        throw new Error(response_data.message || 'Failed to fetch clients')
       }
     } catch (err) {
       console.error('Error fetching clients:', err)
