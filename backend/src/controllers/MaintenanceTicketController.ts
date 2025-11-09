@@ -218,6 +218,9 @@ export class MaintenanceTicketController extends BaseController {
         return;
       }
 
+      // Get current user ID for auto-assignment
+      const currentUserId = (req as AuthenticatedRequest).user?.userId;
+      
       const ticketData: CreateTicketData = {
         equipment_instance_id: req.body.equipment_instance_id ? parseInt(req.body.equipment_instance_id) : undefined,
         client_id: req.body.client_id ? parseInt(req.body.client_id) : undefined,
@@ -225,7 +228,8 @@ export class MaintenanceTicketController extends BaseController {
         issue_description,
         priority,
         scheduled_date: req.body.scheduled_date || undefined,
-        assigned_technician: req.body.assigned_technician ? parseInt(req.body.assigned_technician) : undefined
+        // Auto-assign to current vendor user, or use provided technician ID
+        assigned_technician: req.body.assigned_technician ? parseInt(req.body.assigned_technician) : currentUserId
       };
 
       const result = await MaintenanceTicketRepository.createTicket(vendorId, ticketData);
@@ -392,11 +396,26 @@ export class MaintenanceTicketController extends BaseController {
         return;
       }
       
-      const ticketId = parseInt(req.params.id);
+      const idParam = req.params.id;
+      let ticketNumber: string;
       
-      if (isNaN(ticketId)) {
-        ApiResponseUtil.badRequest(res, 'Invalid ticket ID');
-        return;
+      // Check if it's a numeric ID or ticket number
+      const isNumericId = /^\d+$/.test(idParam);
+      
+      if (isNumericId) {
+        // Convert numeric ID to ticket number by fetching the ticket first
+        const ticketId = parseInt(idParam);
+        const basicTicket = await MaintenanceTicketRepository.getTicketById(ticketId, vendorId);
+        
+        if (!basicTicket) {
+          ApiResponseUtil.notFound(res, 'Ticket not found');
+          return;
+        }
+        
+        ticketNumber = basicTicket.ticket_number;
+      } else {
+        // Use as ticket number directly
+        ticketNumber = idParam;
       }
 
       const { resolution_description } = req.body;
@@ -409,10 +428,9 @@ export class MaintenanceTicketController extends BaseController {
       const resolveData: ResolveTicketData = {
         resolution_description,
         actual_hours: req.body.actual_hours ? parseFloat(req.body.actual_hours) : undefined,
-        cost: req.body.cost ? parseFloat(req.body.cost) : undefined
       };
 
-      const result = await MaintenanceTicketRepository.resolveTicket(ticketId, vendorId, resolveData);
+      const result = await MaintenanceTicketRepository.resolveTicket(ticketNumber, vendorId, resolveData);
       
       ApiResponseUtil.success(res, result, 'Ticket resolved successfully');
     } catch (error) {

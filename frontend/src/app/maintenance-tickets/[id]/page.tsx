@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import ResolveTicketModal from '@/components/modals/ResolveTicketModal';
 import { useToast } from '@/components/providers/ToastProvider';
 import { useConfirmModal } from '@/components/providers/ConfirmModalProvider';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
@@ -75,10 +76,7 @@ interface UpdateTicketData {
   scheduled_date?: string;
 }
 
-interface ResolveTicketData {
-  resolution_description: string;
-  cost?: number;
-}
+
 
 export default function TicketDetailsPage() {
   const params = useParams();
@@ -95,7 +93,6 @@ export default function TicketDetailsPage() {
   // Loading states
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isResolving, setIsResolving] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -108,9 +105,6 @@ export default function TicketDetailsPage() {
   
   // Form data
   const [editFormData, setEditFormData] = useState<UpdateTicketData>({});
-  const [resolveFormData, setResolveFormData] = useState<ResolveTicketData>({
-    resolution_description: ''
-  });
 
   // Fetch ticket details
   const fetchTicketDetails = async () => {
@@ -221,35 +215,11 @@ export default function TicketDetailsPage() {
     }
   };
 
-  // Resolve ticket handler
-  const handleResolveTicket = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsResolving(true);
-
-    try {
-      const response = await fetch(`/api/vendor/tickets/${ticketId}/resolve`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(resolveFormData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to resolve ticket');
-      }
-
-      showToast('success', 'Ticket resolved successfully');
-      setShowResolveModal(false);
-      setResolveFormData({ resolution_description: '' });
-      await fetchTicketDetails();
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Failed to resolve ticket');
-    } finally {
-      setIsResolving(false);
-    }
+  // Handle resolve ticket success
+  const handleResolveSuccess = async () => {
+    setShowResolveModal(false);
+    showToast('success', 'Ticket resolved successfully');
+    await fetchTicketDetails();
   };
 
   // Close ticket handler
@@ -703,7 +673,9 @@ export default function TicketDetailsPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Calculated Hours</label>
-                      <p className="text-sm text-gray-900">{ticket.calculated_hours?.toFixed(1) || '0.0'} hours</p>
+                      <p className="text-sm text-gray-900">
+                        {ticket.calculated_hours ? Number(ticket.calculated_hours).toFixed(1) : '0.0'} hours
+                      </p>
                     </div>
                     
                     {ticket.cost && (
@@ -943,104 +915,14 @@ export default function TicketDetailsPage() {
         </div>
       )}
 
-      {/* Resolve Modal */}
-      {showResolveModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Resolve Ticket</h3>
-              
-              <form onSubmit={handleResolveTicket} className="space-y-4">
-                {/* Resolution Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Resolution Description *
-                  </label>
-                  <textarea
-                    value={resolveFormData.resolution_description}
-                    onChange={(e) => setResolveFormData({
-                      ...resolveFormData,
-                      resolution_description: e.target.value
-                    })}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Describe how the issue was resolved..."
-                    required
-                    minLength={10}
-                    maxLength={1000}
-                  />
-                  <p className="mt-1 text-sm text-gray-500">
-                    {resolveFormData.resolution_description.length}/1000 characters
-                  </p>
-                </div>
-
-                {/* Note about automatic hours calculation */}
-                <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
-                  <div className="flex">
-                    <InformationCircleIcon className="h-5 w-5 text-blue-400" />
-                    <div className="ml-3">
-                      <p className="text-sm text-blue-700">
-                        Hours will be automatically calculated based on the time between ticket creation and resolution.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cost */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Cost (Optional)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="999999.99"
-                      value={resolveFormData.cost || ''}
-                      onChange={(e) => setResolveFormData({
-                        ...resolveFormData,
-                        cost: e.target.value ? parseFloat(e.target.value) : undefined
-                      })}
-                      className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-
-                {/* Modal Actions */}
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowResolveModal(false);
-                      setResolveFormData({ resolution_description: '' });
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-2 focus:ring-blue-500"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isResolving || !resolveFormData.resolution_description.trim()}
-                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                  >
-                    {isResolving ? (
-                      <>
-                        <LoadingSpinner size="sm" />
-                        <span className="ml-2">Resolving...</span>
-                      </>
-                    ) : (
-                      'Resolve Ticket'
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Resolve Ticket Modal */}
+      <ResolveTicketModal
+        isOpen={showResolveModal}
+        onClose={() => setShowResolveModal(false)}
+        onSuccess={handleResolveSuccess}
+        ticketNumber={ticket.ticket_number}
+        ticketId={ticket.ticket_number}
+      />
     </DashboardLayout>
   );
 }

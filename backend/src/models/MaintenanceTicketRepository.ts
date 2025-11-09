@@ -302,42 +302,7 @@ export class MaintenanceTicketRepository {
     return result.rows;
   }
 
-  /**
-   * Generate unique ticket number
-   */
-  private async generateTicketNumber(): Promise<string> {
-    const today = new Date();
-    const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
-    
-    // Find the highest ticket number for today
-    const query = `
-      SELECT ticket_number 
-      FROM maintenance_ticket 
-      WHERE ticket_number LIKE 'TKT-${dateStr}-%'
-      ORDER BY ticket_number DESC 
-      LIMIT 1
-    `;
-    
-    const result = await pool.query(query);
-    
-    let nextNumber = 1;
-    if (result.rows.length > 0) {
-      const lastTicket = result.rows[0].ticket_number;
-      const lastNumber = parseInt(lastTicket.split('-')[2]);
-      nextNumber = lastNumber + 1;
-    }
-    
-    return `TKT-${dateStr}-${nextNumber.toString().padStart(3, '0')}`;
-  }
 
-  /**
-   * Validate ticket number uniqueness
-   */
-  private async isTicketNumberUnique(ticketNumber: string): Promise<boolean> {
-    const query = `SELECT COUNT(*) FROM maintenance_ticket WHERE ticket_number = $1`;
-    const result = await pool.query(query, [ticketNumber]);
-    return parseInt(result.rows[0].count) === 0;
-  }
 
   /**
    * Validate client belongs to vendor
@@ -377,21 +342,18 @@ export class MaintenanceTicketRepository {
       }
     }
 
-    // Generate unique ticket number
-    const ticketNumber = await this.generateTicketNumber();
-    
+    // Insert the ticket - the database trigger will automatically generate the ticket_number
     const query = `
       INSERT INTO maintenance_ticket (
-        ticket_number, equipment_instance_id, client_id, vendor_id, 
+        equipment_instance_id, client_id, vendor_id, 
         ticket_status, support_type, issue_description, priority, 
         scheduled_date, assigned_technician, created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, 'open', $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        $1, $2, $3, 'open', $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       ) RETURNING id, ticket_number
     `;
     
     const params = [
-      ticketNumber,
       ticketData.equipment_instance_id || null,
       ticketData.client_id || null,
       vendorId,
@@ -534,35 +496,36 @@ export class MaintenanceTicketRepository {
   }
 
   /**
-   * Resolve ticket with resolution details
+   * Resolve ticket with resolution details (by ticket number)
    */
-  async resolveTicket(ticketId: number, vendorId: number, resolveData: ResolveTicketData): Promise<{id: number, ticket_number: string}> {
+  async resolveTicket(ticketNumber: string, vendorId: number, resolveData: ResolveTicketData): Promise<{ticket_number: string, resolved_at: string}> {
     const query = `
       UPDATE maintenance_ticket
       SET 
         ticket_status = 'resolved',
         resolution_description = $1,
-        actual_hours = $2,
-        cost = $3,
         resolved_at = CURRENT_TIMESTAMP,
+        actual_hours = $2,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $4
-      AND vendor_id = $5
-      RETURNING id, ticket_number
+      WHERE ticket_number = $3
+        AND vendor_id = $4
+        AND ticket_status = 'open'
+      RETURNING 
+        ticket_number,
+        TO_CHAR(resolved_at, 'Mon DD, YYYY HH12:MI AM') AS resolved_at
     `;
     
     const params = [
       resolveData.resolution_description,
       resolveData.actual_hours || null,
-      resolveData.cost || null,
-      ticketId,
+      ticketNumber,
       vendorId
     ];
     
     const result = await pool.query(query, params);
     
     if (result.rows.length === 0) {
-      throw new Error('Ticket not found or access denied');
+      throw new Error('Ticket not found, already resolved, or access denied');
     }
     
     return result.rows[0];
@@ -623,12 +586,14 @@ export class MaintenanceTicketRepository {
         mt.updated_at,
         mt.resolved_at,
         -- Calculate hours from creation time to now (if not resolved) or to resolved time
-        CASE 
-            WHEN mt.resolved_at IS NOT NULL THEN 
-                EXTRACT(EPOCH FROM (mt.resolved_at - mt.created_at)) / 3600
-            ELSE 
-                EXTRACT(EPOCH FROM (NOW() - mt.created_at)) / 3600
-        END AS calculated_hours,
+        ROUND(
+            CASE 
+                WHEN mt.resolved_at IS NOT NULL THEN 
+                    EXTRACT(EPOCH FROM (mt.resolved_at - mt.created_at)) / 3600
+                ELSE 
+                    EXTRACT(EPOCH FROM (NOW() - mt.created_at)) / 3600
+            END::NUMERIC, 2
+        ) AS calculated_hours,
         0 AS cost,
 
         -- Client object - Match frontend client interface
@@ -675,58 +640,7 @@ export class MaintenanceTicketRepository {
     return result.rows[0];
   }
 
-  /**
-   * Create a new maintenance ticket
-   */
-  static async createTicket(ticketData: CreateTicketData, vendorId: number): Promise<{id: number, ticket_number: string, created_at: string}> {
-    const {
-      equipment_instance_id,
-      client_id,
-      support_type,
-      issue_description,
-      priority,
-      scheduled_date,
-      assigned_technician
-    } = ticketData;
 
-    const query = `
-      INSERT INTO public.maintenance_ticket (
-        ticket_number,
-        equipment_instance_id,
-        client_id,
-        vendor_id,
-        assigned_technician,
-        support_type,
-        issue_description,
-        priority,
-        scheduled_date
-      ) VALUES (
-        'TKT-' || TO_CHAR(CURRENT_DATE, 'YYYYMMDD') || '-' || LPAD(nextval('maintenance_ticket_id_seq')::text, 3, '0'),
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        $8
-      )
-      RETURNING id, ticket_number, created_at;
-    `;
-    
-    const result = await pool.query(query, [
-      equipment_instance_id || null,
-      client_id || null,
-      vendorId,
-      assigned_technician || null,
-      support_type,
-      issue_description,
-      priority,
-      scheduled_date || null
-    ]);
-    
-    return result.rows[0];
-  }
 
   /**
    * Get equipment instances for a specific client (for maintenance tickets)

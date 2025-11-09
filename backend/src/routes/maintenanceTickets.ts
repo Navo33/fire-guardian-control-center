@@ -16,6 +16,21 @@ const validateTicketId = [
   param('id').isInt({ min: 1 }).withMessage('Ticket ID must be a positive integer')
 ];
 
+const validateTicketIdOrNumber = [
+  param('id')
+    .custom((value) => {
+      // Accept either numeric ID or ticket number format (TKT-YYYYMMDD-XXX)
+      const isNumeric = /^\d+$/.test(value);
+      const isTicketNumber = /^TKT-\d{8}-\d{3}$/.test(value);
+      
+      if (!isNumeric && !isTicketNumber) {
+        throw new Error('ID must be a numeric ticket ID or ticket number (TKT-YYYYMMDD-XXX)');
+      }
+      
+      return true;
+    })
+];
+
 const validateCreateTicket = [
   body('support_type')
     .isIn(['maintenance', 'system', 'user'])
@@ -147,7 +162,7 @@ router.get('/:id/related', validateTicketId, MaintenanceTicketController.getRela
 router.put('/:id', validateTicketId, validateUpdateTicket, MaintenanceTicketController.updateTicket);
 
 // PUT /api/vendor/tickets/:id/resolve - Resolve ticket
-router.put('/:id/resolve', validateTicketId, validateResolveTicket, MaintenanceTicketController.resolveTicket);
+router.put('/:id/resolve', validateTicketIdOrNumber, validateResolveTicket, MaintenanceTicketController.resolveTicket);
 
 // PUT /api/vendor/tickets/:id/close - Close ticket
 router.put('/:id/close', validateTicketId, MaintenanceTicketController.closeTicket);

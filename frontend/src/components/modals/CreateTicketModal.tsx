@@ -32,7 +32,6 @@ const ticketSchema = z.object({
     .min(10, 'Issue description must be at least 10 characters')
     .max(1000, 'Issue description cannot exceed 1000 characters'),
   scheduled_date: z.string().optional(),
-  assigned_technician: z.number().optional(),
 });
 
 type TicketFormData = z.infer<typeof ticketSchema>;
@@ -66,12 +65,10 @@ export default function CreateTicketModal({
   
   // Dropdown data
   const [clients, setClients] = useState<DropdownOption[]>([]);
-  const [technicians, setTechnicians] = useState<DropdownOption[]>([]);
   const [equipment, setEquipment] = useState<DropdownOption[]>([]);
   
   // Loading states
   const [isLoadingClients, setIsLoadingClients] = useState(false);
-  const [isLoadingTechnicians, setIsLoadingTechnicians] = useState(false);
   const [isLoadingEquipment, setIsLoadingEquipment] = useState(false);
   
   const { showToast } = useToast();
@@ -112,7 +109,6 @@ export default function CreateTicketModal({
   useEffect(() => {
     if (isOpen && userType === 'vendor') {
       fetchClients();
-      fetchTechnicians();
     }
   }, [isOpen, userType]);
 
@@ -170,32 +166,7 @@ export default function CreateTicketModal({
   };
 
   // Fetch technicians dropdown
-  const fetchTechnicians = async () => {
-    try {
-      setIsLoadingTechnicians(true);
 
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const headers = getAuthHeaders();
-      const url = `${API_ENDPOINTS.MAINTENANCE_TICKETS.BASE}/technicians`;
-
-      logApiCall('GET', url);
-      const response = await fetch(url, { headers });
-      
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setTechnicians(result.data);
-        }
-      }
-    } catch (err) {
-      DebugLogger.error('Technicians fetch failed', err);
-      // Non-critical, so we don't show error to user
-    } finally {
-      setIsLoadingTechnicians(false);
-    }
-  };
 
   // Fetch equipment for selected client
   const fetchEquipmentForClient = async (clientId: number) => {
@@ -235,7 +206,6 @@ export default function CreateTicketModal({
     reset();
     setError(null);
     setClients([]);
-    setTechnicians([]);
     setEquipment([]);
     onClose();
   };
@@ -250,7 +220,7 @@ export default function CreateTicketModal({
         throw new Error('No authentication token found');
       }
 
-      // Prepare request body
+      // Prepare request body (assigned_technician is auto-assigned on backend)
       const requestBody = {
         support_type: data.support_type,
         priority: data.priority,
@@ -258,7 +228,6 @@ export default function CreateTicketModal({
         issue_description: data.issue_description,
         ...(data.equipment_instance_id && { equipment_instance_id: data.equipment_instance_id }),
         ...(data.scheduled_date && { scheduled_date: data.scheduled_date }),
-        ...(data.assigned_technician && { assigned_technician: data.assigned_technician }),
       };
 
       const headers = {
@@ -293,7 +262,7 @@ export default function CreateTicketModal({
       const errorMessage = err instanceof Error ? err.message : 'Failed to create ticket';
       DebugLogger.error('Create ticket failed', err, { errorMessage });
       setError(errorMessage);
-      handleApiError(showToast, err);
+      showToast('error', errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -467,29 +436,17 @@ export default function CreateTicketModal({
                   )}
                 </div>
 
-                {userType === 'vendor' && technicians.length > 0 && (
+                {userType === 'vendor' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Assign Technician (Optional)
+                      Assigned Technician
                     </label>
-                    <select
-                      {...register('assigned_technician', { 
-                        setValueAs: (value) => value === '' ? undefined : Number(value)
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                      disabled={isLoadingTechnicians}
-                    >
-                      <option value="">Assign later...</option>
-                      {technicians.map((tech) => (
-                        <option key={tech.id} value={tech.id}>
-                          {tech.display_name || tech.name}
-                        </option>
-                      ))}
-                    </select>
-                    {isLoadingTechnicians && <LoadingSpinner size="sm" />}
-                    {errors.assigned_technician && (
-                      <p className="mt-1 text-sm text-red-600">{errors.assigned_technician.message}</p>
-                    )}
+                    <div className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-gray-700">
+                      Auto-assigned to you
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      The ticket will be automatically assigned to your account
+                    </p>
                   </div>
                 )}
               </div>

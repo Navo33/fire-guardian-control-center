@@ -559,3 +559,54 @@ SELECT
 FROM public.vendors v
 LEFT JOIN public.equipment_instance ei ON v.id = ei.vendor_id
 GROUP BY v.id, v.company_name;
+
+-- =====================================
+-- MAINTENANCE TICKET NUMBER GENERATION
+-- =====================================
+
+-- Function: Automatic ticket number generation
+CREATE OR REPLACE FUNCTION generate_ticket_number()
+RETURNS TRIGGER AS $$
+DECLARE
+    date_str TEXT;
+    daily_count INTEGER;
+    ticket_num TEXT;
+BEGIN
+    -- Get current date in YYYYMMDD format
+    date_str := TO_CHAR(CURRENT_DATE, 'YYYYMMDD');
+    
+    -- Get the count of tickets created today + 1
+    SELECT COALESCE(MAX(
+        CASE 
+            WHEN ticket_number LIKE 'TKT-' || date_str || '-%' 
+            THEN CAST(SPLIT_PART(ticket_number, '-', 3) AS INTEGER)
+            ELSE 0
+        END
+    ), 0) + 1
+    INTO daily_count
+    FROM maintenance_ticket
+    WHERE DATE(created_at) = CURRENT_DATE;
+    
+    -- Generate ticket number
+    ticket_num := 'TKT-' || date_str || '-' || LPAD(daily_count::TEXT, 3, '0');
+    
+    -- Ensure uniqueness (in case of race condition)
+    WHILE EXISTS (SELECT 1 FROM maintenance_ticket WHERE ticket_number = ticket_num) LOOP
+        daily_count := daily_count + 1;
+        ticket_num := 'TKT-' || date_str || '-' || LPAD(daily_count::TEXT, 3, '0');
+    END LOOP;
+    
+    -- Set the ticket number
+    NEW.ticket_number := ticket_num;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger: Auto-generate ticket numbers on insert
+DROP TRIGGER IF EXISTS auto_generate_ticket_number ON maintenance_ticket;
+CREATE TRIGGER auto_generate_ticket_number
+    BEFORE INSERT ON maintenance_ticket
+    FOR EACH ROW
+    WHEN (NEW.ticket_number IS NULL OR NEW.ticket_number = '')
+    EXECUTE FUNCTION generate_ticket_number();
