@@ -125,6 +125,9 @@ router.get('/clients', MaintenanceTicketController.getClientsForDropdown);
 // GET /api/vendor/tickets/equipment - Get equipment for dropdown
 router.get('/equipment', MaintenanceTicketController.getEquipmentForDropdown);
 
+// GET /api/vendor/tickets/equipment/:clientId - Get equipment for specific client
+router.get('/equipment/:clientId', param('clientId').isInt({ min: 1 }), MaintenanceTicketController.getEquipmentForClient);
+
 // GET /api/vendor/tickets/technicians - Get technicians for dropdown
 router.get('/technicians', MaintenanceTicketController.getTechniciansForDropdown);
 
