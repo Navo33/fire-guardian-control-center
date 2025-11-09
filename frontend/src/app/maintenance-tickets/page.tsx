@@ -383,13 +383,13 @@ export default function MaintenanceTicketsPage() {
               </p>
             </div>
           </div>
-          <Link
-            href="/maintenance-tickets/create" 
+          <button
+            onClick={() => setShowCreateModal(true)}
             className="btn-primary flex items-center space-x-2"
           >
             <PlusIcon className="h-5 w-5" />
             <span>Create Ticket</span>
-          </Link>
+          </button>
         </div>
 
         {/* Stats Cards */}
@@ -600,6 +600,19 @@ export default function MaintenanceTicketsPage() {
         </div>
         </div>
       </div>
+
+      {/* Create Ticket Modal */}
+      <CreateTicketModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={() => {
+          setShowCreateModal(false);
+          showSuccess('Maintenance ticket created successfully');
+          // Refresh the tickets list
+          fetchTickets();
+        }}
+        userType="vendor"
+      />
     </DashboardLayout>
   );
 }
