@@ -16,13 +16,15 @@ import {
   ClockIcon,
   CheckCircleIcon,
   WrenchScrewdriverIcon,
-  UserIcon,
   CalendarIcon,
   BuildingOfficeIcon,
   CogIcon,
   PencilIcon,
   CheckIcon,
-  XMarkIcon
+  XMarkIcon,
+  InformationCircleIcon,
+  DocumentTextIcon,
+  Cog6ToothIcon
 } from '@heroicons/react/24/outline';
 
 // Types
@@ -38,9 +40,8 @@ interface TicketDetails {
   created_at: string;
   updated_at: string;
   resolved_at?: string;
-  actual_hours?: number;
+  calculated_hours?: number;
   cost?: number;
-  assigned_technician_name?: string;
   client?: {
     id: number;
     company_name: string;
@@ -72,18 +73,11 @@ interface UpdateTicketData {
   priority?: 'low' | 'normal' | 'high';
   issue_description?: string;
   scheduled_date?: string;
-  assigned_technician?: number;
 }
 
 interface ResolveTicketData {
   resolution_description: string;
-  actual_hours?: number;
   cost?: number;
-}
-
-interface DropdownOption {
-  id: number;
-  name: string;
 }
 
 export default function TicketDetailsPage() {
@@ -97,7 +91,6 @@ export default function TicketDetailsPage() {
   // State management
   const [ticket, setTicket] = useState<TicketDetails | null>(null);
   const [relatedTickets, setRelatedTickets] = useState<RelatedTicket[]>([]);
-  const [technicians, setTechnicians] = useState<DropdownOption[]>([]);
   
   // Loading states
   const [isLoading, setIsLoading] = useState(true);
@@ -109,6 +102,9 @@ export default function TicketDetailsPage() {
   // Modal states
   const [showEditModal, setShowEditModal] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState('overview');
   
   // Form data
   const [editFormData, setEditFormData] = useState<UpdateTicketData>({});
@@ -145,8 +141,7 @@ export default function TicketDetailsPage() {
         ticket_status: data.data.ticket_status,
         priority: data.data.priority,
         issue_description: data.data.issue_description,
-        scheduled_date: data.data.scheduled_date,
-        assigned_technician: data.data.assigned_technician
+        scheduled_date: data.data.scheduled_date
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch ticket details');
@@ -174,26 +169,7 @@ export default function TicketDetailsPage() {
     }
   };
 
-  // Fetch technicians for dropdown
-  const fetchTechnicians = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
 
-      const headers = getAuthHeaders();
-      const url = API_ENDPOINTS.MAINTENANCE_TICKETS.TECHNICIANS;
-
-      logApiCall('GET', url);
-      const response = await fetch(url, { headers });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTechnicians(data.data);
-      }
-    } catch (err) {
-      console.error('Error fetching technicians:', err);
-    }
-  };
 
   // Initial data loading
   useEffect(() => {
@@ -207,8 +183,7 @@ export default function TicketDetailsPage() {
       setIsLoading(true);
       await Promise.all([
         fetchTicketDetails(),
-        fetchRelatedTickets(),
-        fetchTechnicians()
+        fetchRelatedTickets()
       ]);
       setIsLoading(false);
     };
@@ -447,8 +422,8 @@ export default function TicketDetailsPage() {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
             <div className="flex items-center">
               <div className="p-3 bg-blue-50 rounded-xl">
@@ -475,277 +450,376 @@ export default function TicketDetailsPage() {
 
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
             <div className="flex items-center">
-              <div className="p-3 bg-green-50 rounded-xl">
-                <UserIcon className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Technician</p>
-                <p className="text-lg font-bold text-gray-900">{ticket.assigned_technician_name || 'Unassigned'}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
               <div className="p-3 bg-purple-50 rounded-xl">
                 <ClockIcon className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Hours</p>
-                <p className="text-lg font-bold text-gray-900">{ticket.actual_hours || 0}h</p>
+                <p className="text-lg font-bold text-gray-900">{ticket.calculated_hours ? Number(ticket.calculated_hours).toFixed(1) : '0.0'}h</p>
               </div>
             </div>
           </div>
         </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Ticket Information */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-              <ClipboardDocumentListIcon className="h-5 w-5 text-red-600 mr-2" />
-              Ticket Information
-            </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Status</label>
-                <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getStatusBadgeColor(ticket.ticket_status)}`}>
-                  {ticket.ticket_status}
-                </span>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Priority</label>
-                <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getPriorityBadgeColor(ticket.priority)}`}>
-                  {ticket.priority}
-                </span>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Support Type</label>
-                <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getTypeBadgeColor(ticket.support_type)}`}>
-                  {ticket.support_type}
-                </span>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Assigned Technician</label>
-                <p className="mt-1 text-sm text-gray-900">{ticket.assigned_technician_name || 'Unassigned'}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Created At</label>
-                <p className="mt-1 text-sm text-gray-900">{formatDate(ticket.created_at)}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Updated At</label>
-                <p className="mt-1 text-sm text-gray-900">{formatDate(ticket.updated_at)}</p>
-              </div>
-              
-              {ticket.scheduled_date && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Scheduled Date</label>
-                  <p className="mt-1 text-sm text-gray-900">{formatDateOnly(ticket.scheduled_date)}</p>
+        {/* Tab Navigation */}
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <div className="border-b border-gray-200">
+            <nav className="flex space-x-8 px-6">
+              <button
+                onClick={() => setActiveTab('overview')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === 'overview'
+                    ? 'border-red-500 text-red-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <InformationCircleIcon className="h-5 w-5" />
+                  <span>Overview</span>
                 </div>
-              )}
+              </button>
               
-              {ticket.resolved_at && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Resolved At</label>
-                  <p className="mt-1 text-sm text-gray-900">{formatDate(ticket.resolved_at)}</p>
+              <button
+                onClick={() => setActiveTab('details')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === 'details'
+                    ? 'border-red-500 text-red-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <DocumentTextIcon className="h-5 w-5" />
+                  <span>Details</span>
                 </div>
-              )}
+              </button>
               
-              {ticket.actual_hours && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Actual Hours</label>
-                  <p className="mt-1 text-sm text-gray-900">{ticket.actual_hours} hours</p>
-                </div>
-              )}
-              
-              {ticket.cost && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Cost</label>
-                  <p className="mt-1 text-sm text-gray-900">${ticket.cost.toFixed(2)}</p>
-                </div>
-              )}
-            </div>
-            
-            <div className="mt-6">
-              <label className="block text-sm font-medium text-gray-700">Issue Description</label>
-              <p className="mt-2 text-sm text-gray-900 bg-gray-50 p-3 rounded-md">{ticket.issue_description}</p>
-            </div>
-            
-            {ticket.resolution_description && (
-              <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700">Resolution Description</label>
-                <p className="mt-2 text-sm text-gray-900 bg-green-50 p-3 rounded-md">{ticket.resolution_description}</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Associated Client */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-              <BuildingOfficeIcon className="h-5 w-5 text-red-600 mr-2" />
-              Associated Client
-            </h3>
-            
-            {ticket.client ? (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Company</label>
-                  <p className="mt-1 text-sm font-medium text-gray-900">{ticket.client.company_name}</p>
-                </div>
-                {ticket.client.primary_phone && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</label>
-                    <p className="mt-1 text-sm text-gray-900">{ticket.client.primary_phone}</p>
+              {ticket.equipment && (
+                <button
+                  onClick={() => setActiveTab('equipment')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === 'equipment'
+                      ? 'border-red-500 text-red-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <Cog6ToothIcon className="h-5 w-5" />
+                    <span>Equipment</span>
                   </div>
-                )}
-                {ticket.client.email && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Email</label>
-                    <p className="mt-1 text-sm text-gray-900">{ticket.client.email}</p>
-                  </div>
-                )}
-                {ticket.client.street_address && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Address</label>
-                    <p className="mt-1 text-sm text-gray-900">{ticket.client.street_address}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">No Client Assigned</p>
-            )}
+                </button>
+              )}
+            </nav>
           </div>
 
-          {/* Associated Equipment */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-              <CogIcon className="h-5 w-5 text-red-600 mr-2" />
-              Associated Equipment
-            </h3>
-            
-            {ticket.equipment ? (
-              <div className="space-y-3">
+          {/* Tab Content */}
+          <div className="p-6">
+            {activeTab === 'overview' && (
+              <div className="space-y-8">
+                {/* Ticket Information */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Serial Number</label>
-                  <p className="mt-1 text-sm font-medium text-gray-900">{ticket.equipment.serial_number}</p>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                    <ClipboardDocumentListIcon className="h-5 w-5 text-red-600 mr-2" />
+                    Ticket Information
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Status</label>
+                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getStatusBadgeColor(ticket.ticket_status)}`}>
+                        {ticket.ticket_status}
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Priority</label>
+                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getPriorityBadgeColor(ticket.priority)}`}>
+                        {ticket.priority}
+                      </span>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Support Type</label>
+                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getTypeBadgeColor(ticket.support_type)}`}>
+                        {ticket.support_type}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Created At</label>
+                      <p className="text-sm text-gray-900">{formatDate(ticket.created_at)}</p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Calculated Hours</label>
+                      <p className="text-sm text-gray-900">{ticket.calculated_hours ? Number(ticket.calculated_hours).toFixed(1) : '0.0'} hours</p>
+                    </div>
+                    
+                    {ticket.scheduled_date && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Scheduled Date</label>
+                        <p className="text-sm text-gray-900">{formatDateOnly(ticket.scheduled_date)}</p>
+                      </div>
+                    )}
+                    
+                    {ticket.resolved_at && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Resolved At</label>
+                        <p className="text-sm text-gray-900">{formatDate(ticket.resolved_at)}</p>
+                      </div>
+                    )}
+                    
+                    {ticket.cost && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Cost</label>
+                        <p className="text-sm text-gray-900">${ticket.cost.toFixed(2)}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-6">
+                    <label className="block text-sm font-medium text-gray-700">Issue Description</label>
+                    <p className="text-sm text-gray-900 mt-1">{ticket.issue_description}</p>
+                  </div>
+
+                  {ticket.resolution_description && (
+                    <div className="mt-6">
+                      <label className="block text-sm font-medium text-gray-700">Resolution Description</label>
+                      <p className="text-sm text-gray-900 mt-1">{ticket.resolution_description}</p>
+                    </div>
+                  )}
                 </div>
+
+                {/* Client Information */}
+                {ticket.client && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                      <BuildingOfficeIcon className="h-5 w-5 text-red-600 mr-2" />
+                      Client Information
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Company Name</label>
+                        <p className="text-sm text-gray-900">{ticket.client.company_name}</p>
+                      </div>
+                      
+                      {ticket.client.email && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Email</label>
+                          <p className="text-sm text-gray-900">{ticket.client.email}</p>
+                        </div>
+                      )}
+                      
+                      {ticket.client.primary_phone && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Phone</label>
+                          <p className="text-sm text-gray-900">{ticket.client.primary_phone}</p>
+                        </div>
+                      )}
+                      
+                      {ticket.client.street_address && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Address</label>
+                          <p className="text-sm text-gray-900">{ticket.client.street_address}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Equipment Information */}
+                {ticket.equipment && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                      <Cog6ToothIcon className="h-5 w-5 text-red-600 mr-2" />
+                      Equipment Information
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Serial Number</label>
+                        <p className="text-sm text-gray-900">{ticket.equipment.serial_number}</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Equipment Name</label>
+                        <p className="text-sm text-gray-900">{ticket.equipment.equipment_name}</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Equipment Type</label>
+                        <p className="text-sm text-gray-900">{ticket.equipment.equipment_type}</p>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Compliance Status</label>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${
+                          ticket.equipment.compliance_status === 'compliant' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {ticket.equipment.compliance_status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'details' && (
+              <div className="space-y-8">
+                {/* Detailed Information */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Equipment Name</label>
-                  <p className="mt-1 text-sm text-gray-900">{ticket.equipment.equipment_name}</p>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                    <DocumentTextIcon className="h-5 w-5 text-red-600 mr-2" />
+                    Detailed Information
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Created At</label>
+                      <p className="text-sm text-gray-900">{formatDate(ticket.created_at)}</p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Updated At</label>
+                      <p className="text-sm text-gray-900">{formatDate(ticket.updated_at)}</p>
+                    </div>
+                    
+                    {ticket.scheduled_date && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Scheduled Date</label>
+                        <p className="text-sm text-gray-900">{formatDateOnly(ticket.scheduled_date)}</p>
+                      </div>
+                    )}
+                    
+                    {ticket.resolved_at && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Resolved At</label>
+                        <p className="text-sm text-gray-900">{formatDate(ticket.resolved_at)}</p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Calculated Hours</label>
+                      <p className="text-sm text-gray-900">{ticket.calculated_hours?.toFixed(1) || '0.0'} hours</p>
+                    </div>
+                    
+                    {ticket.cost && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Cost</label>
+                        <p className="text-sm text-gray-900">${ticket.cost.toFixed(2)}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Timeline */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Type</label>
-                  <p className="mt-1 text-sm text-gray-900">{ticket.equipment.equipment_type}</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Compliance Status</label>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${
-                    ticket.equipment.compliance_status === 'compliant' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {ticket.equipment.compliance_status}
-                  </span>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                    <ClockIcon className="h-5 w-5 text-red-600 mr-2" />
+                    Timeline
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Ticket Created</p>
+                        <p className="text-xs text-gray-500">{formatDate(ticket.created_at)}</p>
+                      </div>
+                    </div>
+                    
+                    {ticket.updated_at !== ticket.created_at && (
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0">
+                          <div className="w-2 h-2 bg-yellow-600 rounded-full mt-2"></div>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Last Updated</p>
+                          <p className="text-xs text-gray-500">{formatDate(ticket.updated_at)}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {ticket.resolved_at && (
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0">
+                          <div className="w-2 h-2 bg-green-600 rounded-full mt-2"></div>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Ticket Resolved</p>
+                          <p className="text-xs text-gray-500">{formatDate(ticket.resolved_at)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            ) : (
-              <p className="text-sm text-gray-500">No Equipment Assigned</p>
+            )}
+
+            {activeTab === 'equipment' && ticket.equipment && (
+              <div className="space-y-8">
+                {/* Equipment Details */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                    <Cog6ToothIcon className="h-5 w-5 text-red-600 mr-2" />
+                    Equipment Details
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Serial Number</label>
+                      <p className="text-sm font-medium text-gray-900">{ticket.equipment.serial_number}</p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Equipment Name</label>
+                      <p className="text-sm text-gray-900">{ticket.equipment.equipment_name}</p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Equipment Type</label>
+                      <p className="text-sm text-gray-900">{ticket.equipment.equipment_type}</p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Compliance Status</label>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${
+                        ticket.equipment.compliance_status === 'compliant' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {ticket.equipment.compliance_status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Equipment Actions */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Equipment Actions</h3>
+                  
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                      This ticket is associated with the equipment listed above. Any maintenance performed should be documented appropriately.
+                    </p>
+                    
+                    <Link
+                      href={`/equipment/${ticket.equipment.id}`}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                      <Cog6ToothIcon className="h-4 w-4 mr-2" />
+                      View Full Equipment Details
+                    </Link>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* Related Tickets */}
-      {relatedTickets.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Related Tickets</h3>
-          
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Ticket Number
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Equipment
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Issue Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Priority
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Scheduled Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white">
-                {relatedTickets.map((relatedTicket, index) => (
-                  <tr key={relatedTicket.id} className={`hover:bg-gray-50 transition-colors ${index !== relatedTickets.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-blue-600">
-                        {relatedTicket.ticket_number}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {relatedTicket.equipment_serial_number || 'N/A'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900 max-w-xs">
-                        {relatedTicket.issue_description.length > 50 
-                          ? `${relatedTicket.issue_description.substring(0, 50)}...` 
-                          : relatedTicket.issue_description}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getStatusBadgeColor(relatedTicket.ticket_status)}`}>
-                        {relatedTicket.ticket_status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${getPriorityBadgeColor(relatedTicket.priority)}`}>
-                        {relatedTicket.priority}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {relatedTicket.scheduled_date ? formatDateOnly(relatedTicket.scheduled_date) : 'Not scheduled'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Link
-                        href={`/maintenance-tickets/${relatedTicket.id}`}
-                        className="text-blue-600 hover:text-blue-900 text-sm font-medium"
-                      >
-                        View Details
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Edit Modal */}
       {showEditModal && (
@@ -828,27 +902,7 @@ export default function TicketDetailsPage() {
                   />
                 </div>
 
-                {/* Assigned Technician */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Assigned Technician
-                  </label>
-                  <select
-                    value={editFormData.assigned_technician || ''}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      assigned_technician: e.target.value ? parseInt(e.target.value) : undefined
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select a technician...</option>
-                    {technicians.map((tech) => (
-                      <option key={tech.id} value={tech.id}>
-                        {tech.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
 
                 {/* Modal Actions */}
                 <div className="flex justify-end space-x-3 pt-4">
@@ -861,8 +915,7 @@ export default function TicketDetailsPage() {
                         ticket_status: ticket.ticket_status,
                         priority: ticket.priority,
                         issue_description: ticket.issue_description,
-                        scheduled_date: ticket.scheduled_date,
-                        assigned_technician: undefined
+                        scheduled_date: ticket.scheduled_date
                       });
                     }}
                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-2 focus:ring-blue-500"
@@ -921,24 +974,16 @@ export default function TicketDetailsPage() {
                   </p>
                 </div>
 
-                {/* Actual Hours */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Actual Hours (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.25"
-                    min="0"
-                    max="999.99"
-                    value={resolveFormData.actual_hours || ''}
-                    onChange={(e) => setResolveFormData({
-                      ...resolveFormData,
-                      actual_hours: e.target.value ? parseFloat(e.target.value) : undefined
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="0.00"
-                  />
+                {/* Note about automatic hours calculation */}
+                <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
+                  <div className="flex">
+                    <InformationCircleIcon className="h-5 w-5 text-blue-400" />
+                    <div className="ml-3">
+                      <p className="text-sm text-blue-700">
+                        Hours will be automatically calculated based on the time between ticket creation and resolution.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Cost */}
@@ -996,7 +1041,6 @@ export default function TicketDetailsPage() {
           </div>
         </div>
       )}
-      </div>
     </DashboardLayout>
   );
 }

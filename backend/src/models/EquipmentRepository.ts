@@ -203,60 +203,84 @@ export class EquipmentRepository {
    */
   static async getEquipmentTypes(vendorId?: number, filters: { search?: string, category?: string } = {}) {
     const startTime = DebugLogger.startTimer();
-    DebugLogger.log('Getting equipment catalog', { vendorId, filters }, 'EQUIPMENT_REPO');
+    DebugLogger.log('Getting vendor equipment catalog', { vendorId, filters }, 'EQUIPMENT_REPO');
 
     try {
-      let whereClause = 'WHERE deleted_at IS NULL';
-      const queryParams: any[] = [];
-      let paramCount = 0;
+      if (!vendorId) {
+        throw new Error('Vendor ID is required for equipment types');
+      }
 
-      // Add search filter - searches equipment_name and equipment_code only (as per specification)
+      const queryParams: any[] = [vendorId];
+      let additionalFilters = '';
+      let paramCount = 1;
+
+      // Add search filter
       if (filters.search) {
         paramCount++;
-        whereClause += ` AND (equipment_name ILIKE $${paramCount} OR equipment_code ILIKE $${paramCount})`;
+        additionalFilters += ` AND (e.equipment_name ILIKE $${paramCount} OR e.equipment_code ILIKE $${paramCount})`;
         queryParams.push(`%${filters.search}%`);
       }
 
       // Add category filter
       if (filters.category) {
         paramCount++;
-        whereClause += ` AND equipment_type = $${paramCount}`;
+        additionalFilters += ` AND e.equipment_type = $${paramCount}`;
         queryParams.push(filters.category);
       }
 
+      // Get the equipment types list directly without aggregate mixing
       const query = `
-        SELECT 
-          e.id,
-          e.equipment_name || E'\\n' || e.manufacturer || ' - ' || COALESCE(e.model, '') AS equipment_details,
-          e.equipment_type AS category_type,
-          'Code: ' || e.equipment_code AS code,
-          COALESCE((
-            SELECT COUNT(*) 
-            FROM equipment_instance ei 
-            WHERE ei.equipment_id = e.id 
-              AND ei.deleted_at IS NULL
-          ), 0) AS total_active_instances,
-          'Lifespan: ' || e.default_lifespan_years || ' years' AS lifespan,
-          COALESCE(e.description, 'No description available') AS description,
-          e.specifications,
-          -- Keep original fields for compatibility
-          e.equipment_code,
-          e.equipment_name,
-          e.equipment_type,
-          e.manufacturer,
-          e.model,
-          e.default_lifespan_years,
-          e.created_at
-        FROM public.equipment e
-        ${whereClause}
+        SELECT jsonb_build_object(
+          'id', e.id,
+          'equipment_name', e.equipment_name,
+          'equipment_code', e.equipment_code,
+          'equipment_type', e.equipment_type,
+          'manufacturer', e.manufacturer,
+          'model', e.model,
+          'instance_count', COALESCE(inst.cnt, 0),
+          'available_count', COALESCE(inst.available, 0),
+          'assigned_count', COALESCE(inst.assigned, 0),
+          'specifications', e.specifications,
+          -- Formatted fields for compatibility
+          'equipment_details', e.equipment_name || E'\\n' || e.manufacturer || ' - ' || COALESCE(e.model, ''),
+          'category_type', e.equipment_type,
+          'code', 'Code: ' || e.equipment_code,
+          'total_active_instances', COALESCE(inst.cnt, 0),
+          'lifespan', 'Lifespan: ' || e.default_lifespan_years || ' years',
+          'description', COALESCE(e.description, 'No description available'),
+          'default_lifespan_years', e.default_lifespan_years,
+          'created_at', e.created_at
+        ) AS equipment_type_data
+        FROM equipment e
+        LEFT JOIN LATERAL (
+          SELECT
+            COUNT(*) AS cnt,
+            COUNT(*) FILTER (WHERE ei.status = 'available') AS available,
+            COUNT(*) FILTER (WHERE ei.status = 'assigned') AS assigned
+          FROM equipment_instance ei
+          WHERE ei.equipment_id = e.id
+            AND ei.vendor_id = $1
+            AND ei.deleted_at IS NULL
+        ) inst ON TRUE
+        WHERE EXISTS (
+          SELECT 1 FROM equipment_instance ei
+          WHERE ei.equipment_id = e.id
+            AND ei.vendor_id = $1
+            AND ei.deleted_at IS NULL
+        )
+        AND e.deleted_at IS NULL ${additionalFilters}
         ORDER BY e.equipment_name
       `;
 
-      DebugLogger.database('Equipment Catalog Query', query);
+      DebugLogger.database('Vendor Equipment Catalog Query', query);
       const result = await pool.query(query, queryParams);
 
-      DebugLogger.performance('Equipment catalog fetch', startTime, { count: result.rows.length });
-      return result.rows;
+      DebugLogger.performance('Vendor equipment catalog fetch', startTime, { count: result.rows.length });
+      
+      // Extract equipment type data from each row
+      const equipmentTypes = result.rows.map(row => row.equipment_type_data);
+
+      return equipmentTypes;
 
     } catch (error) {
       DebugLogger.error('Error fetching equipment catalog', error, { vendorId, filters });
@@ -270,34 +294,34 @@ export class EquipmentRepository {
    */
   static async getEquipmentStats(vendorId?: number) {
     const startTime = DebugLogger.startTimer();
-    DebugLogger.log('Getting equipment stats', { vendorId }, 'EQUIPMENT_REPO');
+    DebugLogger.log('Getting vendor equipment stats', { vendorId }, 'EQUIPMENT_REPO');
 
     try {
-      // Note: this query follows the SQL provided by the user and operates across the equipment catalog.
+      if (!vendorId) {
+        throw new Error('Vendor ID is required for equipment stats');
+      }
+
       const query = `
-        SELECT 
-          COUNT(*) FILTER (WHERE e.deleted_at IS NULL) AS equipment_types,
+        SELECT
+          -- Summary Cards
+          COUNT(DISTINCT e.id) AS equipment_types,
+          COUNT(ei.id) AS total_instances,
+          COUNT(DISTINCT e.equipment_type) AS categories,
+          ROUND(AVG(e.default_lifespan_years), 1) AS avg_lifespan
 
-          COALESCE(SUM(
-            (SELECT COUNT(*) 
-             FROM public.equipment_instance ei 
-             WHERE ei.equipment_id = e.id 
-               AND ei.deleted_at IS NULL)
-          ), 0) AS total_instances,
-
-          COUNT(DISTINCT e.equipment_type) FILTER (WHERE e.deleted_at IS NULL) AS categories,
-
-          ROUND(AVG(e.default_lifespan_years)::numeric, 1) AS avg_lifespan
-        FROM public.equipment e
-        WHERE e.deleted_at IS NULL
+        FROM public.equipment_instance ei
+        JOIN public.equipment e ON ei.equipment_id = e.id
+        WHERE ei.vendor_id = $1
+          AND ei.deleted_at IS NULL
+          AND e.deleted_at IS NULL
       `;
 
-      DebugLogger.database('Equipment Stats Query', query);
-      const result = await pool.query(query);
+      DebugLogger.database('Vendor Equipment Stats Query', query);
+      const result = await pool.query(query, [vendorId]);
 
       const row = result.rows[0] || {};
 
-      DebugLogger.performance('Equipment stats fetch', startTime, { stats: row });
+      DebugLogger.performance('Vendor equipment stats fetch', startTime, { vendorId, stats: row });
 
       return {
         equipment_types: parseInt(row.equipment_types || 0, 10),
@@ -307,7 +331,7 @@ export class EquipmentRepository {
       };
 
     } catch (error) {
-      DebugLogger.error('Error fetching equipment stats', error, { vendorId });
+      DebugLogger.error('Error fetching vendor equipment stats', error, { vendorId });
       throw error;
     }
   }

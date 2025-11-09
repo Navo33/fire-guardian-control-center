@@ -115,6 +115,7 @@ export const API_ENDPOINTS = {
 
   // Maintenance Tickets (Vendor-specific)
   MAINTENANCE_TICKETS: {
+    BASE: `${API_BASE_URL}/vendor/tickets`,
     KPIS: `${API_BASE_URL}/vendor/tickets/kpis`,
     LIST: `${API_BASE_URL}/vendor/tickets`,
     CREATE: `${API_BASE_URL}/vendor/tickets`,
@@ -125,6 +126,7 @@ export const API_ENDPOINTS = {
     RELATED: (id: string | number) => `${API_BASE_URL}/vendor/tickets/${id}/related`,
     CLIENTS: `${API_BASE_URL}/vendor/tickets/clients`,
     EQUIPMENT: `${API_BASE_URL}/vendor/tickets/equipment`,
+    EQUIPMENT_FOR_CLIENT: (clientId: string | number) => `${API_BASE_URL}/vendor/tickets/equipment/${clientId}`,
     TECHNICIANS: `${API_BASE_URL}/vendor/tickets/technicians`,
   },
 
