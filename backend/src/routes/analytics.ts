@@ -129,4 +129,59 @@ router.get('/alerts/trends', requireSuperAdmin, [
   query('endDate').optional().isISO8601().withMessage('Invalid end date format')
 ], analyticsController.getAlertTrends);
 
+// Middleware to ensure only vendors can access vendor analytics
+const requireVendor = [
+  authenticateToken,
+  (req: any, res: any, next: any) => {
+    if (req.user?.user_type !== 'vendor') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Vendor privileges required.',
+        errorCode: 'FORBIDDEN'
+      });
+    }
+    next();
+  }
+];
+
+/**
+ * Vendor-Specific Analytics Routes
+ */
+
+/**
+ * @route   GET /api/analytics/vendor
+ * @desc    Get comprehensive vendor analytics dashboard
+ * @access  Private (Vendor)
+ * @params  ?startDate, endDate, clientId
+ */
+router.get('/vendor', requireVendor, [
+  query('startDate').optional().isISO8601().withMessage('Invalid start date format'),
+  query('endDate').optional().isISO8601().withMessage('Invalid end date format'),
+  query('clientId').optional().isNumeric().withMessage('Client ID must be numeric')
+], analyticsController.getVendorAnalytics);
+
+/**
+ * @route   GET /api/analytics/vendor/ticket-trends
+ * @desc    Get ticket trends for vendor
+ * @access  Private (Vendor)
+ * @params  ?startDate, endDate, clientId
+ */
+router.get('/vendor/ticket-trends', requireVendor, [
+  query('startDate').optional().isISO8601().withMessage('Invalid start date format'),
+  query('endDate').optional().isISO8601().withMessage('Invalid end date format'),
+  query('clientId').optional().isNumeric().withMessage('Client ID must be numeric')
+], analyticsController.getTicketTrends);
+
+/**
+ * @route   GET /api/analytics/vendor/compliance-trends
+ * @desc    Get compliance trends for vendor
+ * @access  Private (Vendor)
+ * @params  ?startDate, endDate, clientId
+ */
+router.get('/vendor/compliance-trends', requireVendor, [
+  query('startDate').optional().isISO8601().withMessage('Invalid start date format'),
+  query('endDate').optional().isISO8601().withMessage('Invalid end date format'),
+  query('clientId').optional().isNumeric().withMessage('Client ID must be numeric')
+], analyticsController.getComplianceTrends);
+
 export default router;

@@ -5,14 +5,42 @@ export interface SystemMetrics {
   totalVendors: number;
   totalClients: number;
   totalEquipment: number;
-  totalAssignments: number;
-  activeAssignments: number;
-  pendingReturns: number;
-  totalRevenue?: number;
-  avgAssignmentDuration?: number;
+  totalTickets: number;
+  openTickets: number;
+  resolvedTickets: number;
+  avgResolutionTime?: number;
   criticalAlerts?: number;
   warningAlerts?: number;
   infoAlerts?: number;
+}
+
+// New vendor-specific analytics interfaces
+export interface TicketTrends {
+  month: string;
+  created_tickets: number;
+  resolved_tickets: number;
+  avg_resolution_hours: number;
+}
+
+export interface ComplianceTrends {
+  month: string;
+  compliant: number;
+  expired: number;
+  overdue: number;
+  compliant_pct: number;
+}
+
+export interface ClientPerformance {
+  company_name: string;
+  ticket_count: number;
+  avg_resolution_hours: number;
+  client_id: number;
+}
+
+export interface EquipmentHealth {
+  status: string;
+  count: number;
+  percentage: number;
 }
 
 export interface VendorMetrics {
@@ -121,12 +149,13 @@ class AnalyticsRepository {
 
       const query = `
         SELECT 
-          (SELECT COUNT(*) FROM "user" WHERE user_type = 'vendor' AND deleted_at IS NULL) as total_vendors,
-          (SELECT COUNT(*) FROM "user" WHERE user_type = 'client' AND deleted_at IS NULL) as total_clients,
+          (SELECT COUNT(*) FROM vendors WHERE deleted_at IS NULL) as total_vendors,
+          (SELECT COUNT(*) FROM clients WHERE deleted_at IS NULL) as total_clients,
           (SELECT COUNT(*) FROM equipment_instance WHERE deleted_at IS NULL) as total_equipment,
-          (SELECT COUNT(*) FROM equipment_assignment WHERE 1=1 ${assignmentDateFilter}) as total_assignments,
-          (SELECT COUNT(*) FROM equipment_assignment WHERE status = 'active' ${assignmentDateFilter}) as active_assignments,
-          (SELECT COUNT(*) FROM maintenance_ticket WHERE ticket_status = 'open' ${dateFilter}) as pending_returns,
+          (SELECT COUNT(*) FROM maintenance_ticket WHERE 1=1 ${dateFilter}) as total_tickets,
+          (SELECT COUNT(*) FROM maintenance_ticket WHERE ticket_status = 'open' ${dateFilter}) as open_tickets,
+          (SELECT COUNT(*) FROM maintenance_ticket WHERE ticket_status = 'resolved' ${dateFilter}) as resolved_tickets,
+          (SELECT COALESCE(AVG(actual_hours), 0) FROM maintenance_ticket WHERE ticket_status = 'resolved' AND actual_hours IS NOT NULL ${dateFilter}) as avg_resolution_time,
           (SELECT COUNT(*) FROM notification WHERE type = 'error' ${dateFilter}) as critical_alerts,
           (SELECT COUNT(*) FROM notification WHERE type = 'warning' ${dateFilter}) as warning_alerts,
           (SELECT COUNT(*) FROM notification WHERE type = 'info' ${dateFilter}) as info_alerts
@@ -139,9 +168,10 @@ class AnalyticsRepository {
         totalVendors: parseInt(row.total_vendors) || 0,
         totalClients: parseInt(row.total_clients) || 0,
         totalEquipment: parseInt(row.total_equipment) || 0,
-        totalAssignments: parseInt(row.total_assignments) || 0,
-        activeAssignments: parseInt(row.active_assignments) || 0,
-        pendingReturns: parseInt(row.pending_returns) || 0,
+        totalTickets: parseInt(row.total_tickets) || 0,
+        openTickets: parseInt(row.open_tickets) || 0,
+        resolvedTickets: parseInt(row.resolved_tickets) || 0,
+        avgResolutionTime: parseFloat(row.avg_resolution_time) || 0,
         criticalAlerts: parseInt(row.critical_alerts) || 0,
         warningAlerts: parseInt(row.warning_alerts) || 0,
         infoAlerts: parseInt(row.info_alerts) || 0,
@@ -525,6 +555,201 @@ class AnalyticsRepository {
       }));
     } catch (error) {
       console.error('Error fetching companies:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get ticket trends data for vendor analytics
+   */
+  async getTicketTrends(vendorId: number, clientId?: number, startDate?: string, endDate?: string): Promise<TicketTrends[]> {
+    try {
+      const params: any[] = [vendorId];
+      let paramCount = 1;
+      
+      let clientFilter = '';
+      if (clientId) {
+        paramCount++;
+        clientFilter = 'AND (c.id = $' + paramCount + ' OR $' + paramCount + ' IS NULL)';
+        params.push(clientId);
+      } else {
+        paramCount++;
+        clientFilter = 'AND ($' + paramCount + ' IS NULL)';
+        params.push(null);
+      }
+      
+      let dateFilter = '';
+      if (startDate && endDate) {
+        paramCount++;
+        dateFilter += 'AND mt.created_at BETWEEN $' + paramCount;
+        params.push(startDate);
+        paramCount++;
+        dateFilter += ' AND $' + paramCount;
+        params.push(endDate);
+      }
+
+      const query = `
+        SELECT 
+            DATE_TRUNC('month', mt.created_at) AS month,
+            COUNT(*) FILTER (WHERE mt.ticket_status IN ('open', 'created')) AS created_tickets,
+            COUNT(*) FILTER (WHERE mt.ticket_status = 'resolved') AS resolved_tickets,
+            ROUND(AVG(mt.actual_hours), 1) AS avg_resolution_hours
+        FROM public.maintenance_ticket mt
+        JOIN public.clients c ON mt.client_id = c.id
+        WHERE mt.vendor_id = $1
+          ${clientFilter}
+          ${dateFilter}
+        GROUP BY month
+        ORDER BY month;
+      `;
+
+      const result = await this.pool.query(query, params);
+      
+      return result.rows.map(row => ({
+        month: row.month.toISOString().split('T')[0],
+        created_tickets: parseInt(row.created_tickets) || 0,
+        resolved_tickets: parseInt(row.resolved_tickets) || 0,
+        avg_resolution_hours: parseFloat(row.avg_resolution_hours) || 0,
+      }));
+    } catch (error) {
+      console.error('Error fetching ticket trends:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get compliance trends data for vendor analytics
+   */
+  async getComplianceTrends(vendorId: number, clientId?: number, startDate?: string, endDate?: string): Promise<ComplianceTrends[]> {
+    try {
+      const params: any[] = [vendorId];
+      let paramCount = 1;
+      
+      let clientFilter = '';
+      if (clientId) {
+        paramCount++;
+        clientFilter = 'AND (c.id = $' + paramCount + ' OR $' + paramCount + ' IS NULL)';
+        params.push(clientId);
+      } else {
+        paramCount++;
+        clientFilter = 'AND ($' + paramCount + ' IS NULL)';
+        params.push(null);
+      }
+      
+      let dateFilter = '';
+      if (startDate && endDate) {
+        paramCount++;
+        dateFilter += 'AND ei.updated_at BETWEEN $' + paramCount;
+        params.push(startDate);
+        paramCount++;
+        dateFilter += ' AND $' + paramCount;
+        params.push(endDate);
+      }
+
+      const query = `
+        SELECT 
+            DATE_TRUNC('month', ei.updated_at) AS month,
+            COUNT(*) FILTER (WHERE ei.compliance_status = 'compliant') AS compliant,
+            COUNT(*) FILTER (WHERE ei.compliance_status = 'expired') AS expired,
+            COUNT(*) FILTER (WHERE ei.compliance_status = 'overdue') AS overdue,
+            ROUND((COUNT(*) FILTER (WHERE ei.compliance_status = 'compliant')::float / COUNT(*)) * 100, 1) AS compliant_pct
+        FROM public.equipment_instance ei
+        LEFT JOIN public.clients c ON ei.assigned_to = c.id
+        WHERE ei.vendor_id = $1
+          ${clientFilter}
+          ${dateFilter}
+        GROUP BY month
+        ORDER BY month;
+      `;
+
+      const result = await this.pool.query(query, params);
+      
+      return result.rows.map(row => ({
+        month: row.month.toISOString().split('T')[0],
+        compliant: parseInt(row.compliant) || 0,
+        expired: parseInt(row.expired) || 0,
+        overdue: parseInt(row.overdue) || 0,
+        compliant_pct: parseFloat(row.compliant_pct) || 0,
+      }));
+    } catch (error) {
+      console.error('Error fetching compliance trends:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get client performance data for vendor analytics
+   */
+  async getClientPerformance(vendorId: number, startDate?: string, endDate?: string): Promise<ClientPerformance[]> {
+    try {
+      const params: any[] = [vendorId];
+      let paramCount = 1;
+      
+      let dateFilter = '';
+      if (startDate && endDate) {
+        paramCount++;
+        dateFilter += 'AND mt.created_at BETWEEN $' + paramCount;
+        params.push(startDate);
+        paramCount++;
+        dateFilter += ' AND $' + paramCount;
+        params.push(endDate);
+      }
+
+      const query = `
+        SELECT 
+            c.company_name,
+            c.id as client_id,
+            COUNT(mt.id) AS ticket_count,
+            COALESCE(AVG(mt.actual_hours), 0) AS avg_resolution_hours
+        FROM public.maintenance_ticket mt
+        JOIN public.clients c ON mt.client_id = c.id
+        WHERE mt.vendor_id = $1
+          ${dateFilter}
+        GROUP BY c.id, c.company_name
+        ORDER BY ticket_count DESC
+        LIMIT 5;
+      `;
+
+      const result = await this.pool.query(query, params);
+      
+      return result.rows.map(row => ({
+        company_name: row.company_name,
+        client_id: parseInt(row.client_id),
+        ticket_count: parseInt(row.ticket_count) || 0,
+        avg_resolution_hours: parseFloat(row.avg_resolution_hours) || 0,
+      }));
+    } catch (error) {
+      console.error('Error fetching client performance:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get equipment health data for vendor analytics
+   */
+  async getEquipmentHealth(vendorId: number): Promise<EquipmentHealth[]> {
+    try {
+      const query = `
+        SELECT 
+            ei.status,
+            COUNT(*) as count,
+            ROUND((COUNT(*)::float / (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND deleted_at IS NULL)) * 100, 1) as percentage
+        FROM public.equipment_instance ei
+        WHERE ei.vendor_id = $1 
+          AND ei.deleted_at IS NULL
+        GROUP BY ei.status
+        ORDER BY count DESC;
+      `;
+
+      const result = await this.pool.query(query, [vendorId]);
+      
+      return result.rows.map(row => ({
+        status: row.status,
+        count: parseInt(row.count) || 0,
+        percentage: parseFloat(row.percentage) || 0,
+      }));
+    } catch (error) {
+      console.error('Error fetching equipment health:', error);
       throw error;
     }
   }

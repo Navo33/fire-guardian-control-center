@@ -81,6 +81,9 @@ export const API_ENDPOINTS = {
   ANALYTICS: {
     SYSTEM: `${API_BASE_URL}/analytics/system`,
     METRICS: `${API_BASE_URL}/analytics/metrics`,
+    VENDOR: `${API_BASE_URL}/analytics/vendor`,
+    VENDOR_TICKET_TRENDS: `${API_BASE_URL}/analytics/vendor/ticket-trends`,
+    VENDOR_COMPLIANCE_TRENDS: `${API_BASE_URL}/analytics/vendor/compliance-trends`,
   },
   
   // Equipment

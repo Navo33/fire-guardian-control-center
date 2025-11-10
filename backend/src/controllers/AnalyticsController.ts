@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import AnalyticsRepository, { AnalyticsFilters, AlertMetrics, AlertTrend } from '../models/AnalyticsRepository';
+import { DashboardRepository } from '../models/DashboardRepository';
+import { AuthenticatedRequest } from '../types';
 
 class AnalyticsController extends BaseController {
   private analyticsRepository: AnalyticsRepository;
@@ -9,6 +11,16 @@ class AnalyticsController extends BaseController {
   constructor() {
     super();
     this.analyticsRepository = new AnalyticsRepository();
+  }
+
+  /**
+   * Helper method to get vendor ID from authenticated user
+   */
+  private async getVendorId(req: AuthenticatedRequest): Promise<number | null> {
+    if (!req.user?.userId) {
+      return null;
+    }
+    return await DashboardRepository.getVendorIdFromUserId(req.user.userId);
   }
 
   /**
@@ -188,6 +200,104 @@ class AnalyticsController extends BaseController {
     } catch (error) {
       console.error('Error fetching alert trends:', error);
       ApiResponseUtil.internalError(res, 'Failed to fetch alert trends');
+    }
+  };
+
+  /**
+   * Get vendor-specific analytics data
+   * @route GET /api/vendor/analytics
+   * @access Private (Vendor)
+   */
+  public getVendorAnalytics = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const vendorId = await this.getVendorId(req as AuthenticatedRequest);
+      if (!vendorId) {
+        ApiResponseUtil.unauthorized(res, 'Vendor ID not found');
+        return;
+      }
+
+      const { clientId, startDate, endDate } = req.query;
+
+      const [
+        systemMetrics,
+        ticketTrends,
+        complianceTrends,
+        clientPerformance,
+        equipmentHealth
+      ] = await Promise.all([
+        this.analyticsRepository.getSystemMetrics({ startDate: startDate as string, endDate: endDate as string }),
+        this.analyticsRepository.getTicketTrends(vendorId, clientId ? parseInt(clientId as string) : undefined, startDate as string, endDate as string),
+        this.analyticsRepository.getComplianceTrends(vendorId, clientId ? parseInt(clientId as string) : undefined, startDate as string, endDate as string),
+        this.analyticsRepository.getClientPerformance(vendorId, startDate as string, endDate as string),
+        this.analyticsRepository.getEquipmentHealth(vendorId)
+      ]);
+
+      ApiResponseUtil.success(res, {
+        systemMetrics,
+        ticketTrends,
+        complianceTrends,
+        clientPerformance,
+        equipmentHealth
+      }, 'Vendor analytics data retrieved successfully');
+    } catch (error) {
+      console.error('Error fetching vendor analytics:', error);
+      ApiResponseUtil.internalError(res, 'Failed to fetch vendor analytics data');
+    }
+  };
+
+  /**
+   * Get ticket trends for vendor
+   * @route GET /api/vendor/analytics/ticket-trends
+   * @access Private (Vendor)
+   */
+  public getTicketTrends = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const vendorId = await this.getVendorId(req as AuthenticatedRequest);
+      if (!vendorId) {
+        ApiResponseUtil.unauthorized(res, 'Vendor ID not found');
+        return;
+      }
+
+      const { clientId, startDate, endDate } = req.query;
+      const ticketTrends = await this.analyticsRepository.getTicketTrends(
+        vendorId, 
+        clientId ? parseInt(clientId as string) : undefined, 
+        startDate as string, 
+        endDate as string
+      );
+
+      ApiResponseUtil.success(res, ticketTrends, 'Ticket trends retrieved successfully');
+    } catch (error) {
+      console.error('Error fetching ticket trends:', error);
+      ApiResponseUtil.internalError(res, 'Failed to fetch ticket trends');
+    }
+  };
+
+  /**
+   * Get compliance trends for vendor
+   * @route GET /api/vendor/analytics/compliance-trends
+   * @access Private (Vendor)
+   */
+  public getComplianceTrends = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const vendorId = await this.getVendorId(req as AuthenticatedRequest);
+      if (!vendorId) {
+        ApiResponseUtil.unauthorized(res, 'Vendor ID not found');
+        return;
+      }
+
+      const { clientId, startDate, endDate } = req.query;
+      const complianceTrends = await this.analyticsRepository.getComplianceTrends(
+        vendorId, 
+        clientId ? parseInt(clientId as string) : undefined, 
+        startDate as string, 
+        endDate as string
+      );
+
+      ApiResponseUtil.success(res, complianceTrends, 'Compliance trends retrieved successfully');
+    } catch (error) {
+      console.error('Error fetching compliance trends:', error);
+      ApiResponseUtil.internalError(res, 'Failed to fetch compliance trends');
     }
   };
 
