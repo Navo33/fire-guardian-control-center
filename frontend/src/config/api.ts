@@ -176,6 +176,7 @@ export const API_ENDPOINTS = {
       TYPES: `${API_BASE_URL}/client-views/equipment/types`,
     },
     SERVICE_REQUESTS: `${API_BASE_URL}/client-views/service-requests`,
+    SERVICE_REQUEST_BY_ID: (id: string | number) => `${API_BASE_URL}/client-views/service-requests/${id}`,
     REPORTS: {
       KPIS: `${API_BASE_URL}/client-views/reports/kpis`,
       COMPLIANCE_CHART: `${API_BASE_URL}/client-views/reports/compliance-chart`,
