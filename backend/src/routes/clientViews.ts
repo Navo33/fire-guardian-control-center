@@ -14,9 +14,12 @@ router.get('/dashboard/activity', ClientViewsController.getRecentActivity.bind(C
 
 // Client Equipment
 router.get('/equipment', ClientViewsController.getEquipmentList.bind(ClientViewsController));
+router.get('/equipment/overview', ClientViewsController.getEquipmentTypesOverview.bind(ClientViewsController));
+router.get('/equipment/stats', ClientViewsController.getEquipmentStats.bind(ClientViewsController));
+router.get('/equipment/:id', ClientViewsController.getEquipmentDetail.bind(ClientViewsController));
 
-// Client Tickets
-router.get('/tickets', ClientViewsController.getTicketList.bind(ClientViewsController));
+// Client Service Requests (Tickets)
+router.get('/service-requests', ClientViewsController.getServiceRequests.bind(ClientViewsController));
 
 // Client Reports
 router.get('/reports/kpis', ClientViewsController.getReportsKPIs.bind(ClientViewsController));

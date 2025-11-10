@@ -199,7 +199,7 @@ app.use('/api/equipment', securityMiddleware, equipmentRoutes);
 app.use('/api/vendor/clients', securityMiddleware, clientRoutes);
 app.use('/api/vendor/tickets', securityMiddleware, maintenanceTicketRoutes);
 app.use('/api/reports', securityMiddleware, reportsRoutes);
-app.use('/api/client', securityMiddleware, clientViewsRoutes);
+app.use('/api/client-views', securityMiddleware, clientViewsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
