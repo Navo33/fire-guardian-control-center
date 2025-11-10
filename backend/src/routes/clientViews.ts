@@ -20,6 +20,7 @@ router.get('/equipment/:id', ClientViewsController.getEquipmentDetail.bind(Clien
 
 // Client Service Requests (Tickets)
 router.get('/service-requests', ClientViewsController.getServiceRequests.bind(ClientViewsController));
+router.get('/service-requests/:id', ClientViewsController.getServiceRequestDetails.bind(ClientViewsController));
 
 // Client Reports
 router.get('/reports/kpis', ClientViewsController.getReportsKPIs.bind(ClientViewsController));

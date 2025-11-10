@@ -1018,4 +1018,64 @@ export class ClientViewsRepository {
       throw error;
     }
   }
+
+  /**
+   * Get service request details for a client
+   */
+  static async getServiceRequestDetails(userId: number, ticketId: number) {
+    try {
+      const query = `
+        SELECT
+          mt.id,
+          mt.ticket_number,
+          mt.support_type AS type,
+          mt.issue_description,
+          mt.resolution_description,
+          mt.priority,
+          mt.ticket_status AS status,
+          TO_CHAR(mt.scheduled_date, 'YYYY-MM-DD"T"HH24:MI:SS') AS scheduled_date,
+          TO_CHAR(mt.resolved_at, 'YYYY-MM-DD"T"HH24:MI:SS') AS resolved_at,
+          TO_CHAR(mt.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') AS created_at,
+          TO_CHAR(mt.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS') AS updated_at,
+          mt.actual_hours,
+          -- Equipment information
+          COALESCE(e.equipment_name, 'N/A') AS equipment_name,
+          COALESCE(ei.serial_number, 'N/A') AS serial_number,
+          COALESCE(e.equipment_type, 'N/A') AS equipment_type,
+          COALESCE(ei.compliance_status, 'N/A') AS compliance_status,
+          -- Vendor information
+          COALESCE(v.company_name, 'N/A') AS vendor_name,
+          COALESCE(vu.email, 'N/A') AS vendor_email,
+          COALESCE(v.primary_phone, 'N/A') AS vendor_phone,
+          COALESCE(v.street_address, 'N/A') AS vendor_address,
+          -- Technician information
+          COALESCE(u.display_name, 'Not Assigned') AS technician_name,
+          COALESCE(u.email, 'N/A') AS technician_email
+        FROM public.maintenance_ticket mt
+        -- Join to get client information and verify ownership
+        JOIN public.clients c ON mt.client_id = c.id
+        JOIN public.user cu ON c.user_id = cu.id
+        -- Left joins for equipment, vendor, and technician
+        LEFT JOIN public.equipment_instance ei ON mt.equipment_instance_id = ei.id
+        LEFT JOIN public.equipment e ON ei.equipment_id = e.id
+        LEFT JOIN public.vendors v ON mt.vendor_id = v.id
+        LEFT JOIN public.user vu ON v.user_id = vu.id  -- Join vendor user for email
+        LEFT JOIN public.user u ON mt.assigned_technician = u.id
+        WHERE mt.id = $1 
+          AND cu.id = $2  -- Ensure this ticket belongs to the logged-in client
+          AND c.status = 'active'
+      `;
+
+      const result = await pool.query(query, [ticketId, userId]);
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error getting service request details:', error);
+      throw error;
+    }
+  }
 }

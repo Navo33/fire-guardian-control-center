@@ -355,4 +355,36 @@ export class ClientViewsController extends BaseController {
       res.status(500).json({ success: false, message: 'Failed to fetch service requests' });
     }
   }
+
+  /**
+   * Get service request details for a client
+   */
+  static async getServiceRequestDetails(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      const ticketId = parseInt(req.params.id);
+
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+        return;
+      }
+
+      if (!ticketId || isNaN(ticketId)) {
+        res.status(400).json({ success: false, message: 'Invalid ticket ID' });
+        return;
+      }
+      
+      const ticketDetails = await ClientViewsRepository.getServiceRequestDetails(userId, ticketId);
+      
+      if (!ticketDetails) {
+        res.status(404).json({ success: false, message: 'Service request not found' });
+        return;
+      }
+
+      res.json({ success: true, data: ticketDetails });
+    } catch (error) {
+      console.error('Error fetching service request details:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch service request details' });
+    }
+  }
 }
