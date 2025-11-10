@@ -962,6 +962,7 @@ export class ClientViewsRepository {
         ),
         tickets_list AS (
           SELECT
+            mt.id,
             mt.ticket_number,
             mt.support_type AS type,
             mt.issue_description,

@@ -51,9 +51,8 @@ export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {
       case 'client':
         return [
           { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-          { name: 'My Equipment', href: '/equipment', icon: FireIcon },
-          { name: 'Service Requests', href: '/requests', icon: ClipboardDocumentListIcon },
-          { name: 'Maintenance History', href: '/maintenance', icon: WrenchScrewdriverIcon },
+          { name: 'My Equipment', href: '/client-equipment', icon: FireIcon },
+          { name: 'Service Requests', href: '/service-requests', icon: WrenchScrewdriverIcon },
           { name: 'Safety Reports', href: '/reports', icon: ShieldCheckIcon },
         ];
       default:

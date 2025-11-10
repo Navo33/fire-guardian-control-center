@@ -164,19 +164,26 @@ export const API_ENDPOINTS = {
   // Client Views (for client users)
   CLIENT: {
     DASHBOARD: {
-      KPIS: `${API_BASE_URL}/client/dashboard/kpis`,
-      ACTIVITY: `${API_BASE_URL}/client/dashboard/activity`,
+      KPIS: `${API_BASE_URL}/client-views/dashboard/kpis`,
+      ACTIVITY: `${API_BASE_URL}/client-views/dashboard/activity`,
     },
-    EQUIPMENT: `${API_BASE_URL}/client/equipment`,
-    TICKETS: `${API_BASE_URL}/client/tickets`,
+    EQUIPMENT: {
+      LIST: `${API_BASE_URL}/client-views/equipment`,
+      OVERVIEW: `${API_BASE_URL}/client-views/equipment/overview`,
+      BY_ID: (id: string | number) => `${API_BASE_URL}/client-views/equipment/${id}`,
+      DETAIL: `${API_BASE_URL}/client-views/equipment`,
+      STATS: `${API_BASE_URL}/client-views/equipment/stats`,
+      TYPES: `${API_BASE_URL}/client-views/equipment/types`,
+    },
+    SERVICE_REQUESTS: `${API_BASE_URL}/client-views/service-requests`,
     REPORTS: {
-      KPIS: `${API_BASE_URL}/client/reports/kpis`,
-      COMPLIANCE_CHART: `${API_BASE_URL}/client/reports/compliance-chart`,
-      LIST: `${API_BASE_URL}/client/reports`,
-      BY_ID: (id: string) => `${API_BASE_URL}/client/reports/${id}`,
-      RELATED: (id: string) => `${API_BASE_URL}/client/reports/${id}/related`,
-      EXPORT: (id: string) => `${API_BASE_URL}/client/reports/${id}/export`,
-      EXPORT_ALL: `${API_BASE_URL}/client/reports/export-all`,
+      KPIS: `${API_BASE_URL}/client-views/reports/kpis`,
+      COMPLIANCE_CHART: `${API_BASE_URL}/client-views/reports/compliance-chart`,
+      LIST: `${API_BASE_URL}/client-views/reports`,
+      BY_ID: (id: string) => `${API_BASE_URL}/client-views/reports/${id}`,
+      RELATED: (id: string) => `${API_BASE_URL}/client-views/reports/${id}/related`,
+      EXPORT: (id: string) => `${API_BASE_URL}/client-views/reports/${id}/export`,
+      EXPORT_ALL: `${API_BASE_URL}/client-views/reports/export-all`,
     },
   },
 };
