@@ -1,322 +1,250 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import RequireRole from '@/components/auth/RequireRole';
+
 import { useToast } from '@/components/providers/ToastProvider';
-import { useConfirmModal } from '@/components/providers/ConfirmModalProvider';
-import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
-import DebugLogger from '@/utils/DebugLogger';
+import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
+import Link from 'next/link';
+import Image from 'next/image';
 import { 
   ClipboardDocumentListIcon,
   MagnifyingGlassIcon,
-  PlusIcon,
+
   ChevronDownIcon,
   ExclamationTriangleIcon,
   ClockIcon,
   CheckCircleIcon,
-  WrenchScrewdriverIcon
+  WrenchScrewdriverIcon,
+  UserIcon,
+  CalendarIcon,
+  ArrowTopRightOnSquareIcon,
+  FunnelIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline';
 
-interface ServiceRequest {
+// Types
+interface MaintenanceTicket {
   id: number;
-  client_name: string;
-  client_id: number;
-  equipment_type: string;
-  equipment_location: string;
-  request_type: 'Inspection' | 'Maintenance' | 'Repair' | 'Installation' | 'Emergency';
-  priority: 'Low' | 'Medium' | 'High' | 'Urgent';
-  status: 'Open' | 'In Progress' | 'Completed' | 'Cancelled';
-  description: string;
-  requested_date: string;
+  ticket_number: string;
+  equipment?: string;
+  equipment_name?: string;
+  client_name?: string;
+  vendor_name?: string;
+  status: 'open' | 'resolved' | 'closed';
+  type: 'maintenance' | 'system' | 'user';
+  priority: 'low' | 'normal' | 'high';
+  issue: string;
   scheduled_date?: string;
-  completed_date?: string;
-  assigned_technician?: string;
-  estimated_cost?: number;
-  actual_cost?: number;
+  created_at?: string;
+  updated_at?: string;
+  assigned_technician_name?: string;
 }
 
-interface ServiceRequestStats {
-  totalRequests: number;
-  openRequests: number;
-  inProgressRequests: number;
-  completedThisMonth: number;
-  urgentRequests: number;
-  averageResponseTime: number;
-  customerSatisfaction: number;
-  monthlyRevenue: number;
+interface TicketKPIs {
+  total_tickets: number;
+  open_tickets: number;
+  resolved_tickets: number;
+  closed_tickets: number;
+  high_priority_tickets: number;
+  overdue_tickets: number;
+  avg_resolution_time_hours?: number;
 }
 
-export default function VendorServiceRequestsPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [priorityFilter, setPriorityFilter] = useState('All');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const toast = useToast();
-  const confirmModal = useConfirmModal();
-  
-  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
+// No additional interfaces needed for client view
 
-  const [serviceStats, setServiceStats] = useState<ServiceRequestStats>({
-    totalRequests: 0,
-    openRequests: 0,
-    inProgressRequests: 0,
-    completedThisMonth: 0,
-    urgentRequests: 0,
-    averageResponseTime: 0,
-    customerSatisfaction: 0,
-    monthlyRevenue: 0
-  });
-
-  const requestTypes = ['All', 'Inspection', 'Maintenance', 'Repair', 'Installation', 'Emergency'];
-  const priorities = ['All', 'Low', 'Medium', 'High', 'Urgent'];
-
-  // Fetch service requests data (using maintenance tickets API)
-  const fetchServiceRequests = async () => {
-    const startTime = DebugLogger.startTimer();
-    DebugLogger.ui('ServiceRequests', 'fetchServiceRequests started');
-    
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-
-      const headers = getAuthHeaders();
-
-      // Fetch maintenance tickets as service requests
-      logApiCall('GET', API_ENDPOINTS.MAINTENANCE_TICKETS.LIST);
-      const response = await fetch(API_ENDPOINTS.MAINTENANCE_TICKETS.LIST, { headers });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch service requests: ${response.status} ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      DebugLogger.api('GET', API_ENDPOINTS.MAINTENANCE_TICKETS.LIST, undefined, result, response.status);
-
-      if (result.success) {
-        // Transform maintenance tickets to service requests format
-        const transformedRequests = result.data.map((ticket: any) => ({
-          id: ticket.id,
-          client_name: ticket.client || 'Unknown Client',
-          client_id: ticket.client_id || 0,
-          equipment_type: ticket.equipment_serial || 'Unknown Equipment',
-          equipment_location: 'Location not specified',
-          request_type: ticket.support_type === 'maintenance' ? 'Maintenance' : 'System',
-          priority: ticket.priority === 'low' ? 'Low' : 
-                   ticket.priority === 'normal' ? 'Medium' : 
-                   ticket.priority === 'high' ? 'High' : 'Medium',
-          status: ticket.ticket_status === 'open' ? 'Open' : 
-                 ticket.ticket_status === 'resolved' ? 'Completed' : 'In Progress',
-          description: ticket.issue_description || 'No description provided',
-          requested_date: ticket.created_at ? new Date(ticket.created_at).toISOString().split('T')[0] : '',
-          scheduled_date: ticket.scheduled_date ? new Date(ticket.scheduled_date).toISOString().split('T')[0] : undefined,
-          assigned_technician: ticket.assigned_technician_name,
-          estimated_cost: 0
-        }));
-
-        setServiceRequests(transformedRequests);
-        DebugLogger.log('Service requests loaded successfully', { count: transformedRequests.length }, 'SERVICE_REQUESTS');
-      } else {
-        throw new Error(result.message || 'Failed to load service requests');
-      }
-
-      DebugLogger.performance('Service requests fetch', startTime);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load service requests';
-      DebugLogger.error('Service requests fetch failed', err, { errorMessage });
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
+interface ClientProfile {
+  company_name: string;
+  user: {
+    display_name: string;
+    avatar_url?: string;
   };
+}
 
-  // Fetch service statistics
-  const fetchServiceStats = async () => {
+export default function ServiceRequestsPage() {
+  const router = useRouter();
+  const { success: showSuccess, error: showError } = useToast();
+  
+  // State management
+  const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
+  const [kpis, setKPIs] = useState<TicketKPIs | null>(null);
+  const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
+  
+  // Loading states
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Filter and search states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  
+  // No modal states needed for read-only client view
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalTickets, setTotalTickets] = useState(0);
+  const ticketsPerPage = 25;
+
+  // API fetch functions
+  const fetchTickets = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+      const params = new URLSearchParams({
+        limit: ticketsPerPage.toString(),
+        offset: ((currentPage - 1) * ticketsPerPage).toString()
+      });
 
-      const headers = getAuthHeaders();
+      if (searchTerm) params.append('search', searchTerm);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (typeFilter !== 'all') params.append('type', typeFilter);
+      if (priorityFilter !== 'all') params.append('priority', priorityFilter);
 
-      // Fetch KPIs from maintenance tickets
-      logApiCall('GET', API_ENDPOINTS.MAINTENANCE_TICKETS.KPIS);
-      const response = await fetch(API_ENDPOINTS.MAINTENANCE_TICKETS.KPIS, { headers });
+      const response = await fetch(`${API_ENDPOINTS.CLIENT.SERVICE_REQUESTS}?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch tickets');
+
+      const data = await response.json();
       
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setServiceStats({
-            totalRequests: result.data.total_tickets || 0,
-            openRequests: result.data.open_tickets || 0,
-            inProgressRequests: 0, // Not available from current API
-            completedThisMonth: result.data.resolved_tickets || 0,
-            urgentRequests: result.data.high_priority_tickets || 0,
-            averageResponseTime: result.data.avg_resolution_time_hours || 0,
-            customerSatisfaction: 4.5, // Default value
-            monthlyRevenue: 0 // Not available from current API
+      // Handle the response structure from the client views repository
+      if (data.data) {
+        setTickets(data.data.tickets || []);
+        setTotalTickets(data.data.total_tickets || 0);
+        
+        // Set KPIs from the response
+        setKPIs({
+          total_tickets: data.data.total_tickets || 0,
+          open_tickets: data.data.open_tickets || 0,
+          resolved_tickets: data.data.resolved_tickets || 0,
+          closed_tickets: 0, // Not provided in new response
+          high_priority_tickets: data.data.high_priority_tickets || 0,
+          overdue_tickets: 0, // Not provided in new response
+          avg_resolution_time_hours: undefined
+        });
+        
+        // Set client profile if available
+        if (data.data.client_name) {
+          setClientProfile({
+            company_name: data.data.client_name,
+            user: {
+              display_name: data.data.client_name
+            }
           });
         }
       }
     } catch (err) {
-      DebugLogger.error('Failed to fetch service stats', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch tickets');
     }
-  };
+  }, [currentPage, searchTerm, statusFilter, typeFilter, priorityFilter]);
 
-  // Initialize data on component mount
+  // No additional fetch functions needed as all data comes from the main endpoint
+
+  // Initial data loading
   useEffect(() => {
-    fetchServiceRequests();
-    fetchServiceStats();
-  }, []);
+    const loadData = async () => {
+      setIsLoading(true);
+      await fetchTickets();
+      setIsLoading(false);
+    };
 
-  // Filter requests based on search and filters
-  const filteredRequests = serviceRequests.filter(request => {
-    const matchesSearch = 
-      request.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.equipment_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.equipment_location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (request.assigned_technician && request.assigned_technician.toLowerCase().includes(searchTerm.toLowerCase()));
+    loadData();
+  }, [fetchTickets]);
 
-    const matchesType = typeFilter === 'All' || request.request_type === typeFilter;
-    const matchesStatus = statusFilter === 'All' || request.status === statusFilter;
-    const matchesPriority = priorityFilter === 'All' || request.priority === priorityFilter;
-
-    return matchesSearch && matchesType && matchesStatus && matchesPriority;
-  });
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'Low':
-        return 'bg-gray-100 text-gray-800';
-      case 'Medium':
-        return 'bg-blue-100 text-blue-800';
-      case 'High':
-        return 'bg-orange-100 text-orange-800';
-      case 'Urgent':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
+  // Handle ticket click
+  const handleTicketClick = (ticketId: number) => {
+    router.push(`/service-requests/${ticketId}`);
   };
 
-  const getStatusColor = (status: string) => {
+  // No create functionality for client view
+
+  // Helper functions
+  const getStatusBadgeColor = (status: string) => {
     switch (status) {
-      case 'Open':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'In Progress':
-        return 'bg-blue-100 text-blue-800';
-      case 'Completed':
-        return 'bg-green-100 text-green-800';
-      case 'Cancelled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      case 'open': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'resolved': return 'bg-green-100 text-green-800 border-green-200';
+      case 'closed': return 'bg-gray-100 text-gray-800 border-gray-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  const getTypeColor = (type: string) => {
+  const getPriorityBadgeColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'bg-red-100 text-red-800 border-red-200';
+      case 'normal': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'low': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getTypeBadgeColor = (type: string) => {
     switch (type) {
-      case 'Inspection':
-        return 'bg-purple-50 text-purple-700';
-      case 'Maintenance':
-        return 'bg-blue-50 text-blue-700';
-      case 'Repair':
-        return 'bg-orange-50 text-orange-700';
-      case 'Installation':
-        return 'bg-green-50 text-green-700';
-      case 'Emergency':
-        return 'bg-red-50 text-red-700';
-      default:
-        return 'bg-gray-50 text-gray-700';
+      case 'maintenance': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'system': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'user': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  const handleCreateRequest = async () => {
-    const confirmed = await confirmModal.confirm({
-      title: 'Create New Service Request',
-      message: 'Start creating a new service request?',
-      confirmText: 'Continue',
-      cancelText: 'Cancel'
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
-
-    if (confirmed) {
-      toast.success('Opening service request form...');
-      // In real implementation, this would navigate to a form or open a modal
-    }
   };
 
-  const handleCompleteRequest = async (requestId: number, clientName: string) => {
-    const confirmed = await confirmModal.confirm({
-      title: 'Complete Service Request',
-      message: `Mark this service request for ${clientName} as completed?`,
-      confirmText: 'Mark Complete',
-      cancelText: 'Cancel'
-    });
-
-    if (!confirmed) return;
-
-    try {
-      setServiceRequests(requests => 
-        requests.map(req => 
-          req.id === requestId 
-            ? { ...req, status: 'Completed' as const, completed_date: new Date().toISOString().split('T')[0] }
-            : req
-        )
-      );
-      toast.success(`Service request for ${clientName} marked as completed`);
-    } catch (err) {
-      toast.error('Failed to update service request. Please try again.');
-    }
+  const truncateText = (text: string, maxLength: number = 50) => {
+    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
   };
 
-  const handleAssignTechnician = async (requestId: number, clientName: string) => {
-    const confirmed = await confirmModal.confirm({
-      title: 'Assign Technician',
-      message: `Assign a technician to the service request for ${clientName}?`,
-      confirmText: 'Assign',
-      cancelText: 'Cancel'
-    });
-
-    if (confirmed) {
-      toast.success(`Technician assigned to ${clientName}'s request`);
-    }
+  const getUserInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  const handleCancelRequest = async (requestId: number, clientName: string) => {
-    const confirmed = await confirmModal.danger({
-      title: 'Cancel Service Request',
-      message: `Are you sure you want to cancel this service request for ${clientName}? This action cannot be undone.`,
-      confirmText: 'Cancel Request',
-      cancelText: 'Keep Request'
-    });
-
-    if (!confirmed) return;
-
-    try {
-      setServiceRequests(requests => 
-        requests.map(req => 
-          req.id === requestId 
-            ? { ...req, status: 'Cancelled' as const }
-            : req
-        )
-      );
-      toast.success(`Service request for ${clientName} has been cancelled`);
-    } catch (err) {
-      toast.error('Failed to cancel service request. Please try again.');
-    }
+  // Reset filters
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setTypeFilter('all');
+    setPriorityFilter('all');
+    setCurrentPage(1);
   };
+
+  if (isLoading) {
+    return (
+      <RequireRole allowedRoles={['client']}>
+        <DashboardLayout>
+          <div className="flex items-center justify-center min-h-64">
+            <LoadingSpinner size="lg" />
+          </div>
+        </DashboardLayout>
+      </RequireRole>
+    );
+  }
+
+  if (error) {
+    return (
+      <RequireRole allowedRoles={['client']}>
+        <DashboardLayout>
+          <ErrorDisplay message={error} />
+        </DashboardLayout>
+      </RequireRole>
+    );
+  }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
+    <RequireRole allowedRoles={['client']}>
+      <DashboardLayout>
+      <div className="space-y-6">
         {/* Page Header */}
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3">
@@ -324,21 +252,17 @@ export default function VendorServiceRequestsPage() {
               <WrenchScrewdriverIcon className="h-8 w-8 text-gray-900" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Maintenance Tickets</h1>
-              <p className="text-gray-600 mt-1">Manage client service requests and maintenance schedules</p>
+              <h1 className="text-2xl font-bold text-gray-900">Service Requests</h1>
+              <p className="text-gray-600 mt-1">
+                {clientProfile?.company_name ? `${clientProfile.company_name} - View and track your equipment service requests` : 'View and track your equipment service requests'}
+              </p>
             </div>
           </div>
-          <button 
-            onClick={handleCreateRequest}
-            className="btn-primary flex items-center space-x-2"
-          >
-            <PlusIcon className="h-5 w-5" />
-            <span>Create Ticket</span>
-          </button>
+
         </div>
 
-        {/* Stats Grid */}
-        {!isLoading && (
+        {/* Stats Cards */}
+        {kpis && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
               <div className="flex items-center">
@@ -346,8 +270,8 @@ export default function VendorServiceRequestsPage() {
                   <ClipboardDocumentListIcon className="h-8 w-8 text-blue-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Total Requests</p>
-                  <p className="text-2xl font-bold text-gray-900">{serviceStats.totalRequests}</p>
+                    <p className="text-sm font-medium text-gray-500">Total Requests</p>
+                    <p className="text-2xl font-bold text-gray-900">{kpis.total_tickets}</p>
                 </div>
               </div>
             </div>
@@ -358,20 +282,8 @@ export default function VendorServiceRequestsPage() {
                   <ClockIcon className="h-8 w-8 text-yellow-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Open</p>
-                  <p className="text-2xl font-bold text-gray-900">{serviceStats.openRequests}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <WrenchScrewdriverIcon className="h-8 w-8 text-orange-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">In Progress</p>
-                  <p className="text-2xl font-bold text-gray-900">{serviceStats.inProgressRequests}</p>
+                    <p className="text-sm font-medium text-gray-500">Open Requests</p>
+                    <p className="text-2xl font-bold text-gray-900">{kpis.open_tickets}</p>
                 </div>
               </div>
             </div>
@@ -382,221 +294,177 @@ export default function VendorServiceRequestsPage() {
                   <ExclamationTriangleIcon className="h-8 w-8 text-red-600" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Urgent</p>
-                  <p className="text-2xl font-bold text-gray-900">{serviceStats.urgentRequests}</p>
+                  <p className="text-sm font-medium text-gray-500">High Priority</p>
+                  <p className="text-2xl font-bold text-gray-900">{kpis.high_priority_tickets}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <CheckCircleIcon className="h-8 w-8 text-green-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Resolved</p>
+                  <p className="text-2xl font-bold text-gray-900">{kpis.resolved_tickets}</p>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Search and Filter Bar */}
+        {/* Search and Filters */}
         <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             {/* Search Bar */}
-            <div className="relative flex-1">
+            <div className="flex-1 relative">
               <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search maintenance tickets by client, equipment, or ticket ID..."
+                  placeholder="Search service requests by number, equipment, or description..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="input-field pl-10"
               />
             </div>
 
-            {/* Filter Dropdowns */}
-            <div className="relative">
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="input-field appearance-none pr-8 min-w-[120px]"
-              >
-                {requestTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              <ChevronDownIcon className="h-5 w-5 absolute right-2 top-3 text-gray-400" />
-            </div>
-            
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="input-field appearance-none pr-8 min-w-[120px]"
-              >
-                <option value="All">All Statuses</option>
-                <option value="Open">Open</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
-              <ChevronDownIcon className="h-5 w-5 absolute right-2 top-3 text-gray-400" />
-            </div>
+            {/* Filters */}
+            <div className="flex gap-3">
+              <div className="relative">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="input-field appearance-none pr-8 min-w-[120px]"
+                >
+                  <option value="all">All Status</option>
+                  <option value="open">Open</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+                <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
+              </div>
 
-            <div className="relative">
-              <select
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                className="input-field appearance-none pr-8 min-w-[120px]"
-              >
-                {priorities.map(priority => (
-                  <option key={priority} value={priority}>{priority}</option>
-                ))}
-              </select>
-              <ChevronDownIcon className="h-5 w-5 absolute right-2 top-3 text-gray-400" />
+              <div className="relative">
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="input-field appearance-none pr-8 min-w-[120px]"
+                >
+                  <option value="all">All Types</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="system">System</option>
+                  <option value="user">User</option>
+                </select>
+                <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
+              </div>
+
+              <div className="relative">
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="input-field appearance-none pr-8 min-w-[120px]"
+                >
+                  <option value="all">All Priority</option>
+                  <option value="high">High</option>
+                  <option value="normal">Normal</option>
+                  <option value="low">Low</option>
+                </select>
+                <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Service Requests Table */}
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-6 py-5 border-b border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Maintenance Tickets ({filteredRequests.length})
-            </h3>
+        {/* Tickets Table */}
+        <div className="bg-white rounded-2xl border border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Service Requests ({tickets.length})
+            </h2>
           </div>
-
-          {/* Loading State */}
-          {isLoading && (
-            <LoadingSpinner text="Loading maintenance tickets..." />
-          )}
-
-          {/* Error State */}
-          {error && !isLoading && (
-            <ErrorDisplay 
-              message={error}
-              action={{
-                label: 'Try Again',
-                onClick: () => window.location.reload()
-              }}
-            />
-          )}
-
-          {/* Empty State */}
-          {!isLoading && !error && filteredRequests.length === 0 && (
-            <div className="text-center py-12">
-              <ClipboardDocumentListIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No maintenance tickets found</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {searchTerm || typeFilter !== 'All' || statusFilter !== 'All' || priorityFilter !== 'All'
-                  ? 'Try adjusting your search or filter criteria.'
-                  : 'Get started by creating your first maintenance ticket.'}
-              </p>
-            </div>
-          )}
-
-          {/* Table */}
-          {!isLoading && !error && filteredRequests.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                      Request Details
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                      Client & Equipment
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                      Priority & Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                      Dates & Technician
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                      Cost & Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white">
-                  {filteredRequests.map((request) => (
-                    <tr key={request.id} className="border-b border-gray-100 hover:bg-gray-50"
->
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">#{request.id}</div>
-                        <div className="text-sm text-gray-600 mt-1 max-w-xs truncate">{request.description}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{request.client_name}</div>
-                        <div className="text-sm text-gray-600">{request.equipment_type}</div>
-                        <div className="text-xs text-gray-500 mt-1">{request.equipment_location}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col space-y-2">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(request.priority)}`}>
-                            {request.priority}
-                          </span>
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-md ${getTypeColor(request.request_type)}`}>
-                            {request.request_type}
-                          </span>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Ticket Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Equipment & Vendor
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Priority & Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Status & Schedule
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+              {tickets.map((ticket) => (
+                <tr 
+                  key={ticket.id} 
+                  className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => handleTicketClick(ticket.id)}
+                >
+                  <td className="px-6 py-4">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                          <WrenchScrewdriverIcon className="h-5 w-5 text-blue-600" />
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        <div>Requested: {new Date(request.requested_date).toLocaleDateString()}</div>
-                        {request.scheduled_date && (
-                          <div className="text-blue-600">Scheduled: {new Date(request.scheduled_date).toLocaleDateString()}</div>
-                        )}
-                        {request.completed_date && (
-                          <div className="text-green-600">Completed: {new Date(request.completed_date).toLocaleDateString()}</div>
-                        )}
-                        {request.assigned_technician && (
-                          <div className="text-purple-600 text-xs mt-1">{request.assigned_technician}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">
-                          {request.estimated_cost && (
-                            <div>Est: LKR {request.estimated_cost.toLocaleString()}</div>
-                          )}
-                          {request.actual_cost && (
-                            <div className="text-green-600">Actual: LKR {request.actual_cost.toLocaleString()}</div>
-                          )}
-                        </div>
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-2 ${getStatusColor(request.status)}`}>
-                          {request.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm font-medium space-x-3">
-                        <button className="text-blue-600 hover:text-blue-800 transition-colors">
-                          View
-                        </button>
-                        {request.status === 'Open' && !request.assigned_technician && (
-                          <button 
-                            onClick={() => handleAssignTechnician(request.id, request.client_name)}
-                            className="text-purple-600 hover:text-purple-800 transition-colors"
-                          >
-                            Assign
-                          </button>
-                        )}
-                        {(request.status === 'Open' || request.status === 'In Progress') && (
-                          <button 
-                            onClick={() => handleCompleteRequest(request.id, request.client_name)}
-                            className="text-green-600 hover:text-green-800 transition-colors"
-                          >
-                            Complete
-                          </button>
-                        )}
-                        {request.status !== 'Completed' && request.status !== 'Cancelled' && (
-                          <button 
-                            onClick={() => handleCancelRequest(request.id, request.client_name)}
-                            className="text-red-600 hover:text-red-800 transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                      </div>
+                      <div className="ml-3">
+                        <div className="text-sm font-medium text-gray-900">#{ticket.ticket_number}</div>
+                        <div className="text-sm text-gray-500">{ticket.issue ? truncateText(ticket.issue, 50) : 'No description'}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900">{ticket.equipment_name || ticket.equipment || 'Unassigned Equipment'}</div>
+                    <div className="text-sm text-gray-500 flex items-center">
+                      <BuildingOfficeIcon className="h-3 w-3 mr-1" />
+                      {ticket.vendor_name || 'No vendor assigned'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadgeColor(ticket.priority)}`}>
+                      {ticket.priority}
+                    </span>
+                    <div className="text-sm text-gray-500 mt-1">{ticket.type}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(ticket.status)}`}>
+                      {ticket.status}
+                    </span>
+                    <div className="text-sm text-gray-500 mt-1">
+                      {ticket.scheduled_date ? formatDate(ticket.scheduled_date) : 'Not scheduled'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center space-x-2">
+                      <Link
+                        href={`/service-requests/${ticket.id}`}
+                        className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                      >
+                        View Details
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         </div>
       </div>
+
+
     </DashboardLayout>
+    </RequireRole>
   );
 }
