@@ -77,15 +77,6 @@ export const API_ENDPOINTS = {
     BULK_UPDATE: `${API_BASE_URL}/settings/bulk`,
   },
   
-  // Analytics
-  ANALYTICS: {
-    SYSTEM: `${API_BASE_URL}/analytics/system`,
-    METRICS: `${API_BASE_URL}/analytics/metrics`,
-    VENDOR: `${API_BASE_URL}/analytics/vendor`,
-    VENDOR_TICKET_TRENDS: `${API_BASE_URL}/analytics/vendor/ticket-trends`,
-    VENDOR_COMPLIANCE_TRENDS: `${API_BASE_URL}/analytics/vendor/compliance-trends`,
-  },
-  
   // Equipment
   EQUIPMENT: {
     LIST: `${API_BASE_URL}/equipment`,

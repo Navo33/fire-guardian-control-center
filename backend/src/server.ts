@@ -19,7 +19,6 @@ import { securityMiddleware, cleanupExpiredSessions } from './middleware/securit
 import authRoutes from './routes/auth';
 import dashboardRoutes from './routes/dashboard';
 import vendorRoutes from './routes/vendors';
-import analyticsRoutes from './routes/analytics';
 import usersRoutes from './routes/users';
 import userDetailsRoutes from './routes/userDetails';
 import profileRoutes from './routes/profile';
@@ -192,7 +191,6 @@ app.use('/api/dashboard', securityMiddleware, dashboardRoutes);
 app.use('/api/vendors', securityMiddleware, vendorRoutes);
 app.use('/api/users', securityMiddleware, usersRoutes);
 app.use('/api/user-details', securityMiddleware, userDetailsRoutes);
-app.use('/api/analytics', securityMiddleware, analyticsRoutes);
 app.use('/api/profile', securityMiddleware, profileRoutes);
 app.use('/api/settings', securityMiddleware, settingsRoutes);
 app.use('/api/equipment', securityMiddleware, equipmentRoutes);
