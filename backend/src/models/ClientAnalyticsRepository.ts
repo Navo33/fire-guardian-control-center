@@ -499,4 +499,192 @@ export class ClientAnalyticsRepository {
     const result = await this.pool.query(query, [clientId]);
     return result.rows;
   }
+
+  /**
+   * Get detailed equipment list for PDF export
+   */
+  async getEquipmentListForPDF(clientId: number) {
+    const query = `
+      SELECT 
+          e.id,
+          e.equipment_tag,
+          e.equipment_name,
+          et.name AS equipment_type,
+          e.location,
+          v.name AS vendor_name,
+          v.contact_email AS vendor_email,
+          v.contact_phone AS vendor_phone,
+          e.installation_date,
+          e.last_inspection_date,
+          e.next_inspection_due,
+          e.status,
+          CASE 
+              WHEN e.status = 'compliant' THEN 'Compliant'
+              WHEN e.status = 'due_soon' THEN 'Due Soon'
+              WHEN e.status = 'overdue' THEN 'Overdue'
+              WHEN e.status = 'out_of_service' THEN 'Out of Service'
+              ELSE 'Unknown'
+          END AS compliance_status,
+          CASE 
+              WHEN e.next_inspection_due < NOW() AND e.status != 'out_of_service' THEN 'Critical'
+              WHEN e.next_inspection_due <= NOW() + INTERVAL '30 days' AND e.status != 'out_of_service' THEN 'Warning'
+              ELSE 'Normal'
+          END AS priority_level
+      FROM public.equipment e
+      JOIN public.equipment_types et ON e.equipment_type_id = et.id
+      JOIN public.vendors v ON e.vendor_id = v.id
+      WHERE e.client_id = $1
+      ORDER BY 
+          CASE 
+              WHEN e.status = 'overdue' THEN 1
+              WHEN e.status = 'due_soon' THEN 2
+              WHEN e.status = 'compliant' THEN 3
+              WHEN e.status = 'out_of_service' THEN 4
+              ELSE 5
+          END,
+          e.next_inspection_due ASC;
+    `;
+
+    const result = await this.pool.query(query, [clientId]);
+    return result.rows;
+  }
+
+  /**
+   * Get compliance summary for PDF overview
+   */
+  async getComplianceSummaryForPDF(clientId: number) {
+    const query = `
+      SELECT 
+          COUNT(*) as total_equipment,
+          SUM(CASE WHEN e.status = 'compliant' THEN 1 ELSE 0 END) as compliant_count,
+          SUM(CASE WHEN e.status = 'due_soon' THEN 1 ELSE 0 END) as due_soon_count,
+          SUM(CASE WHEN e.status = 'overdue' THEN 1 ELSE 0 END) as overdue_count,
+          SUM(CASE WHEN e.status = 'out_of_service' THEN 1 ELSE 0 END) as out_of_service_count,
+          ROUND(
+              (SUM(CASE WHEN e.status = 'compliant' THEN 1 ELSE 0 END)::float / 
+               NULLIF(COUNT(*), 0)) * 100, 1
+          ) as compliance_percentage
+      FROM public.equipment e
+      WHERE e.client_id = $1;
+    `;
+
+    const result = await this.pool.query(query, [clientId]);
+    return result.rows[0];
+  }
+
+  /**
+   * Get upcoming inspection events for PDF
+   */
+  async getUpcomingEventsForPDF(clientId: number, daysAhead: number = 90) {
+    const query = `
+      SELECT 
+          e.equipment_tag,
+          e.equipment_name,
+          et.name AS equipment_type,
+          e.location,
+          e.next_inspection_due,
+          CASE 
+              WHEN e.next_inspection_due < NOW() THEN 'Overdue'
+              WHEN e.next_inspection_due <= NOW() + INTERVAL '7 days' THEN 'This Week'
+              WHEN e.next_inspection_due <= NOW() + INTERVAL '30 days' THEN 'This Month'
+              ELSE 'Future'
+          END AS urgency,
+          DATE_PART('days', e.next_inspection_due - NOW())::int AS days_until_due
+      FROM public.equipment e
+      JOIN public.equipment_types et ON e.equipment_type_id = et.id
+      WHERE e.client_id = $1
+        AND e.status != 'out_of_service'
+        AND e.next_inspection_due <= NOW() + INTERVAL '$2 days'
+      ORDER BY e.next_inspection_due ASC
+      LIMIT 20;
+    `;
+
+    const result = await this.pool.query(query, [clientId, daysAhead]);
+    return result.rows;
+  }
+
+  /**
+   * Get unresolved maintenance tickets for PDF
+   */
+  async getUnresolvedTicketsForPDF(clientId: number) {
+    const query = `
+      SELECT 
+          mt.id,
+          mt.title,
+          mt.description,
+          mt.priority,
+          mt.status,
+          e.equipment_tag,
+          e.equipment_name,
+          et.name AS equipment_type,
+          mt.created_at,
+          mt.updated_at,
+          CASE 
+              WHEN mt.priority = 'critical' THEN 'Critical'
+              WHEN mt.priority = 'high' THEN 'High'
+              WHEN mt.priority = 'medium' THEN 'Medium'
+              WHEN mt.priority = 'low' THEN 'Low'
+              ELSE 'Normal'
+          END AS priority_display,
+          DATE_PART('days', NOW() - mt.created_at)::int AS days_open
+      FROM public.maintenance_tickets mt
+      JOIN public.equipment e ON mt.equipment_id = e.id
+      JOIN public.equipment_types et ON e.equipment_type_id = et.id
+      WHERE e.client_id = $1
+        AND mt.status NOT IN ('resolved', 'closed')
+      ORDER BY 
+          CASE 
+              WHEN mt.priority = 'critical' THEN 1
+              WHEN mt.priority = 'high' THEN 2
+              WHEN mt.priority = 'medium' THEN 3
+              WHEN mt.priority = 'low' THEN 4
+              ELSE 5
+          END,
+          mt.created_at DESC
+      LIMIT 15;
+    `;
+
+    const result = await this.pool.query(query, [clientId]);
+    return result.rows;
+  }
+
+  /**
+   * Get comprehensive PDF report data in one call
+   */
+  async getPDFReportData(clientId: number) {
+    try {
+      const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const endDate = new Date().toISOString().split('T')[0];
+
+      const [
+        overview,
+        equipmentList,
+        complianceSummary,
+        upcomingEvents,
+        unresolvedTickets
+      ] = await Promise.all([
+        this.getClientOverview(clientId, startDate, endDate),
+        this.getEquipmentListForPDF(clientId),
+        this.getComplianceSummaryForPDF(clientId),
+        this.getUpcomingEventsForPDF(clientId),
+        this.getUnresolvedTicketsForPDF(clientId)
+      ]);
+
+      return {
+        overview,
+        equipmentList,
+        complianceSummary,
+        upcomingEvents,
+        unresolvedTickets,
+        generatedAt: new Date().toISOString(),
+        reportPeriod: {
+          startDate,
+          endDate
+        }
+      };
+    } catch (error) {
+      console.error('Error generating PDF report data:', error);
+      throw error;
+    }
+  }
 }

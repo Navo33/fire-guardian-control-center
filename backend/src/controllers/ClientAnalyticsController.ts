@@ -311,4 +311,37 @@ export class ClientAnalyticsController extends BaseController {
       return ApiResponseUtil.internalError(res, 'Failed to fetch active sessions');
     }
   }
+
+  /**
+   * Generate PDF report with comprehensive analytics
+   * GET /api/client/analytics/pdf-export
+   */
+  async exportPDF(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const client_id = await this.validateClientAccess(req);
+      if (!client_id) {
+        return ApiResponseUtil.unauthorized(res, 'Client access required');
+      }
+
+      // Get comprehensive data for PDF
+      const reportData = await this.clientAnalyticsRepo.getPDFReportData(client_id);
+
+      // Get client name for the report
+      const clientQuery = `SELECT name FROM clients WHERE id = $1`;
+      const clientResult = await this.clientAnalyticsRepo.query(clientQuery, [client_id]);
+      const clientName = clientResult.rows[0]?.name || 'Client';
+
+      // Add client name to report data
+      const pdfData = {
+        ...reportData,
+        clientName,
+        clientId: client_id
+      };
+
+      ApiResponseUtil.success(res, pdfData, 'PDF report data generated successfully');
+    } catch (error) {
+      console.error('Error generating PDF report data:', error);
+      return ApiResponseUtil.internalError(res, 'Failed to generate PDF report data');
+    }
+  }
 }

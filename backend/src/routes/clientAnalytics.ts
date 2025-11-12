@@ -42,4 +42,7 @@ router.get('/account/logins', clientAnalyticsController.getLoginHistory.bind(cli
 router.get('/account/security', clientAnalyticsController.getAccountSecurity.bind(clientAnalyticsController));
 router.get('/account/sessions', clientAnalyticsController.getActiveSessions.bind(clientAnalyticsController));
 
+// PDF Export
+router.get('/pdf-export', clientAnalyticsController.exportPDF.bind(clientAnalyticsController));
+
 export default router;
