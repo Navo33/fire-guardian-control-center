@@ -6,11 +6,11 @@ import { AdminAnalyticsRepository } from '../models/AdminAnalyticsRepository';
 export class AdminAnalyticsController extends BaseController {
 
   /**
-   * Get system overview statistics
+   * 1. Get system overview statistics with vendor filtering and user metrics
    */
   static async getSystemOverview(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { startDate, endDate } = req.query;
+      const { startDate, endDate, vendorId } = req.query;
       
       // Default to last 30 days if no dates provided
       const defaultEndDate = new Date().toISOString().split('T')[0];
@@ -18,8 +18,9 @@ export class AdminAnalyticsController extends BaseController {
       
       const start = (startDate as string) || defaultStartDate;
       const end = (endDate as string) || defaultEndDate;
+      const vendor = vendorId ? parseInt(vendorId as string) : undefined;
 
-      const overview = await AdminAnalyticsRepository.getSystemOverview(start, end);
+      const overview = await AdminAnalyticsRepository.getSystemOverview(start, end, vendor);
       res.json({ success: true, data: overview });
     } catch (error) {
       console.error('Error fetching system overview:', error);
@@ -28,11 +29,14 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get compliance analytics summary
+   * 2. Get compliance analytics summary with vendor filtering
    */
   static async getComplianceSummary(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const summary = await AdminAnalyticsRepository.getComplianceSummary();
+      const { vendorId } = req.query;
+      const vendor = vendorId ? parseInt(vendorId as string) : undefined;
+
+      const summary = await AdminAnalyticsRepository.getComplianceSummary(vendor);
       res.json({ success: true, data: summary });
     } catch (error) {
       console.error('Error fetching compliance summary:', error);
@@ -41,11 +45,11 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get compliance trend over time
+   * 3. Get compliance trend over time with vendor filtering
    */
   static async getComplianceTrend(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { startDate, endDate } = req.query;
+      const { startDate, endDate, vendorId } = req.query;
       
       // Default to last 12 months if no dates provided
       const defaultEndDate = new Date().toISOString().split('T')[0];
@@ -53,8 +57,9 @@ export class AdminAnalyticsController extends BaseController {
       
       const start = (startDate as string) || defaultStartDate;
       const end = (endDate as string) || defaultEndDate;
+      const vendor = vendorId ? parseInt(vendorId as string) : undefined;
 
-      const trend = await AdminAnalyticsRepository.getComplianceTrend(start, end);
+      const trend = await AdminAnalyticsRepository.getComplianceTrend(start, end, vendor);
       res.json({ success: true, data: trend });
     } catch (error) {
       console.error('Error fetching compliance trend:', error);
@@ -63,7 +68,7 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get compliance by vendor
+   * 4. Get compliance by vendor (stacked bar chart)
    */
   static async getComplianceByVendor(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
@@ -76,11 +81,11 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get ticket trends over time
+   * 5. Get ticket trends over time with vendor filtering
    */
   static async getTicketTrends(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { startDate, endDate } = req.query;
+      const { startDate, endDate, vendorId } = req.query;
       
       // Default to last 12 months if no dates provided
       const defaultEndDate = new Date().toISOString().split('T')[0];
@@ -88,8 +93,9 @@ export class AdminAnalyticsController extends BaseController {
       
       const start = (startDate as string) || defaultStartDate;
       const end = (endDate as string) || defaultEndDate;
+      const vendor = vendorId ? parseInt(vendorId as string) : undefined;
 
-      const trends = await AdminAnalyticsRepository.getTicketTrends(start, end);
+      const trends = await AdminAnalyticsRepository.getTicketTrends(start, end, vendor);
       res.json({ success: true, data: trends });
     } catch (error) {
       console.error('Error fetching ticket trends:', error);
@@ -98,11 +104,14 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get tickets by type
+   * 6. Get tickets by type with vendor filtering
    */
   static async getTicketsByType(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const data = await AdminAnalyticsRepository.getTicketsByType();
+      const { vendorId } = req.query;
+      const vendor = vendorId ? parseInt(vendorId as string) : undefined;
+
+      const data = await AdminAnalyticsRepository.getTicketsByType(vendor);
       res.json({ success: true, data });
     } catch (error) {
       console.error('Error fetching tickets by type:', error);
@@ -111,7 +120,7 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get tickets overview
+   * Legacy: Get tickets overview
    */
   static async getTicketsOverview(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
@@ -124,7 +133,7 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get vendor performance rankings
+   * 7. Get vendor performance rankings with user metrics
    */
   static async getVendorRankings(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
@@ -137,11 +146,14 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get recent high-priority tickets
+   * 8. Get recent high-priority tickets with vendor filtering
    */
   static async getRecentHighPriorityTickets(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const tickets = await AdminAnalyticsRepository.getRecentHighPriorityTickets();
+      const { vendorId } = req.query;
+      const vendor = vendorId ? parseInt(vendorId as string) : undefined;
+
+      const tickets = await AdminAnalyticsRepository.getRecentHighPriorityTickets(vendor);
       res.json({ success: true, data: tickets });
     } catch (error) {
       console.error('Error fetching recent high-priority tickets:', error);
@@ -150,7 +162,58 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get audit log trends
+   * 9. Get user & security trends (NEW - User engagement line chart)
+   */
+  static async getUserTrends(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { startDate, endDate } = req.query;
+      
+      // Default to last 90 days if no dates provided
+      const defaultEndDate = new Date().toISOString().split('T')[0];
+      const defaultStartDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const start = (startDate as string) || defaultStartDate;
+      const end = (endDate as string) || defaultEndDate;
+
+      const trends = await AdminAnalyticsRepository.getUserTrends(start, end);
+      res.json({ success: true, data: trends });
+    } catch (error) {
+      console.error('Error fetching user trends:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch user trends' });
+    }
+  }
+
+  /**
+   * 10. Get password resets breakdown (NEW - Pie chart by reason)
+   */
+  static async getPasswordResets(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const data = await AdminAnalyticsRepository.getPasswordResets();
+      res.json({ success: true, data });
+    } catch (error) {
+      console.error('Error fetching password resets:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch password resets' });
+    }
+  }
+
+  /**
+   * 11. Get equipment categories breakdown with vendor filtering
+   */
+  static async getEquipmentCategories(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { vendorId } = req.query;
+      const vendor = vendorId ? parseInt(vendorId as string) : undefined;
+
+      const categories = await AdminAnalyticsRepository.getEquipmentCategories(vendor);
+      res.json({ success: true, data: categories });
+    } catch (error) {
+      console.error('Error fetching equipment categories:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch equipment categories' });
+    }
+  }
+
+  /**
+   * 12. Get audit log trends
    */
   static async getAuditTrends(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
@@ -172,7 +235,7 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get recent audit events
+   * 13. Get recent audit events
    */
   static async getRecentAuditEvents(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
@@ -185,20 +248,7 @@ export class AdminAnalyticsController extends BaseController {
   }
 
   /**
-   * Get equipment categories breakdown
-   */
-  static async getEquipmentCategories(req: AuthenticatedRequest, res: Response): Promise<void> {
-    try {
-      const categories = await AdminAnalyticsRepository.getEquipmentCategories();
-      res.json({ success: true, data: categories });
-    } catch (error) {
-      console.error('Error fetching equipment categories:', error);
-      res.status(500).json({ success: false, message: 'Failed to fetch equipment categories' });
-    }
-  }
-
-  /**
-   * Get security summary
+   * Legacy: Get security summary (Enhanced)
    */
   static async getSecuritySummary(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
