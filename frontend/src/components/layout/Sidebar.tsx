@@ -53,6 +53,7 @@ export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {
           { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
           { name: 'My Equipment', href: '/client-equipment', icon: FireIcon },
           { name: 'Service Requests', href: '/service-requests', icon: WrenchScrewdriverIcon },
+          { name: 'Analytics & Compliance', href: '/clients/analytics', icon: ChartBarIcon },
           { name: 'Safety Reports', href: '/reports', icon: ShieldCheckIcon },
         ];
       default:

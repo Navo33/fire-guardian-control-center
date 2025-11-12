@@ -30,6 +30,7 @@ import clientRoutes from './routes/clients';
 import maintenanceTicketRoutes from './routes/maintenanceTickets';
 import reportsRoutes from './routes/reports';
 import clientViewsRoutes from './routes/clientViews';
+import clientAnalyticsRoutes from './routes/clientAnalytics';
 
 // Load environment variables
 dotenv.config();
@@ -198,6 +199,7 @@ app.use('/api/settings', securityMiddleware, settingsRoutes);
 app.use('/api/equipment', securityMiddleware, equipmentRoutes);
 app.use('/api/admin/analytics', securityMiddleware, adminAnalyticsRoutes);
 app.use('/api/vendor/analytics', securityMiddleware, vendorAnalyticsRoutes);
+app.use('/api/client/analytics', securityMiddleware, clientAnalyticsRoutes);
 app.use('/api/vendor/clients', securityMiddleware, clientRoutes);
 app.use('/api/vendor/tickets', securityMiddleware, maintenanceTicketRoutes);
 app.use('/api/reports', securityMiddleware, reportsRoutes);
