@@ -1336,7 +1336,7 @@ function ClientDashboardComponent({ user }: { user: User }) {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
             <div className="space-y-3">
               <Link 
-                href="/equipment"
+                href="/client-equipment"
                 className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
               >
                 <div className="p-2 bg-blue-50 rounded-lg">
@@ -1349,7 +1349,7 @@ function ClientDashboardComponent({ user }: { user: User }) {
               </Link>
               
               <Link 
-                href="/maintenance-tickets"
+                href="/service-requests"
                 className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 <div className="p-2 bg-orange-50 rounded-lg">
@@ -1362,14 +1362,27 @@ function ClientDashboardComponent({ user }: { user: User }) {
               </Link>
               
               <Link 
+                href="/clients/analytics"
+                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                <div className="p-2 bg-purple-50 rounded-lg">
+                  <ChartBarIcon className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Analytics & Compliance</p>
+                  <p className="text-xs text-gray-500">Track performance & compliance</p>
+                </div>
+              </Link>
+              
+              <Link 
                 href="/reports"
                 className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 <div className="p-2 bg-green-50 rounded-lg">
-                  <ChartBarIcon className="h-5 w-5 text-green-600" />
+                  <ShieldCheckIcon className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-900">View Reports</p>
+                  <p className="text-sm font-medium text-gray-900">Safety Reports</p>
                   <p className="text-xs text-gray-500">Compliance reports</p>
                 </div>
               </Link>
