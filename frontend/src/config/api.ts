@@ -77,6 +77,39 @@ export const API_ENDPOINTS = {
     BULK_UPDATE: `${API_BASE_URL}/settings/bulk`,
   },
   
+  // Admin Analytics
+  ADMIN_ANALYTICS: {
+    OVERVIEW: `${API_BASE_URL}/admin/analytics/overview`,
+    COMPLIANCE: {
+      SUMMARY: `${API_BASE_URL}/admin/analytics/compliance/summary`,
+      TREND: `${API_BASE_URL}/admin/analytics/compliance/trend`,
+      BY_VENDOR: `${API_BASE_URL}/admin/analytics/compliance/by-vendor`,
+    },
+    TICKETS: {
+      OVERVIEW: `${API_BASE_URL}/admin/analytics/tickets/overview`,
+      TRENDS: `${API_BASE_URL}/admin/analytics/tickets/trends`,
+      BY_TYPE: `${API_BASE_URL}/admin/analytics/tickets/by-type`,
+      RECENT_HIGH_PRIORITY: `${API_BASE_URL}/admin/analytics/tickets/recent-high-priority`,
+    },
+    VENDORS: {
+      RANKINGS: `${API_BASE_URL}/admin/analytics/vendors/rankings`,
+    },
+    EQUIPMENT: {
+      CATEGORIES: `${API_BASE_URL}/admin/analytics/equipment/categories`,
+    },
+    AUDIT: {
+      TRENDS: `${API_BASE_URL}/admin/analytics/audit/trends`,
+      RECENT: `${API_BASE_URL}/admin/analytics/audit/recent`,
+    },
+    SECURITY: {
+      SUMMARY: `${API_BASE_URL}/admin/analytics/security/summary`,
+    },
+    USERS: {
+      TRENDS: `${API_BASE_URL}/admin/analytics/users/trends`,
+      PASSWORD_RESETS: `${API_BASE_URL}/admin/analytics/users/password-resets`,
+    },
+  },
+  
   // Equipment
   EQUIPMENT: {
     LIST: `${API_BASE_URL}/equipment`,
