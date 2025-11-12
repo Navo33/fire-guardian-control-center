@@ -261,7 +261,7 @@ export class VendorAnalyticsRepository {
   ): Promise<TicketTrend[]> {
     DebugLogger.log('Fetching ticket trends', { vendorId, startDate, endDate, clientId }, 'VENDOR_ANALYTICS');
 
-    const query = `
+    let query = `
       SELECT
           DATE_TRUNC('month', mt.created_at)::date AS month,
           COUNT(*) AS created,
@@ -274,12 +274,21 @@ export class VendorAnalyticsRepository {
       JOIN public.clients c ON mt.client_id = c.id
       WHERE mt.vendor_id = $1
         AND mt.created_at::date BETWEEN $2 AND $3
-        AND ($4::int IS NULL OR mt.client_id = $4::int)
+    `;
+
+    const params: any[] = [vendorId, startDate, endDate];
+
+    if (clientId !== undefined && clientId !== null) {
+      query += ` AND mt.client_id = $4`;
+      params.push(clientId);
+    }
+
+    query += `
       GROUP BY month
       ORDER BY month
     `;
 
-    const result = await this.pool.query(query, [vendorId, startDate, endDate, clientId]);
+    const result = await this.pool.query(query, params);
     return result.rows;
   }
 

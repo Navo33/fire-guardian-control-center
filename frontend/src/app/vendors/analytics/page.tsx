@@ -288,6 +288,8 @@ export default function VendorAnalyticsPage() {
 
       // Fetch all data in parallel
       console.log('Making API calls with vendorId:', vendorId, 'params:', params);
+      console.log('API_BASE_URL value:', API_BASE_URL);
+      console.log('First URL example:', `${API_BASE_URL}/vendor/analytics/overview?${params}`);
       
       const [
         overviewRes,
