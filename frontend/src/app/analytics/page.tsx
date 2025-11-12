@@ -19,8 +19,8 @@ import {
   FunnelIcon,
   ArrowDownTrayIcon,
   FireIcon,
-  LockClosedIcon,
-  DocumentMagnifyingGlassIcon
+  ClipboardDocumentListIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline';
 
 // Chart components
@@ -76,25 +76,7 @@ interface TicketsOverview {
   avg_resolution_hours: number;
 }
 
-interface SecuritySummary {
-  locked_users: string;
-  failed_logins_last_7d: string;
-  suspicious_ips_24h: string;
-}
 
-interface UserTrend {
-  week: string;
-  logins: number;
-  vendor_logins: number;
-  client_logins: number;
-  failed_attempts: number;
-  password_resets: number;
-}
-
-interface PasswordReset {
-  reason: string;
-  count: number;
-}
 
 interface Vendor {
   id: number;
@@ -114,17 +96,12 @@ export default function AdminAnalyticsPage() {
   const [systemOverview, setSystemOverview] = useState<SystemOverview | null>(null);
   const [complianceSummary, setComplianceSummary] = useState<ComplianceSummary | null>(null);
   const [ticketsOverview, setTicketsOverview] = useState<TicketsOverview | null>(null);
-  const [securitySummary, setSecuritySummary] = useState<SecuritySummary | null>(null);
   const [complianceTrend, setComplianceTrend] = useState<any[]>([]);
   const [ticketTrends, setTicketTrends] = useState<any[]>([]);
   const [equipmentCategories, setEquipmentCategories] = useState<any[]>([]);
   const [vendorRankings, setVendorRankings] = useState<any[]>([]);
   const [recentTickets, setRecentTickets] = useState<any[]>([]);
   const [auditEvents, setAuditEvents] = useState<any[]>([]);
-  
-  // NEW: User & Security Analytics
-  const [userTrends, setUserTrends] = useState<UserTrend[]>([]);
-  const [passwordResets, setPasswordResets] = useState<PasswordReset[]>([]);
   
   // NEW: Vendor data for dropdown
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -188,6 +165,7 @@ export default function AdminAnalyticsPage() {
         'Content-Type': 'application/json'
       };
 
+      
       // Build query params with date range and optional vendor filter
       const queryParams = new URLSearchParams({
         startDate: dateRange.startDate,
@@ -204,34 +182,27 @@ export default function AdminAnalyticsPage() {
         vendorQueryParams.set('vendorId', selectedVendor.toString());
       }
 
-      // Fetch all data in parallel - ENHANCED with vendor filtering and new endpoints
+      // Fetch all data in parallel - vendor filtering enabled
       const [
         overviewRes,
         complianceRes,
         ticketsOverviewRes,
-        securityRes,
         complianceTrendRes,
         ticketTrendsRes,
         equipmentCategoriesRes,
         vendorRankingsRes,
         recentTicketsRes,
-        auditEventsRes,
-        userTrendsRes,
-        passwordResetsRes
+        auditEventsRes
       ] = await Promise.all([
         fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.OVERVIEW}?${queryParams}`, { headers }),
         fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.COMPLIANCE.SUMMARY}?${vendorQueryParams}`, { headers }),
         fetch(API_ENDPOINTS.ADMIN_ANALYTICS.TICKETS.OVERVIEW, { headers }),
-        fetch(API_ENDPOINTS.ADMIN_ANALYTICS.SECURITY.SUMMARY, { headers }),
         fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.COMPLIANCE.TREND}?${queryParams}`, { headers }),
         fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.TICKETS.TRENDS}?${queryParams}`, { headers }),
         fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.EQUIPMENT.CATEGORIES}?${vendorQueryParams}`, { headers }),
         fetch(API_ENDPOINTS.ADMIN_ANALYTICS.VENDORS.RANKINGS, { headers }),
         fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.TICKETS.RECENT_HIGH_PRIORITY}?${vendorQueryParams}`, { headers }),
-        fetch(API_ENDPOINTS.ADMIN_ANALYTICS.AUDIT.RECENT, { headers }),
-        // NEW: User & Security Analytics
-        fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.USERS.TRENDS}?${new URLSearchParams({ startDate: dateRange.startDate, endDate: dateRange.endDate })}`, { headers }),
-        fetch(API_ENDPOINTS.ADMIN_ANALYTICS.USERS.PASSWORD_RESETS, { headers })
+        fetch(API_ENDPOINTS.ADMIN_ANALYTICS.AUDIT.RECENT, { headers })
       ]);
 
       // Check for critical errors (allow some to fail gracefully)
@@ -244,44 +215,34 @@ export default function AdminAnalyticsPage() {
         overviewData,
         complianceData,
         ticketsOverviewData,
-        securityData,
         complianceTrendData,
         ticketTrendsData,
         equipmentCategoriesData,
         vendorRankingsData,
         recentTicketsData,
-        auditEventsData,
-        userTrendsData,
-        passwordResetsData
+        auditEventsData
       ] = await Promise.all([
         overviewRes.json(),
         complianceRes.json(),
         ticketsOverviewRes.json(),
-        securityRes.json(),
         complianceTrendRes.json(),
         ticketTrendsRes.json(),
         equipmentCategoriesRes.json(),
         vendorRankingsRes.json(),
         recentTicketsRes.json(),
-        auditEventsRes.json(),
-        userTrendsRes.json(),
-        passwordResetsRes.json()
+        auditEventsRes.json()
       ]);
 
       // Set state
       setSystemOverview(overviewData.data);
       setComplianceSummary(complianceData.data);
       setTicketsOverview(ticketsOverviewData.data);
-      setSecuritySummary(securityData.data);
       setComplianceTrend(complianceTrendData.data || []);
       setTicketTrends(ticketTrendsData.data || []);
       setEquipmentCategories(equipmentCategoriesData.data || []);
       setVendorRankings(vendorRankingsData.data || []);
       setRecentTickets(recentTicketsData.data || []);
       setAuditEvents(auditEventsData.data || []);
-      // NEW: User & Security Analytics
-      setUserTrends(userTrendsData.data || []);
-      setPasswordResets(passwordResetsData.data || []);
 
     } catch (err) {
       console.error('Error fetching analytics data:', err);
@@ -458,26 +419,7 @@ export default function AdminAnalyticsPage() {
     }));
   };
 
-  // NEW: Format user trends data for line chart
-  const formatUserTrendsForChart = (data: UserTrend[]) => {
-    return data.map(item => ({
-      week: new Date(item.week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      'Total Logins': safeNumber(item.logins),
-      'Vendor Logins': safeNumber(item.vendor_logins),
-      'Client Logins': safeNumber(item.client_logins),
-      'Failed Attempts': safeNumber(item.failed_attempts),
-      'Password Resets': safeNumber(item.password_resets)
-    }));
-  };
 
-  // NEW: Format password resets for pie chart
-  const formatPasswordResetsForChart = (data: PasswordReset[]) => {
-    return data.map((item, index) => ({
-      name: item.reason,
-      value: safeNumber(item.count),
-      color: CHART_COLORS[index % CHART_COLORS.length]
-    }));
-  };
 
   if (loading) {
     return (
@@ -514,64 +456,59 @@ export default function AdminAnalyticsPage() {
               </h1>
               <p className="text-gray-600 mt-1">Monitor system performance, compliance, and operational health</p>
             </div>
-            <div className="flex space-x-3">
+            <div className="flex items-center space-x-3">
               <button
                 onClick={exportToPDF}
                 disabled={exportingPDF}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary flex items-center space-x-2"
               >
                 {exportingPDF ? (
                   <>
-                    <div className="animate-spin -ml-1 mr-3 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                    Exporting...
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    <span>Exporting...</span>
                   </>
                 ) : (
                   <>
-                    <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                    Export PDF Report
+                    <ArrowDownTrayIcon className="h-4 w-4" />
+                    <span>Export PDF Report</span>
                   </>
                 )}
               </button>
             </div>
           </div>
 
-          {/* ENHANCED: Filters with Vendor Selection */}
+          {/* Search and Filters */}
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center mb-4">
-              <FunnelIcon className="h-5 w-5 text-gray-400 mr-2" />
-              <h2 className="text-lg font-semibold text-gray-900">Filters & Data Scope</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Start Date
-                </label>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-end">
+              {/* Start Date */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
                 <input
                   type="date"
                   value={dateRange.startDate}
                   onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  className="input-field w-full"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  End Date
-                </label>
+              
+              {/* End Date */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
                 <input
                   type="date"
                   value={dateRange.endDate}
                   onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  className="input-field w-full"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vendor Filter
-                </label>
+
+              {/* Vendor Filter */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Vendor</label>
                 <select
                   value={selectedVendor || ''}
                   onChange={(e) => setSelectedVendor(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  className="input-field appearance-none pr-8 w-full"
                 >
                   <option value="">All Vendors</option>
                   {vendors.map(vendor => (
@@ -580,77 +517,77 @@ export default function AdminAnalyticsPage() {
                     </option>
                   ))}
                 </select>
+                <ChevronDownIcon className="h-4 w-4 absolute right-2 top-9 text-gray-400 pointer-events-none" />
               </div>
             </div>
             {selectedVendor && (
               <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-700">
-                  <span className="font-medium">Filtered View:</span> Showing data for {vendors.find(v => v.id === selectedVendor)?.company_name} only.
-                  Select "All Vendors" to view system-wide analytics.
-                </p>
+                <div className="flex items-center">
+                  <EyeIcon className="h-4 w-4 text-blue-600 mr-2" />
+                  <p className="text-sm text-blue-700">
+                    <span className="font-medium">Filtered View:</span> Showing data for {vendors.find(v => v.id === selectedVendor)?.company_name} only.
+                    Select "All Vendors" to view system-wide analytics.
+                  </p>
+                </div>
               </div>
             )}
           </div>
 
-          {/* ENHANCED: System Overview KPIs with User Metrics */}
+          {/* System Overview KPIs */}
           {systemOverview && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center">
-                  <div className="p-3 bg-blue-50 rounded-xl">
-                    <BuildingOfficeIcon className="h-6 w-6 text-blue-600" />
+                  <div className="flex-shrink-0">
+                    <div className="p-3 bg-blue-50 rounded-xl">
+                      <BuildingOfficeIcon className="h-8 w-8 text-blue-600" />
+                    </div>
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Active Vendors</p>
-                    <p className="text-2xl font-bold text-gray-900">{systemOverview.active_vendors}</p>
+                  <div className="ml-5">
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Active Vendors</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{systemOverview.active_vendors}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center">
-                  <div className="p-3 bg-green-50 rounded-xl">
-                    <UserGroupIcon className="h-6 w-6 text-green-600" />
+                  <div className="flex-shrink-0">
+                    <div className="p-3 bg-green-50 rounded-xl">
+                      <UserGroupIcon className="h-8 w-8 text-green-600" />
+                    </div>
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Active Clients</p>
-                    <p className="text-2xl font-bold text-gray-900">{systemOverview.active_clients}</p>
+                  <div className="ml-5">
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Active Clients</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{systemOverview.active_clients}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center">
-                  <div className="p-3 bg-orange-50 rounded-xl">
-                    <FireIcon className="h-6 w-6 text-orange-600" />
+                  <div className="flex-shrink-0">
+                    <div className="p-3 bg-orange-50 rounded-xl">
+                      <FireIcon className="h-8 w-8 text-orange-600" />
+                    </div>
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Total Equipment</p>
-                    <p className="text-2xl font-bold text-gray-900">{systemOverview.total_equipment_instances}</p>
+                  <div className="ml-5">
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Equipment</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{systemOverview.total_equipment_instances}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center">
-                  <div className="p-3 bg-purple-50 rounded-xl">
-                    <WrenchScrewdriverIcon className="h-6 w-6 text-purple-600" />
+                  <div className="flex-shrink-0">
+                    <div className="p-3 bg-purple-50 rounded-xl">
+                      <WrenchScrewdriverIcon className="h-8 w-8 text-purple-600" />
+                    </div>
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Tickets (Period)</p>
-                    <p className="text-2xl font-bold text-gray-900">{systemOverview.tickets_in_period}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <div className="flex items-center">
-                  <div className="p-3 bg-indigo-50 rounded-xl">
-                    <LockClosedIcon className="h-6 w-6 text-indigo-600" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">User Logins</p>
-                    <p className="text-2xl font-bold text-gray-900">{systemOverview.user_logins_in_period}</p>
+                  <div className="ml-5">
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Tickets (Period)</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{systemOverview.tickets_in_period}</p>
                   </div>
                 </div>
               </div>
@@ -661,27 +598,29 @@ export default function AdminAnalyticsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Compliance Summary */}
             {complianceSummary && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                  <ShieldCheckIcon className="h-6 w-6 text-red-600 mr-2" />
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+                <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                  <div className="p-2 bg-green-50 rounded-lg mr-3">
+                    <ShieldCheckIcon className="h-6 w-6 text-green-600" />
+                  </div>
                   Compliance Overview
                 </h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="text-center p-4 bg-green-50 rounded-xl">
                     <div className="text-3xl font-bold text-green-600">{safeNumber(complianceSummary.compliance_rate_pct).toFixed(1)}%</div>
-                    <div className="text-sm text-gray-600">Compliance Rate</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Compliance Rate</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center p-4 bg-red-50 rounded-xl">
                     <div className="text-3xl font-bold text-red-600">{complianceSummary.vendors_below_80_pct}</div>
-                    <div className="text-sm text-gray-600">Low Compliance Vendors</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Low Compliance Vendors</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center p-4 bg-orange-50 rounded-xl">
                     <div className="text-2xl font-bold text-orange-600">{complianceSummary.expired_eq}</div>
-                    <div className="text-sm text-gray-600">Expired Equipment</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Expired Equipment</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center p-4 bg-yellow-50 rounded-xl">
                     <div className="text-2xl font-bold text-yellow-600">{complianceSummary.overdue_eq}</div>
-                    <div className="text-sm text-gray-600">Overdue Equipment</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Overdue Equipment</div>
                   </div>
                 </div>
               </div>
@@ -689,27 +628,29 @@ export default function AdminAnalyticsPage() {
 
             {/* Tickets Summary */}
             {ticketsOverview && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                  <WrenchScrewdriverIcon className="h-6 w-6 text-red-600 mr-2" />
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+                <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                  <div className="p-2 bg-purple-50 rounded-lg mr-3">
+                    <WrenchScrewdriverIcon className="h-6 w-6 text-purple-600" />
+                  </div>
                   Tickets Overview
                 </h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="text-center p-4 bg-blue-50 rounded-xl">
                     <div className="text-3xl font-bold text-blue-600">{ticketsOverview.total_tickets}</div>
-                    <div className="text-sm text-gray-600">Total Tickets</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Total Tickets</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center p-4 bg-yellow-50 rounded-xl">
                     <div className="text-3xl font-bold text-yellow-600">{ticketsOverview.open_tickets}</div>
-                    <div className="text-sm text-gray-600">Open Tickets</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Open Tickets</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center p-4 bg-red-50 rounded-xl">
                     <div className="text-2xl font-bold text-red-600">{ticketsOverview.high_priority_tickets}</div>
-                    <div className="text-sm text-gray-600">High Priority</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">High Priority</div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center p-4 bg-green-50 rounded-xl">
                     <div className="text-2xl font-bold text-green-600">{safeNumber(ticketsOverview.avg_resolution_hours).toFixed(1)}h</div>
-                    <div className="text-sm text-gray-600">Avg Resolution</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Avg Resolution</div>
                   </div>
                 </div>
               </div>
@@ -719,125 +660,90 @@ export default function AdminAnalyticsPage() {
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Compliance Trend */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <ExclamationTriangleIcon className="h-6 w-6 text-red-600 mr-2" />
-                Compliance Trend
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-green-50 rounded-lg mr-3">
+                  <ShieldCheckIcon className="h-6 w-6 text-green-600" />
+                </div>
+                Compliance Trend Over Time
               </h2>
               {complianceTrend.length > 0 ? (
-                <div className="h-64">
+                <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={formatComplianceTrendForChart(complianceTrend)}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#fff', 
+                          border: '1px solid #e5e7eb', 
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                        }} 
+                      />
                       <Legend />
-                      <Line type="monotone" dataKey="Compliance Rate %" stroke="#059669" strokeWidth={2} />
+                      <Line type="monotone" dataKey="Compliance Rate %" stroke="#059669" strokeWidth={3} dot={{ fill: '#059669', r: 4 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">No trend data available</div>
+                <div className="text-center py-12 text-gray-500">
+                  <ShieldCheckIcon className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No compliance trend data available</p>
+                </div>
               )}
             </div>
 
             {/* Ticket Trends */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <ChartBarIcon className="h-6 w-6 text-red-600 mr-2" />
-                Ticket Trends
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-purple-50 rounded-lg mr-3">
+                  <ChartBarIcon className="h-6 w-6 text-purple-600" />
+                </div>
+                Ticket Activity Trends
               </h2>
               {ticketTrends.length > 0 ? (
-                <div className="h-64">
+                <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={formatTicketTrendsForChart(ticketTrends)}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#fff', 
+                          border: '1px solid #e5e7eb', 
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                        }} 
+                      />
                       <Legend />
-                      <Line type="monotone" dataKey="Created" stroke="#E65100" strokeWidth={2} />
-                      <Line type="monotone" dataKey="Resolved" stroke="#059669" strokeWidth={2} />
-                      <Line type="monotone" dataKey="High Priority" stroke="#DC2626" strokeWidth={2} />
+                      <Line type="monotone" dataKey="Created" stroke="#E65100" strokeWidth={3} dot={{ fill: '#E65100', r: 4 }} />
+                      <Line type="monotone" dataKey="Resolved" stroke="#059669" strokeWidth={3} dot={{ fill: '#059669', r: 4 }} />
+                      <Line type="monotone" dataKey="High Priority" stroke="#DC2626" strokeWidth={3} dot={{ fill: '#DC2626', r: 4 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">No trend data available</div>
+                <div className="text-center py-12 text-gray-500">
+                  <ChartBarIcon className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No ticket trend data available</p>
+                </div>
               )}
             </div>
           </div>
 
-          {/* NEW: User & Security Trends Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* User Engagement Trends */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <UserGroupIcon className="h-6 w-6 text-indigo-600 mr-2" />
-                User Engagement Trends
-              </h2>
-              {userTrends.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={formatUserTrendsForChart(userTrends)}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="week" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="Total Logins" stroke="#4F46E5" strokeWidth={2} />
-                      <Line type="monotone" dataKey="Vendor Logins" stroke="#059669" strokeWidth={2} />
-                      <Line type="monotone" dataKey="Client Logins" stroke="#DC6D00" strokeWidth={2} />
-                      <Line type="monotone" dataKey="Failed Attempts" stroke="#DC2626" strokeWidth={2} strokeDasharray="5 5" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">No user trend data available</div>
-              )}
-            </div>
 
-            {/* Password Reset Reasons */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <LockClosedIcon className="h-6 w-6 text-amber-600 mr-2" />
-                Password Reset Reasons
-              </h2>
-              {passwordResets.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={formatPasswordResetsForChart(passwordResets)}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {passwordResets.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">No password reset data available</div>
-              )}
-            </div>
-          </div>
 
           {/* Equipment Categories */}
           {equipmentCategories.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <FireIcon className="h-6 w-6 text-red-600 mr-2" />
-                Equipment Categories
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-red-50 rounded-lg mr-3">
+                  <FireIcon className="h-6 w-6 text-red-600" />
+                </div>
+                Equipment Categories Distribution
               </h2>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
@@ -845,7 +751,7 @@ export default function AdminAnalyticsPage() {
                     <Pie
                       data={equipmentCategories.map(cat => ({
                         name: cat.equipment_type,
-                        value: cat.instance_count
+                        value: safeNumber(cat.instance_count)
                       }))}
                       cx="50%"
                       cy="50%"
@@ -868,38 +774,40 @@ export default function AdminAnalyticsPage() {
 
           {/* Vendor Rankings */}
           {vendorRankings.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <BuildingOfficeIcon className="h-6 w-6 text-red-600 mr-2" />
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-blue-50 rounded-lg mr-3">
+                  <BuildingOfficeIcon className="h-6 w-6 text-blue-600" />
+                </div>
                 Top Vendor Performance
               </h2>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Vendor</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Clients</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Equipment</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Tickets</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Compliance</th>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Vendor</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Clients</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Equipment</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Tickets</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Compliance</th>
                     </tr>
                   </thead>
                   <tbody>
                     {vendorRankings.slice(0, 10).map((vendor, index) => (
-                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4 font-medium text-gray-900">{vendor.company_name}</td>
-                        <td className="py-3 px-4 text-gray-600">{vendor.client_count}</td>
-                        <td className="py-3 px-4 text-gray-600">{vendor.equipment_assigned}</td>
-                        <td className="py-3 px-4 text-gray-600">{vendor.tickets_raised}</td>
-                        <td className="py-3 px-4">
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                            vendor.avg_compliance_pct >= 80 
+                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="py-4 px-6 font-medium text-gray-900">{vendor.company_name}</td>
+                        <td className="py-4 px-6 text-gray-600 font-medium">{vendor.client_count}</td>
+                        <td className="py-4 px-6 text-gray-600 font-medium">{vendor.equipment_assigned}</td>
+                        <td className="py-4 px-6 text-gray-600 font-medium">{vendor.tickets_raised}</td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full ${
+                            safeNumber(vendor.avg_compliance_pct) >= 80 
                               ? 'bg-green-100 text-green-800' 
-                              : vendor.avg_compliance_pct >= 60 
+                              : safeNumber(vendor.avg_compliance_pct) >= 60 
                               ? 'bg-yellow-100 text-yellow-800' 
                               : 'bg-red-100 text-red-800'
                           }`}>
-                            {vendor.avg_compliance_pct}%
+                            {safeNumber(vendor.avg_compliance_pct).toFixed(1)}%
                           </span>
                         </td>
                       </tr>
@@ -912,39 +820,41 @@ export default function AdminAnalyticsPage() {
 
           {/* Recent High-Priority Tickets */}
           {recentTickets.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <ExclamationTriangleIcon className="h-6 w-6 text-red-600 mr-2" />
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-orange-50 rounded-lg mr-3">
+                  <ExclamationTriangleIcon className="h-6 w-6 text-orange-600" />
+                </div>
                 Recent High-Priority Tickets
               </h2>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Ticket #</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Vendor</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Client</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Equipment</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Status</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Created</th>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Ticket #</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Vendor</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Client</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Equipment</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Status</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Created</th>
                     </tr>
                   </thead>
                   <tbody>
                     {recentTickets.slice(0, 10).map((ticket) => (
-                      <tr key={ticket.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4 font-medium text-blue-600">{ticket.ticket_number}</td>
-                        <td className="py-3 px-4 text-gray-900">{ticket.vendor || 'N/A'}</td>
-                        <td className="py-3 px-4 text-gray-900">{ticket.client || 'N/A'}</td>
-                        <td className="py-3 px-4 text-gray-600">{ticket.equipment_name || 'N/A'}</td>
-                        <td className="py-3 px-4">
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                            ticket.ticket_status === 'open' 
+                      <tr key={ticket.ticket_number} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="py-4 px-6 font-medium text-blue-600">{ticket.ticket_number}</td>
+                        <td className="py-4 px-6 text-gray-900">{ticket.vendor || 'N/A'}</td>
+                        <td className="py-4 px-6 text-gray-900">{ticket.client || 'N/A'}</td>
+                        <td className="py-4 px-6 text-gray-600">{ticket.equipment || 'N/A'}</td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full ${
+                            ticket.status === 'open' 
                               ? 'bg-yellow-100 text-yellow-800' 
-                              : ticket.ticket_status === 'resolved' 
+                              : ticket.status === 'resolved' 
                               ? 'bg-green-100 text-green-800' 
                               : 'bg-gray-100 text-gray-800'
                           }`}>
-                            {ticket.ticket_status}
+                            {ticket.status}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-gray-600 text-sm">{ticket.created}</td>
@@ -956,35 +866,15 @@ export default function AdminAnalyticsPage() {
             </div>
           )}
 
-          {/* Security Summary */}
-          {securitySummary && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <LockClosedIcon className="h-6 w-6 text-red-600 mr-2" />
-                Security Overview
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-red-600">{securitySummary.locked_users}</div>
-                  <div className="text-sm text-gray-600">Locked Users</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-yellow-600">{securitySummary.failed_logins_last_7d}</div>
-                  <div className="text-sm text-gray-600">Failed Logins (7d)</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-orange-600">{securitySummary.suspicious_ips_24h}</div>
-                  <div className="text-sm text-gray-600">Suspicious IPs (24h)</div>
-                </div>
-              </div>
-            </div>
-          )}
+
 
           {/* Recent Audit Events */}
           {auditEvents.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <DocumentMagnifyingGlassIcon className="h-6 w-6 text-red-600 mr-2" />
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-indigo-50 rounded-lg mr-3">
+                  <ClipboardDocumentListIcon className="h-6 w-6 text-indigo-600" />
+                </div>
                 Recent Audit Events
               </h2>
               <div className="overflow-x-auto">
