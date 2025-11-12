@@ -14,6 +14,7 @@ import {
   ShieldCheckIcon,
   ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline';
+import { useRouter } from 'next/navigation';
 
 // Types
 interface KPIData {
@@ -35,6 +36,7 @@ interface Client {
 }
 
 export default function ReportsPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [kpis, setKpis] = useState<KPIData | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
@@ -48,6 +50,18 @@ export default function ReportsPage() {
   });
 
   const { showToast } = useToast();
+
+  // Redirect vendors to their dedicated analytics page
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      const user = JSON.parse(userData);
+      if (user.user_type === 'vendor') {
+        router.push('/vendors/analytics');
+        return;
+      }
+    }
+  }, [router]);
 
   useEffect(() => {
     loadAllData();
