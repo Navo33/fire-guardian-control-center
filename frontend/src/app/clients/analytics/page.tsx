@@ -313,113 +313,331 @@ export default function ClientAnalyticsPage() {
     }
   };
 
-  // Export to PDF functionality
+  // Export to PDF functionality using React-PDF
   const exportToPDF = async () => {
     try {
       setExportingPDF(true);
       
-      // Import jsPDF and autoTable plugin
-      const { jsPDF } = await import('jspdf');
-      await import('jspdf-autotable');
+      // Import React-PDF dependencies
+      const { Document, Page, Text, View, StyleSheet, pdf, Font } = await import('@react-pdf/renderer');
       
-      const doc = new jsPDF();
+      // Define styles for the PDF
+      const styles = StyleSheet.create({
+        page: {
+          flexDirection: 'column',
+          backgroundColor: '#ffffff',
+          padding: 30,
+          fontFamily: 'Helvetica'
+        },
+        header: {
+          backgroundColor: '#1e40af',
+          color: 'white',
+          padding: 20,
+          marginBottom: 20,
+          borderRadius: 5
+        },
+        title: {
+          fontSize: 24,
+          fontWeight: 'bold',
+          marginBottom: 8
+        },
+        subtitle: {
+          fontSize: 12,
+          marginBottom: 4
+        },
+        section: {
+          marginBottom: 20
+        },
+        sectionTitle: {
+          fontSize: 16,
+          fontWeight: 'bold',
+          color: '#1e40af',
+          marginBottom: 10,
+          borderBottom: '1px solid #e5e7eb',
+          paddingBottom: 5
+        },
+        kpiContainer: {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          marginBottom: 15
+        },
+        kpiBox: {
+          width: '30%',
+          marginRight: '5%',
+          marginBottom: 10,
+          padding: 10,
+          border: '1px solid #e5e7eb',
+          borderRadius: 5,
+          textAlign: 'center'
+        },
+        kpiValue: {
+          fontSize: 18,
+          fontWeight: 'bold',
+          color: '#1e40af',
+          marginBottom: 4
+        },
+        kpiLabel: {
+          fontSize: 10,
+          color: '#6b7280'
+        },
+        table: {
+          display: 'table',
+          width: 'auto',
+          borderStyle: 'solid',
+          borderWidth: 1,
+          borderRightWidth: 0,
+          borderBottomWidth: 0,
+          borderColor: '#e5e7eb'
+        },
+        tableRow: {
+          margin: 'auto',
+          flexDirection: 'row'
+        },
+        tableColHeader: {
+          width: '20%',
+          borderStyle: 'solid',
+          borderWidth: 1,
+          borderLeftWidth: 0,
+          borderTopWidth: 0,
+          borderColor: '#e5e7eb',
+          backgroundColor: '#ef4444',
+          padding: 8
+        },
+        tableCol: {
+          width: '20%',
+          borderStyle: 'solid',
+          borderWidth: 1,
+          borderLeftWidth: 0,
+          borderTopWidth: 0,
+          borderColor: '#e5e7eb',
+          padding: 8
+        },
+        tableCellHeader: {
+          fontSize: 10,
+          fontWeight: 'bold',
+          color: 'white',
+          textAlign: 'center'
+        },
+        tableCell: {
+          fontSize: 8,
+          color: '#374151'
+        },
+        criticalSection: {
+          backgroundColor: '#fef2f2',
+          padding: 15,
+          borderLeft: '4px solid #ef4444',
+          marginBottom: 15
+        },
+        criticalTitle: {
+          fontSize: 14,
+          fontWeight: 'bold',
+          color: '#dc2626',
+          marginBottom: 8
+        },
+        criticalText: {
+          fontSize: 10,
+          color: '#7f1d1d',
+          marginBottom: 10
+        },
+        upcomingSection: {
+          backgroundColor: '#fffbeb',
+          padding: 15,
+          borderLeft: '4px solid #f59e0b',
+          marginBottom: 15
+        },
+        upcomingTitle: {
+          fontSize: 14,
+          fontWeight: 'bold',
+          color: '#d97706',
+          marginBottom: 8
+        },
+        footer: {
+          position: 'absolute',
+          bottom: 30,
+          left: 30,
+          right: 30,
+          borderTop: '1px solid #e5e7eb',
+          paddingTop: 10
+        },
+        footerText: {
+          fontSize: 8,
+          color: '#6b7280',
+          textAlign: 'center',
+          marginBottom: 4
+        }
+      });
+
+      // Create PDF Document Component
+      const PDFDocument = () => (
+        <Document>
+          <Page size="A4" style={styles.page}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.title}>Fire Safety Analytics Report</Text>
+              <Text style={styles.subtitle}>
+                Generated: {new Date().toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </Text>
+              <Text style={styles.subtitle}>
+                Report Period: {dateRange.startDate} to {dateRange.endDate}
+              </Text>
+            </View>
+
+            {/* Executive Summary */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Executive Summary</Text>
+              {clientOverview && (
+                <View style={styles.kpiContainer}>
+                  <View style={styles.kpiBox}>
+                    <Text style={styles.kpiValue}>{clientOverview.total_assigned}</Text>
+                    <Text style={styles.kpiLabel}>Total Equipment</Text>
+                  </View>
+                  <View style={styles.kpiBox}>
+                    <Text style={styles.kpiValue}>{clientOverview.compliance_rate_pct}%</Text>
+                    <Text style={styles.kpiLabel}>Compliance Rate</Text>
+                  </View>
+                  <View style={styles.kpiBox}>
+                    <Text style={styles.kpiValue}>{clientOverview.compliant}</Text>
+                    <Text style={styles.kpiLabel}>Compliant Units</Text>
+                  </View>
+                  <View style={styles.kpiBox}>
+                    <Text style={styles.kpiValue}>{clientOverview.open_requests}</Text>
+                    <Text style={styles.kpiLabel}>Open Requests</Text>
+                  </View>
+                  <View style={styles.kpiBox}>
+                    <Text style={styles.kpiValue}>{clientOverview.unread_notifications}</Text>
+                    <Text style={styles.kpiLabel}>Notifications</Text>
+                  </View>
+                  <View style={styles.kpiBox}>
+                    <Text style={styles.kpiValue}>{clientOverview.upcoming_events}</Text>
+                    <Text style={styles.kpiLabel}>Upcoming Events</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+
+            {/* Compliance Status Overview */}
+            {equipmentStatus.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Compliance Overview</Text>
+                {equipmentStatus.map((status: EquipmentStatus, index: number) => (
+                  <Text key={index} style={{ fontSize: 10, marginBottom: 4 }}>
+                    • {status.status.replace('_', ' ').toUpperCase()}: {status.count} units
+                  </Text>
+                ))}
+              </View>
+            )}
+
+            {/* Critical Non-Compliant Equipment */}
+            {nonCompliantEquipment.length > 0 && (
+              <View style={styles.criticalSection}>
+                <Text style={styles.criticalTitle}>⚠ Critical: Non-Compliant Equipment</Text>
+                <Text style={styles.criticalText}>
+                  IMMEDIATE ACTION REQUIRED - Contact your fire safety vendor
+                </Text>
+                
+                <View style={styles.table}>
+                  {/* Table Header */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.tableColHeader}>
+                      <Text style={styles.tableCellHeader}>Equipment</Text>
+                    </View>
+                    <View style={styles.tableColHeader}>
+                      <Text style={styles.tableCellHeader}>Serial #</Text>
+                    </View>
+                    <View style={styles.tableColHeader}>
+                      <Text style={styles.tableCellHeader}>Location</Text>
+                    </View>
+                    <View style={styles.tableColHeader}>
+                      <Text style={styles.tableCellHeader}>Status</Text>
+                    </View>
+                    <View style={styles.tableColHeader}>
+                      <Text style={styles.tableCellHeader}>Due Date</Text>
+                    </View>
+                  </View>
+
+                  {/* Table Rows */}
+                  {nonCompliantEquipment.slice(0, 8).map((equipment, index) => (
+                    <View key={index} style={styles.tableRow}>
+                      <View style={styles.tableCol}>
+                        <Text style={styles.tableCell}>{equipment.equipment_name || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.tableCol}>
+                        <Text style={styles.tableCell}>{equipment.serial_number || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.tableCol}>
+                        <Text style={styles.tableCell}>{equipment.location || 'N/A'}</Text>
+                      </View>
+                      <View style={styles.tableCol}>
+                        <Text style={styles.tableCell}>{equipment.compliance_status || 'Unknown'}</Text>
+                      </View>
+                      <View style={styles.tableCol}>
+                        <Text style={styles.tableCell}>
+                          {equipment.next_maintenance || equipment.expiry_date || 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Upcoming Events */}
+            {upcomingEvents.length > 0 && (
+              <View style={styles.upcomingSection}>
+                <Text style={styles.upcomingTitle}>📅 Upcoming Inspections & Maintenance</Text>
+                <Text style={{ fontSize: 10, marginBottom: 10, color: '#92400e' }}>
+                  Plan ahead to maintain compliance and avoid emergency situations
+                </Text>
+
+                {upcomingEvents.slice(0, 8).map((event, index) => (
+                  <Text key={index} style={{ fontSize: 9, marginBottom: 3, color: '#451a03' }}>
+                    • {event.type || 'Maintenance'}: {event.title || 'N/A'} - 
+                    Due: {event.date || 'N/A'} ({event.days_until || 0} days)
+                  </Text>
+                ))}
+              </View>
+            )}
+
+            {/* Footer */}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Fire Guardian Control Center</Text>
+              <Text style={styles.footerText}>
+                This report is generated for compliance and insurance documentation purposes.
+              </Text>
+              <Text style={styles.footerText}>
+                Please contact your fire safety vendor immediately for any non-compliant items requiring attention.
+              </Text>
+              <Text style={styles.footerText}>
+                Report generated on: {new Date().toLocaleString()}
+              </Text>
+            </View>
+          </Page>
+        </Document>
+      );
+
+      // Generate and download PDF
+      const blob = await pdf(<PDFDocument />).toBlob();
       
-      // Title and header
-      doc.setFontSize(20);
-      doc.text('Fire Safety Compliance Report', 20, 20);
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
       
-      doc.setFontSize(12);
-      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, 30);
-      doc.text(`Report Period: ${dateRange.startDate} to ${dateRange.endDate}`, 20, 40);
-      
-      let y = 55;
-      
-      // Client Overview
-      if (clientOverview) {
-        doc.setFontSize(14);
-        doc.text('Safety Overview', 20, y);
-        y += 10;
-        
-        doc.setFontSize(10);
-        doc.text(`Total Equipment: ${clientOverview.total_assigned}`, 20, y);
-        y += 6;
-        doc.text(`Compliant Equipment: ${clientOverview.compliant}`, 20, y);
-        y += 6;
-        doc.text(`Compliance Rate: ${clientOverview.compliance_rate_pct}%`, 20, y);
-        y += 6;
-        doc.text(`Open Service Requests: ${clientOverview.open_requests}`, 20, y);
-        y += 6;
-        doc.text(`Upcoming Events: ${clientOverview.upcoming_events}`, 20, y);
-        y += 15;
-      }
-      
-      // Non-Compliant Equipment (Critical for insurance/compliance)
-      if (nonCompliantEquipment.length > 0 && y < 200) {
-        doc.setFontSize(14);
-        doc.text('Non-Compliant Equipment (Action Required)', 20, y);
-        y += 10;
-        
-        const tableData = nonCompliantEquipment.slice(0, 10).map(eq => [
-          eq.equipment_name,
-          eq.serial_number,
-          eq.location,
-          eq.compliance_status,
-          eq.next_maintenance || eq.expiry_date
-        ]);
-        
-        // @ts-expect-error jsPDF autoTable plugin types not available
-        doc.autoTable({
-          startY: y,
-          head: [['Equipment', 'Serial', 'Location', 'Status', 'Due Date']],
-          body: tableData,
-          theme: 'grid',
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [220, 53, 69] } // Red for non-compliant items
-        });
-        
-        // @ts-expect-error jsPDF autoTable plugin types not available
-        y = doc.lastAutoTable.finalY + 15;
-      }
-      
-      // Upcoming Events
-      if (upcomingEvents.length > 0 && y < 240) {
-        doc.setFontSize(14);
-        doc.text('Upcoming Maintenance & Expiry Events', 20, y);
-        y += 10;
-        
-        const eventsData = upcomingEvents.slice(0, 8).map(event => [
-          event.type,
-          event.title,
-          event.date,
-          event.days_until + ' days',
-          event.location
-        ]);
-        
-        // @ts-expect-error jsPDF autoTable plugin types not available
-        doc.autoTable({
-          startY: y,
-          head: [['Type', 'Equipment', 'Date', 'Days Until', 'Location']],
-          body: eventsData,
-          theme: 'grid',
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [245, 158, 11] } // Amber for upcoming events
-        });
-      }
-      
-      // Compliance note for insurance/regulatory purposes
-      const pageHeight = doc.internal.pageSize.height;
-      doc.setFontSize(8);
-      doc.text('This report is generated for compliance and insurance documentation purposes.', 20, pageHeight - 20);
-      doc.text('Please contact your fire safety vendor for any non-compliant items requiring attention.', 20, pageHeight - 15);
-      
-      // Save the PDF
       const timestamp = new Date().toISOString().slice(0, 10);
-      const filename = `Fire-Safety-Compliance-Report-${timestamp}.pdf`;
+      const filename = `Fire-Safety-Analytics-Report-${timestamp}.pdf`;
+      link.download = filename;
       
-      doc.save(filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       
       // Success notification
-      alert(`Compliance report generated successfully! File: ${filename}`);
+      alert(`🔥 Fire Safety Analytics Report Generated Successfully!\n\nFile: ${filename}\n\n✅ Professional compliance report with:\n• Executive summary & KPIs\n• Equipment compliance status\n• Critical action items\n• Upcoming maintenance schedule\n\nThis report is suitable for insurance and regulatory documentation.`);
       
     } catch (error) {
       console.error('Error exporting PDF:', error);
@@ -481,8 +699,10 @@ export default function ClientAnalyticsPage() {
     return (
       <RequireRole allowedRoles={['client']}>
         <DashboardLayout>
-          <div className="flex items-center justify-center min-h-64">
+          <div className="flex flex-col items-center justify-center min-h-96 bg-white rounded-2xl border border-gray-100 m-6">
             <LoadingSpinner size="lg" />
+            <p className="mt-4 text-gray-600 font-medium">Loading analytics data...</p>
+            <p className="text-sm text-gray-400 mt-1">Please wait while we gather your fire safety insights</p>
           </div>
         </DashboardLayout>
       </RequireRole>
@@ -502,21 +722,23 @@ export default function ClientAnalyticsPage() {
   return (
     <RequireRole allowedRoles={['client']}>
       <DashboardLayout>
-        <div className="space-y-6">
+        <div className="space-y-6 p-6 analytics-dashboard" data-pdf-content>
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-                <ShieldCheckIcon className="h-7 w-7 text-red-600 mr-3" />
-                Fire Safety Dashboard
-              </h1>
-              <p className="text-gray-600 mt-1">Monitor compliance, track service requests, and stay safe</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center space-x-4">
+              <div className="flex-shrink-0">
+                <ShieldCheckIcon className="h-8 w-8 text-gray-900" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Analytics & Compliance</h1>
+                <p className="text-gray-600">Monitor equipment compliance, track service requests, and stay safe</p>
+              </div>
             </div>
             <div className="flex space-x-3">
               <button
                 onClick={exportToPDF}
                 disabled={exportingPDF}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150"
               >
                 {exportingPDF ? (
                   <>
@@ -526,7 +748,7 @@ export default function ClientAnalyticsPage() {
                 ) : (
                   <>
                     <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
-                    Export Compliance Report
+                    Export Report
                   </>
                 )}
               </button>
@@ -535,9 +757,9 @@ export default function ClientAnalyticsPage() {
 
           {/* Filters */}
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center mb-4">
-              <FunnelIcon className="h-5 w-5 text-gray-400 mr-2" />
-              <h2 className="text-lg font-semibold text-gray-900">Filters & Time Range</h2>
+            <div className="flex items-center mb-6">
+              <FunnelIcon className="h-6 w-6 text-red-600 mr-3" />
+              <h2 className="text-xl font-semibold text-gray-900">Filters & Time Range</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -548,7 +770,7 @@ export default function ClientAnalyticsPage() {
                   type="date"
                   value={dateRange.startDate}
                   onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors"
                 />
               </div>
               <div>
@@ -559,7 +781,7 @@ export default function ClientAnalyticsPage() {
                   type="date"
                   value={dateRange.endDate}
                   onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors"
                 />
               </div>
               <div>
@@ -569,7 +791,7 @@ export default function ClientAnalyticsPage() {
                 <select
                   value={selectedEquipmentType || ''}
                   onChange={(e) => setSelectedEquipmentType(e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors"
                 >
                   <option value="">All Equipment Types</option>
                   {equipmentTypes.map(type => (
@@ -663,8 +885,8 @@ export default function ClientAnalyticsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Equipment Status Pie Chart */}
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <FireIcon className="h-6 w-6 text-red-600 mr-2" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <FireIcon className="h-6 w-6 text-red-600 mr-3" />
                 Equipment Status Overview
               </h2>
               {equipmentStatus.length > 0 ? (
@@ -680,7 +902,7 @@ export default function ClientAnalyticsPage() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }: { name: string; percent: number }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                         outerRadius={80}
                         fill="#8884d8"
                         dataKey="value"
@@ -694,14 +916,18 @@ export default function ClientAnalyticsPage() {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">No equipment data available</div>
+                <div className="text-center py-12">
+                  <FireIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 font-medium">No equipment data available</p>
+                  <p className="text-sm text-gray-400 mt-1">Data will appear here once equipment is added</p>
+                </div>
               )}
             </div>
 
             {/* Compliance Trend */}
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <ChartBarIcon className="h-6 w-6 text-red-600 mr-2" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <ChartBarIcon className="h-6 w-6 text-red-600 mr-3" />
                 Compliance Trend
               </h2>
               {complianceTrend.length > 0 ? (
@@ -718,7 +944,11 @@ export default function ClientAnalyticsPage() {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">No trend data available</div>
+                <div className="text-center py-12">
+                  <ChartBarIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 font-medium">No trend data available</p>
+                  <p className="text-sm text-gray-400 mt-1">Compliance trends will appear after data collection</p>
+                </div>
               )}
             </div>
           </div>
@@ -726,8 +956,8 @@ export default function ClientAnalyticsPage() {
           {/* Compliance by Equipment Type */}
           {complianceByType.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <ExclamationTriangleIcon className="h-6 w-6 text-red-600 mr-2" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <ExclamationTriangleIcon className="h-6 w-6 text-red-600 mr-3" />
                 Compliance Status by Equipment Type
               </h2>
               <div className="h-80">
@@ -751,49 +981,53 @@ export default function ClientAnalyticsPage() {
           {/* Critical Alerts - Non-Compliant Equipment */}
           {nonCompliantEquipment.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
-              <div className="flex items-center mb-4">
-                <ExclamationTriangleIcon className="h-6 w-6 text-red-600 mr-2" />
-                <h2 className="text-xl font-semibold text-red-900">
-                  ⚠️ Action Required: Non-Compliant Equipment
-                </h2>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center">
+                  <ExclamationTriangleIcon className="h-6 w-6 text-red-600 mr-3" />
+                  <h2 className="text-xl font-semibold text-red-900">
+                    ⚠️ Action Required: Non-Compliant Equipment
+                  </h2>
+                </div>
                 <button
-                  className="ml-auto inline-flex items-center px-3 py-1.5 border border-red-300 rounded-md text-sm font-medium text-red-700 bg-white hover:bg-red-50"
+                  className="inline-flex items-center px-4 py-2 border border-red-300 rounded-lg text-sm font-medium text-red-700 bg-white hover:bg-red-50 transition-colors"
                 >
-                  <PhoneIcon className="h-4 w-4 mr-1" />
+                  <PhoneIcon className="h-4 w-4 mr-2" />
                   Contact Vendor
                 </button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-red-200">
-                      <th className="text-left py-3 px-4 font-semibold text-red-900">Equipment</th>
-                      <th className="text-left py-3 px-4 font-semibold text-red-900">Serial Number</th>
-                      <th className="text-left py-3 px-4 font-semibold text-red-900">Location</th>
-                      <th className="text-left py-3 px-4 font-semibold text-red-900">Status</th>
-                      <th className="text-left py-3 px-4 font-semibold text-red-900">Due Date</th>
-                      <th className="text-left py-3 px-4 font-semibold text-red-900">Days Until</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {nonCompliantEquipment.slice(0, 10).map((equipment, index) => (
-                      <tr key={index} className="border-b border-red-100 hover:bg-red-25">
-                        <td className="py-3 px-4 font-medium text-red-900">{equipment.equipment_name}</td>
-                        <td className="py-3 px-4 text-red-800 font-mono text-sm">{equipment.serial_number}</td>
-                        <td className="py-3 px-4 text-red-800">{equipment.location}</td>
-                        <td className="py-3 px-4">
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusBadgeColor(equipment.compliance_status)}`}>
-                            {equipment.compliance_status.replace('_', ' ')}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-red-800">{equipment.next_maintenance || equipment.expiry_date}</td>
-                        <td className="py-3 px-4 text-red-800 font-semibold">
-                          {equipment.days_until_maintenance || equipment.days_until_expiry} days
-                        </td>
+              <div className="bg-white rounded-lg border border-red-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-red-100 border-b border-red-200">
+                      <tr>
+                        <th className="text-left py-4 px-6 font-semibold text-red-900">Equipment</th>
+                        <th className="text-left py-4 px-6 font-semibold text-red-900">Serial Number</th>
+                        <th className="text-left py-4 px-6 font-semibold text-red-900">Location</th>
+                        <th className="text-left py-4 px-6 font-semibold text-red-900">Status</th>
+                        <th className="text-left py-4 px-6 font-semibold text-red-900">Due Date</th>
+                        <th className="text-left py-4 px-6 font-semibold text-red-900">Days Until</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-red-100">
+                      {nonCompliantEquipment.slice(0, 10).map((equipment, index) => (
+                        <tr key={index} className="hover:bg-red-25 transition-colors">
+                          <td className="py-4 px-6 font-medium text-gray-900">{equipment.equipment_name}</td>
+                          <td className="py-4 px-6 text-gray-700 font-mono text-sm">{equipment.serial_number}</td>
+                          <td className="py-4 px-6 text-gray-700">{equipment.location}</td>
+                          <td className="py-4 px-6">
+                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusBadgeColor(equipment.compliance_status)}`}>
+                              {equipment.compliance_status.replace('_', ' ')}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-gray-700">{equipment.next_maintenance || equipment.expiry_date}</td>
+                          <td className="py-4 px-6 font-semibold text-red-700">
+                            {equipment.days_until_maintenance || equipment.days_until_expiry} days
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -801,36 +1035,40 @@ export default function ClientAnalyticsPage() {
           {/* Upcoming Events Calendar */}
           {upcomingEvents.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <CalendarIcon className="h-6 w-6 text-red-600 mr-2" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <CalendarIcon className="h-6 w-6 text-red-600 mr-3" />
                 Upcoming Maintenance & Events (Next 30 Days)
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {upcomingEvents.slice(0, 9).map((event, index) => (
-                  <div key={index} className={`p-4 rounded-lg border-l-4 ${
+                  <div key={index} className={`p-5 rounded-xl border transition-all hover:shadow-md ${
                     parseInt(event.days_until) <= 7 
-                      ? 'border-red-500 bg-red-50' 
+                      ? 'border-red-200 bg-red-50 hover:bg-red-100' 
                       : parseInt(event.days_until) <= 14 
-                      ? 'border-yellow-500 bg-yellow-50' 
-                      : 'border-blue-500 bg-blue-50'
+                      ? 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100' 
+                      : 'border-blue-200 bg-blue-50 hover:bg-blue-100'
                   }`}>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-900">{event.title}</p>
-                        <p className="text-sm text-gray-600">{event.location}</p>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-900 mb-1">{event.title}</h4>
+                        <p className="text-sm text-gray-600 mb-1">{event.location}</p>
                         <p className="text-sm text-gray-500">{event.date}</p>
                       </div>
-                      <span className={`inline-flex px-2 py-1 text-xs font-bold rounded ${
+                      <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-full ml-3 ${
                         parseInt(event.days_until) <= 7 
-                          ? 'bg-red-100 text-red-800' 
+                          ? 'bg-red-100 text-red-800 border border-red-200' 
                           : parseInt(event.days_until) <= 14 
-                          ? 'bg-yellow-100 text-yellow-800' 
-                          : 'bg-blue-100 text-blue-800'
+                          ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' 
+                          : 'bg-blue-100 text-blue-800 border border-blue-200'
                       }`}>
                         {event.days_until} days
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2 capitalize">{event.type}</p>
+                    <div className="flex items-center">
+                      <span className="text-xs text-gray-500 capitalize bg-white px-2 py-1 rounded-md border">
+                        {event.type}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -841,8 +1079,8 @@ export default function ClientAnalyticsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Service Request Trends */}
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <WrenchScrewdriverIcon className="h-6 w-6 text-red-600 mr-2" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <WrenchScrewdriverIcon className="h-6 w-6 text-red-600 mr-3" />
                 Service Request Activity
               </h2>
               {requestTrends.length > 0 ? (
@@ -861,14 +1099,18 @@ export default function ClientAnalyticsPage() {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">No service request data available</div>
+                <div className="text-center py-12">
+                  <WrenchScrewdriverIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 font-medium">No service request data available</p>
+                  <p className="text-sm text-gray-400 mt-1">Activity trends will display when requests are submitted</p>
+                </div>
               )}
             </div>
 
             {/* Account Security */}
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <LockClosedIcon className="h-6 w-6 text-red-600 mr-2" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <LockClosedIcon className="h-6 w-6 text-red-600 mr-3" />
                 Account Activity
               </h2>
               {loginHistory.length > 0 ? (
@@ -886,7 +1128,11 @@ export default function ClientAnalyticsPage() {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">No login activity data available</div>
+                <div className="text-center py-12">
+                  <LockClosedIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 font-medium">No login activity data available</p>
+                  <p className="text-sm text-gray-400 mt-1">Account activity will be tracked going forward</p>
+                </div>
               )}
             </div>
           </div>
@@ -894,37 +1140,39 @@ export default function ClientAnalyticsPage() {
           {/* Recent Notifications */}
           {recentNotifications.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <BellIcon className="h-6 w-6 text-red-600 mr-2" />
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <BellIcon className="h-6 w-6 text-red-600 mr-3" />
                 Recent Notifications
               </h2>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {recentNotifications.slice(0, 5).map((notification, index) => (
-                  <div key={index} className={`p-4 rounded-lg border ${
-                    !notification.is_read ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+                  <div key={index} className={`p-5 rounded-xl border transition-all hover:shadow-md ${
+                    !notification.is_read 
+                      ? 'bg-blue-50 border-blue-200 hover:bg-blue-100' 
+                      : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                   }`}>
                     <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-900">{notification.title}</p>
-                        <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
-                        <p className="text-xs text-gray-500 mt-2">{notification.created_at}</p>
+                      <div className="flex-1">
+                        <div className="flex items-center mb-2">
+                          <h4 className="font-semibold text-gray-900">{notification.title}</h4>
+                          {!notification.is_read && (
+                            <span className="ml-2 inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                              New
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600 leading-relaxed">{notification.message}</p>
+                        <p className="text-xs text-gray-500 mt-3">{notification.created_at}</p>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded ${
-                          notification.priority === 'high' 
-                            ? 'bg-red-100 text-red-800' 
-                            : notification.priority === 'medium' 
-                            ? 'bg-yellow-100 text-yellow-800' 
-                            : 'bg-green-100 text-green-800'
-                        }`}>
-                          {notification.priority}
-                        </span>
-                        {!notification.is_read && (
-                          <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                            New
-                          </span>
-                        )}
-                      </div>
+                      <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ml-4 ${
+                        notification.priority === 'high' 
+                          ? 'bg-red-100 text-red-800' 
+                          : notification.priority === 'medium' 
+                          ? 'bg-yellow-100 text-yellow-800' 
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {notification.priority.toUpperCase()}
+                      </span>
                     </div>
                   </div>
                 ))}
