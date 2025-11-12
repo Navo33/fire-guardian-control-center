@@ -46,14 +46,13 @@ export default function Sidebar({ userRole, isOpen, onClose }: SidebarProps) {
           { name: 'Client Management', href: '/clients', icon: UsersIcon },
           { name: 'Equipment Management', href: '/equipment', icon: FireIcon },
           { name: 'Maintenance Tickets', href: '/maintenance-tickets', icon: WrenchScrewdriverIcon },
-          { name: 'Analytics & Reports', href: '/reports', icon: ChartBarIcon },
+          { name: 'Analytics & Reports', href: '/vendors/analytics', icon: ChartBarIcon },
         ];
       case 'client':
         return [
           { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-          { name: 'My Equipment', href: '/equipment', icon: FireIcon },
-          { name: 'Service Requests', href: '/requests', icon: ClipboardDocumentListIcon },
-          { name: 'Maintenance History', href: '/maintenance', icon: WrenchScrewdriverIcon },
+          { name: 'My Equipment', href: '/client-equipment', icon: FireIcon },
+          { name: 'Service Requests', href: '/service-requests', icon: WrenchScrewdriverIcon },
           { name: 'Safety Reports', href: '/reports', icon: ShieldCheckIcon },
         ];
       default:

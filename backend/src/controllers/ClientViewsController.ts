@@ -23,13 +23,9 @@ export class ClientViewsController extends BaseController {
    */
   static async getDashboardKPIs(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const clientId = await ClientViewsController.getClientId(req);
-      if (!clientId) {
-        res.status(404).json({ success: false, message: 'Client not found' });
-        return;
-      }
-
-      const kpis = await ClientViewsRepository.getDashboardKPIs(clientId);
+      const userId = req.user!.userId;
+      
+      const kpis = await ClientViewsRepository.getDashboardKPIs(userId);
       res.json({ success: true, data: kpis });
     } catch (error) {
       console.error('Error fetching client dashboard KPIs:', error);
@@ -42,13 +38,9 @@ export class ClientViewsController extends BaseController {
    */
   static async getRecentActivity(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const clientId = await ClientViewsController.getClientId(req);
-      if (!clientId) {
-        res.status(404).json({ success: false, message: 'Client not found' });
-        return;
-      }
-
-      const activity = await ClientViewsRepository.getRecentActivity(clientId, req.user!.userId);
+      const userId = req.user!.userId;
+      
+      const activity = await ClientViewsRepository.getRecentActivity(userId);
       res.json({ success: true, data: activity });
     } catch (error) {
       console.error('Error fetching recent activity:', error);
@@ -289,6 +281,110 @@ export class ClientViewsController extends BaseController {
     } catch (error) {
       console.error('Error exporting report:', error);
       res.status(500).json({ success: false, message: 'Failed to export report' });
+    }
+  }
+
+  /**
+   * Get equipment detail for client
+   */
+  static async getEquipmentDetail(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      const equipmentId = parseInt(req.params.id);
+
+      if (isNaN(equipmentId)) {
+        res.status(400).json({ success: false, message: 'Invalid equipment ID' });
+        return;
+      }
+
+      const equipmentDetail = await ClientViewsRepository.getEquipmentDetail(userId, equipmentId);
+      
+      if (!equipmentDetail) {
+        res.status(404).json({ success: false, message: 'Equipment not found' });
+        return;
+      }
+
+      res.json({ success: true, data: equipmentDetail });
+    } catch (error) {
+      console.error('Error fetching equipment detail:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch equipment detail' });
+    }
+  }
+
+  /**
+   * Get equipment stats for client
+   */
+  static async getEquipmentStats(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      
+      const stats = await ClientViewsRepository.getEquipmentStats(userId);
+      res.json({ success: true, data: stats });
+    } catch (error) {
+      console.error('Error fetching equipment stats:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch equipment stats' });
+    }
+  }
+
+  /**
+   * Get equipment types overview for client (like vendor equipment types page)
+   */
+  static async getEquipmentTypesOverview(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      
+      const overview = await ClientViewsRepository.getEquipmentTypesOverview(userId);
+      res.json({ success: true, data: overview });
+    } catch (error) {
+      console.error('Error fetching equipment types overview:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch equipment types overview' });
+    }
+  }
+
+  /**
+   * Get service requests/tickets for client
+   */
+  static async getServiceRequests(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      
+      const serviceRequests = await ClientViewsRepository.getServiceRequests(userId);
+      res.json({ success: true, data: serviceRequests });
+    } catch (error) {
+      console.error('Error fetching service requests:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch service requests' });
+    }
+  }
+
+  /**
+   * Get service request details for a client
+   */
+  static async getServiceRequestDetails(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      const ticketId = parseInt(req.params.id);
+
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+        return;
+      }
+
+      if (!ticketId || isNaN(ticketId)) {
+        res.status(400).json({ success: false, message: 'Invalid ticket ID' });
+        return;
+      }
+      
+      const ticketDetails = await ClientViewsRepository.getServiceRequestDetails(userId, ticketId);
+      
+      if (!ticketDetails) {
+        res.status(404).json({ success: false, message: 'Service request not found' });
+        return;
+      }
+
+      res.json({ success: true, data: ticketDetails });
+    } catch (error) {
+      console.error('Error fetching service request details:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch service request details' });
     }
   }
 }

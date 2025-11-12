@@ -142,6 +142,117 @@ export const runMigrations = async (): Promise<void> => {
       up: async () => {
         await applyInitialSchema();
       }
+    },
+    {
+      name: '002_add_ticket_number_trigger',
+      description: 'Add automatic ticket number generation trigger (legacy - now in schema.sql)',
+      up: async () => {
+        // Check if the trigger already exists (it should be in schema.sql now)
+        const triggerCheck = await pool.query(`
+          SELECT 1 FROM information_schema.triggers 
+          WHERE trigger_name = 'auto_generate_ticket_number' 
+          AND event_object_table = 'maintenance_ticket'
+        `);
+        
+        if (triggerCheck.rows.length > 0) {
+          console.log('✅ Ticket number trigger already exists (from schema.sql)');
+        } else {
+          console.log('📝 Creating ticket number generation function...');
+          
+          // Create the function to generate ticket numbers
+          await pool.query(`
+            CREATE OR REPLACE FUNCTION generate_ticket_number()
+            RETURNS TRIGGER AS $$
+            DECLARE
+                date_str TEXT;
+                daily_count INTEGER;
+                ticket_num TEXT;
+            BEGIN
+                -- Get current date in YYYYMMDD format
+                date_str := TO_CHAR(CURRENT_DATE, 'YYYYMMDD');
+                
+                -- Get the count of tickets created today + 1
+                SELECT COALESCE(MAX(
+                    CASE 
+                        WHEN ticket_number LIKE 'TKT-' || date_str || '-%' 
+                        THEN CAST(SPLIT_PART(ticket_number, '-', 3) AS INTEGER)
+                        ELSE 0
+                    END
+                ), 0) + 1
+                INTO daily_count
+                FROM maintenance_ticket
+                WHERE DATE(created_at) = CURRENT_DATE;
+                
+                -- Generate ticket number
+                ticket_num := 'TKT-' || date_str || '-' || LPAD(daily_count::TEXT, 3, '0');
+                
+                -- Ensure uniqueness (in case of race condition)
+                WHILE EXISTS (SELECT 1 FROM maintenance_ticket WHERE ticket_number = ticket_num) LOOP
+                    daily_count := daily_count + 1;
+                    ticket_num := 'TKT-' || date_str || '-' || LPAD(daily_count::TEXT, 3, '0');
+                END LOOP;
+                
+                -- Set the ticket number
+                NEW.ticket_number := ticket_num;
+                
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+          `);
+          
+          console.log('📝 Creating ticket number trigger...');
+          
+          // Create the trigger
+          await pool.query(`
+            CREATE TRIGGER auto_generate_ticket_number
+                BEFORE INSERT ON maintenance_ticket
+                FOR EACH ROW
+                WHEN (NEW.ticket_number IS NULL OR NEW.ticket_number = '')
+                EXECUTE FUNCTION generate_ticket_number();
+          `);
+        }
+        
+        console.log('📝 Updating existing records with proper ticket numbers...');
+        
+        // Update existing records that might have empty ticket numbers
+        await pool.query(`
+          UPDATE maintenance_ticket 
+          SET ticket_number = 'TKT-' || TO_CHAR(created_at, 'YYYYMMDD') || '-' || LPAD(id::TEXT, 3, '0')
+          WHERE ticket_number IS NULL OR ticket_number = ''
+        `);
+        
+        console.log('📝 Ensuring sequence synchronization...');
+        
+        // Reset the sequence to be in sync with the current max ID
+        await pool.query(`
+          SELECT setval(
+            'maintenance_ticket_id_seq', 
+            COALESCE((SELECT MAX(id) FROM maintenance_ticket), 0) + 1, 
+            false
+          )
+        `);
+        
+        console.log('✅ Ticket number trigger system ready');
+      }
+    },
+    {
+      name: '003_fix_sequence_sync',
+      description: 'Fix maintenance_ticket_id_seq synchronization with existing data',
+      up: async () => {
+        console.log('📝 Synchronizing maintenance_ticket_id_seq with existing data...');
+        
+        // Reset the sequence to be in sync with the current max ID
+        const result = await pool.query(`
+          SELECT setval(
+            'maintenance_ticket_id_seq', 
+            COALESCE((SELECT MAX(id) FROM maintenance_ticket), 0) + 1, 
+            false
+          )
+        `);
+        
+        const newSeqValue = result.rows[0].setval;
+        console.log(`✅ Sequence reset to: ${newSeqValue}`);
+      }
     }
   ];
 

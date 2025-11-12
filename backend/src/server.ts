@@ -19,11 +19,12 @@ import { securityMiddleware, cleanupExpiredSessions } from './middleware/securit
 import authRoutes from './routes/auth';
 import dashboardRoutes from './routes/dashboard';
 import vendorRoutes from './routes/vendors';
-import analyticsRoutes from './routes/analytics';
 import usersRoutes from './routes/users';
 import userDetailsRoutes from './routes/userDetails';
 import profileRoutes from './routes/profile';
 import settingsRoutes from './routes/settings';
+import adminAnalyticsRoutes from './routes/adminAnalytics';
+import vendorAnalyticsRoutes from './routes/vendorAnalytics';
 import equipmentRoutes from './routes/equipment';
 import clientRoutes from './routes/clients';
 import maintenanceTicketRoutes from './routes/maintenanceTickets';
@@ -192,14 +193,15 @@ app.use('/api/dashboard', securityMiddleware, dashboardRoutes);
 app.use('/api/vendors', securityMiddleware, vendorRoutes);
 app.use('/api/users', securityMiddleware, usersRoutes);
 app.use('/api/user-details', securityMiddleware, userDetailsRoutes);
-app.use('/api/analytics', securityMiddleware, analyticsRoutes);
 app.use('/api/profile', securityMiddleware, profileRoutes);
 app.use('/api/settings', securityMiddleware, settingsRoutes);
 app.use('/api/equipment', securityMiddleware, equipmentRoutes);
+app.use('/api/admin/analytics', securityMiddleware, adminAnalyticsRoutes);
+app.use('/api/vendor/analytics', securityMiddleware, vendorAnalyticsRoutes);
 app.use('/api/vendor/clients', securityMiddleware, clientRoutes);
 app.use('/api/vendor/tickets', securityMiddleware, maintenanceTicketRoutes);
 app.use('/api/reports', securityMiddleware, reportsRoutes);
-app.use('/api/client', securityMiddleware, clientViewsRoutes);
+app.use('/api/client-views', securityMiddleware, clientViewsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

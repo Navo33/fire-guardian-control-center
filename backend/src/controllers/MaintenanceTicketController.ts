@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import MaintenanceTicketRepository, { 
+  MaintenanceTicketRepository as MTRepository,
   CreateTicketData, 
   UpdateTicketData, 
   ResolveTicketData, 
@@ -26,6 +27,7 @@ export class MaintenanceTicketController extends BaseController {
     this.resolveTicket = this.resolveTicket.bind(this);
     this.closeTicket = this.closeTicket.bind(this);
     this.getRelatedTickets = this.getRelatedTickets.bind(this);
+    this.getEquipmentForClient = this.getEquipmentForClient.bind(this);
   }
 
   /**
@@ -90,18 +92,21 @@ export class MaintenanceTicketController extends BaseController {
         }
       });
 
-      const [tickets, totalCount] = await Promise.all([
-        MaintenanceTicketRepository.getTicketList(vendorId, filters),
-        MaintenanceTicketRepository.getTicketCount(vendorId, filters)
-      ]);
-
+      const ticketData = await MaintenanceTicketRepository.getTicketList(vendorId, filters);
+      
       const response = {
-        tickets,
+        // Summary statistics
+        total_tickets: ticketData.total_tickets,
+        open_tickets: ticketData.open_tickets,
+        high_priority: ticketData.high_priority,
+        resolved_tickets: ticketData.resolved_tickets,
+        // Tickets array
+        tickets: ticketData.tickets,
         pagination: {
-          total: totalCount,
+          total: ticketData.tickets.length,
           limit: filters.limit || 25,
           offset: filters.offset || 0,
-          hasMore: (filters.offset || 0) + (filters.limit || 25) < totalCount
+          hasMore: ticketData.tickets.length >= (filters.limit || 25)
         }
       };
       
@@ -213,6 +218,9 @@ export class MaintenanceTicketController extends BaseController {
         return;
       }
 
+      // Get current user ID for auto-assignment
+      const currentUserId = (req as AuthenticatedRequest).user?.userId;
+      
       const ticketData: CreateTicketData = {
         equipment_instance_id: req.body.equipment_instance_id ? parseInt(req.body.equipment_instance_id) : undefined,
         client_id: req.body.client_id ? parseInt(req.body.client_id) : undefined,
@@ -220,7 +228,8 @@ export class MaintenanceTicketController extends BaseController {
         issue_description,
         priority,
         scheduled_date: req.body.scheduled_date || undefined,
-        assigned_technician: req.body.assigned_technician ? parseInt(req.body.assigned_technician) : undefined
+        // Auto-assign to current vendor user, or use provided technician ID
+        assigned_technician: req.body.assigned_technician ? parseInt(req.body.assigned_technician) : currentUserId
       };
 
       const result = await MaintenanceTicketRepository.createTicket(vendorId, ticketData);
@@ -249,14 +258,28 @@ export class MaintenanceTicketController extends BaseController {
         return;
       }
       
-      const ticketId = parseInt(req.params.id);
+      const idParam = req.params.id;
       
-      if (isNaN(ticketId)) {
-        ApiResponseUtil.badRequest(res, 'Invalid ticket ID');
-        return;
+      // Check if it's a numeric ID or ticket number
+      const isNumericId = /^\d+$/.test(idParam);
+      let ticket;
+      
+      if (isNumericId) {
+        // It's a numeric ID, use the old method for backward compatibility
+        const ticketId = parseInt(idParam);
+        const basicTicket = await MaintenanceTicketRepository.getTicketById(ticketId, vendorId);
+        
+        if (!basicTicket) {
+          ApiResponseUtil.notFound(res, 'Ticket not found');
+          return;
+        }
+        
+        // Get detailed information using ticket number
+        ticket = await MTRepository.getTicketDetailsByNumber(basicTicket.ticket_number, vendorId);
+      } else {
+        // It's a ticket number, use directly
+        ticket = await MTRepository.getTicketDetailsByNumber(idParam, vendorId);
       }
-
-      const ticket = await MaintenanceTicketRepository.getTicketDetails(ticketId, vendorId);
       
       if (!ticket) {
         ApiResponseUtil.notFound(res, 'Ticket not found');
@@ -373,11 +396,26 @@ export class MaintenanceTicketController extends BaseController {
         return;
       }
       
-      const ticketId = parseInt(req.params.id);
+      const idParam = req.params.id;
+      let ticketNumber: string;
       
-      if (isNaN(ticketId)) {
-        ApiResponseUtil.badRequest(res, 'Invalid ticket ID');
-        return;
+      // Check if it's a numeric ID or ticket number
+      const isNumericId = /^\d+$/.test(idParam);
+      
+      if (isNumericId) {
+        // Convert numeric ID to ticket number by fetching the ticket first
+        const ticketId = parseInt(idParam);
+        const basicTicket = await MaintenanceTicketRepository.getTicketById(ticketId, vendorId);
+        
+        if (!basicTicket) {
+          ApiResponseUtil.notFound(res, 'Ticket not found');
+          return;
+        }
+        
+        ticketNumber = basicTicket.ticket_number;
+      } else {
+        // Use as ticket number directly
+        ticketNumber = idParam;
       }
 
       const { resolution_description } = req.body;
@@ -390,10 +428,9 @@ export class MaintenanceTicketController extends BaseController {
       const resolveData: ResolveTicketData = {
         resolution_description,
         actual_hours: req.body.actual_hours ? parseFloat(req.body.actual_hours) : undefined,
-        cost: req.body.cost ? parseFloat(req.body.cost) : undefined
       };
 
-      const result = await MaintenanceTicketRepository.resolveTicket(ticketId, vendorId, resolveData);
+      const result = await MaintenanceTicketRepository.resolveTicket(ticketNumber, vendorId, resolveData);
       
       ApiResponseUtil.success(res, result, 'Ticket resolved successfully');
     } catch (error) {
@@ -435,6 +472,38 @@ export class MaintenanceTicketController extends BaseController {
         ApiResponseUtil.badRequest(res, error.message);
       } else {
         ApiResponseUtil.internalError(res, 'Failed to close ticket');
+      }
+    }
+  }
+
+  /**
+   * Get equipment instances for a specific client (for maintenance ticket creation)
+   * GET /api/vendor/tickets/equipment/:clientId
+   */
+  async getEquipmentForClient(req: Request, res: Response): Promise<void> {
+    try {
+      const vendorId = await this.getVendorId(req as AuthenticatedRequest);
+      
+      if (!vendorId) {
+        ApiResponseUtil.unauthorized(res, 'Vendor access required');
+        return;
+      }
+
+      const clientId = parseInt(req.params.clientId);
+      if (isNaN(clientId)) {
+        ApiResponseUtil.badRequest(res, 'Valid client ID is required');
+        return;
+      }
+
+      const equipment = await MTRepository.getEquipmentForClient(clientId, vendorId);
+      
+      ApiResponseUtil.success(res, equipment);
+    } catch (error) {
+      console.error('Error fetching equipment for client:', error);
+      if (error instanceof Error) {
+        ApiResponseUtil.badRequest(res, error.message);
+      } else {
+        ApiResponseUtil.internalError(res, 'Failed to fetch equipment');
       }
     }
   }

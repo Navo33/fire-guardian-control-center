@@ -77,10 +77,37 @@ export const API_ENDPOINTS = {
     BULK_UPDATE: `${API_BASE_URL}/settings/bulk`,
   },
   
-  // Analytics
-  ANALYTICS: {
-    SYSTEM: `${API_BASE_URL}/analytics/system`,
-    METRICS: `${API_BASE_URL}/analytics/metrics`,
+  // Admin Analytics
+  ADMIN_ANALYTICS: {
+    OVERVIEW: `${API_BASE_URL}/admin/analytics/overview`,
+    COMPLIANCE: {
+      SUMMARY: `${API_BASE_URL}/admin/analytics/compliance/summary`,
+      TREND: `${API_BASE_URL}/admin/analytics/compliance/trend`,
+      BY_VENDOR: `${API_BASE_URL}/admin/analytics/compliance/by-vendor`,
+    },
+    TICKETS: {
+      OVERVIEW: `${API_BASE_URL}/admin/analytics/tickets/overview`,
+      TRENDS: `${API_BASE_URL}/admin/analytics/tickets/trends`,
+      BY_TYPE: `${API_BASE_URL}/admin/analytics/tickets/by-type`,
+      RECENT_HIGH_PRIORITY: `${API_BASE_URL}/admin/analytics/tickets/recent-high-priority`,
+    },
+    VENDORS: {
+      RANKINGS: `${API_BASE_URL}/admin/analytics/vendors/rankings`,
+    },
+    EQUIPMENT: {
+      CATEGORIES: `${API_BASE_URL}/admin/analytics/equipment/categories`,
+    },
+    AUDIT: {
+      TRENDS: `${API_BASE_URL}/admin/analytics/audit/trends`,
+      RECENT: `${API_BASE_URL}/admin/analytics/audit/recent`,
+    },
+    SECURITY: {
+      SUMMARY: `${API_BASE_URL}/admin/analytics/security/summary`,
+    },
+    USERS: {
+      TRENDS: `${API_BASE_URL}/admin/analytics/users/trends`,
+      PASSWORD_RESETS: `${API_BASE_URL}/admin/analytics/users/password-resets`,
+    },
   },
   
   // Equipment
@@ -115,6 +142,7 @@ export const API_ENDPOINTS = {
 
   // Maintenance Tickets (Vendor-specific)
   MAINTENANCE_TICKETS: {
+    BASE: `${API_BASE_URL}/vendor/tickets`,
     KPIS: `${API_BASE_URL}/vendor/tickets/kpis`,
     LIST: `${API_BASE_URL}/vendor/tickets`,
     CREATE: `${API_BASE_URL}/vendor/tickets`,
@@ -125,6 +153,7 @@ export const API_ENDPOINTS = {
     RELATED: (id: string | number) => `${API_BASE_URL}/vendor/tickets/${id}/related`,
     CLIENTS: `${API_BASE_URL}/vendor/tickets/clients`,
     EQUIPMENT: `${API_BASE_URL}/vendor/tickets/equipment`,
+    EQUIPMENT_FOR_CLIENT: (clientId: string | number) => `${API_BASE_URL}/vendor/tickets/equipment/${clientId}`,
     TECHNICIANS: `${API_BASE_URL}/vendor/tickets/technicians`,
   },
 
@@ -159,19 +188,27 @@ export const API_ENDPOINTS = {
   // Client Views (for client users)
   CLIENT: {
     DASHBOARD: {
-      KPIS: `${API_BASE_URL}/client/dashboard/kpis`,
-      ACTIVITY: `${API_BASE_URL}/client/dashboard/activity`,
+      KPIS: `${API_BASE_URL}/client-views/dashboard/kpis`,
+      ACTIVITY: `${API_BASE_URL}/client-views/dashboard/activity`,
     },
-    EQUIPMENT: `${API_BASE_URL}/client/equipment`,
-    TICKETS: `${API_BASE_URL}/client/tickets`,
+    EQUIPMENT: {
+      LIST: `${API_BASE_URL}/client-views/equipment`,
+      OVERVIEW: `${API_BASE_URL}/client-views/equipment/overview`,
+      BY_ID: (id: string | number) => `${API_BASE_URL}/client-views/equipment/${id}`,
+      DETAIL: `${API_BASE_URL}/client-views/equipment`,
+      STATS: `${API_BASE_URL}/client-views/equipment/stats`,
+      TYPES: `${API_BASE_URL}/client-views/equipment/types`,
+    },
+    SERVICE_REQUESTS: `${API_BASE_URL}/client-views/service-requests`,
+    SERVICE_REQUEST_BY_ID: (id: string | number) => `${API_BASE_URL}/client-views/service-requests/${id}`,
     REPORTS: {
-      KPIS: `${API_BASE_URL}/client/reports/kpis`,
-      COMPLIANCE_CHART: `${API_BASE_URL}/client/reports/compliance-chart`,
-      LIST: `${API_BASE_URL}/client/reports`,
-      BY_ID: (id: string) => `${API_BASE_URL}/client/reports/${id}`,
-      RELATED: (id: string) => `${API_BASE_URL}/client/reports/${id}/related`,
-      EXPORT: (id: string) => `${API_BASE_URL}/client/reports/${id}/export`,
-      EXPORT_ALL: `${API_BASE_URL}/client/reports/export-all`,
+      KPIS: `${API_BASE_URL}/client-views/reports/kpis`,
+      COMPLIANCE_CHART: `${API_BASE_URL}/client-views/reports/compliance-chart`,
+      LIST: `${API_BASE_URL}/client-views/reports`,
+      BY_ID: (id: string) => `${API_BASE_URL}/client-views/reports/${id}`,
+      RELATED: (id: string) => `${API_BASE_URL}/client-views/reports/${id}/related`,
+      EXPORT: (id: string) => `${API_BASE_URL}/client-views/reports/${id}/export`,
+      EXPORT_ALL: `${API_BASE_URL}/client-views/reports/export-all`,
     },
   },
 };
