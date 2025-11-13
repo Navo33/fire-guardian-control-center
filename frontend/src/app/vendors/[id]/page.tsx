@@ -71,6 +71,7 @@ interface VendorDetails {
   // Counts and metrics
   equipment_count: number;
   assignments_count: number;
+  clients_count?: number;
   
   // Computed fields for display
   name?: string;
@@ -115,7 +116,6 @@ function VendorDetailsContent() {
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: '',
-    email: '',
     company_name: '',
     business_type: '',
     license_number: '',
@@ -174,7 +174,6 @@ function VendorDetailsContent() {
           setEditForm({
             first_name: vendorData.first_name || '',
             last_name: vendorData.last_name || '',
-            email: vendorData.email || '',
             company_name: vendorData.company?.company_name || '',
             business_type: vendorData.company?.business_type || '',
             license_number: vendorData.company?.license_number || '',
@@ -301,7 +300,6 @@ function VendorDetailsContent() {
       setEditForm({
         first_name: vendor.first_name || '',
         last_name: vendor.last_name || '',
-        email: vendor.email || '',
         company_name: vendor.company?.company_name || '',
         business_type: vendor.company?.business_type || '',
         license_number: vendor.company?.license_number || '',
@@ -602,12 +600,9 @@ function VendorDetailsContent() {
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                            <input
-                              type="email"
-                              value={editForm.email}
-                              onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                            />
+                            <p className="text-sm text-gray-900 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                              {vendor.email} <span className="text-xs text-gray-500">(Cannot be modified)</span>
+                            </p>
                           </div>
                         </div>
                         

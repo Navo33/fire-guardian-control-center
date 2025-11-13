@@ -258,7 +258,8 @@ export class UserRepository {
   static async getRecentVendors(limit: number = 5): Promise<any[]> {
     const query = `
       SELECT 
-        u.id, u.first_name, u.last_name, u.display_name, u.email, 
+        v.id as vendor_id,  -- This is the vendors.id that frontend needs
+        u.id as user_id, u.first_name, u.last_name, u.display_name, u.email, 
         u.user_type, u.is_locked, u.last_login, u.created_at,
         
         -- Company details from vendors table
@@ -269,8 +270,8 @@ export class UserRepository {
         -- Equipment count
         (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = v.id AND deleted_at IS NULL) as equipment_count,
         
-        -- Client assignments count  
-        (SELECT COUNT(DISTINCT client_id) FROM equipment_assignment WHERE vendor_id = v.id) as client_count,
+        -- Client count (clients created by this vendor)
+        (SELECT COUNT(*) FROM clients WHERE created_by_vendor_id = v.id) as client_count,
         
         -- Specializations (comma-separated)
         (SELECT STRING_AGG(s.name, ', ') 
@@ -294,6 +295,7 @@ export class UserRepository {
       // Map to same structure as VendorRepository.getVendors
       return result.rows.map(row => ({
         ...row,
+        id: row.vendor_id,  // Use vendor_id as the primary id for frontend
         equipment_count: parseInt(row.equipment_count) || 0,
         client_count: parseInt(row.client_count) || 0,
         // Add computed fields that frontend expects

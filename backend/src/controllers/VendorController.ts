@@ -135,7 +135,8 @@ export class VendorController extends BaseController {
   createVendor = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     DebugLogger.log('VendorController.createVendor called', { 
       userId: req.user?.userId,
-      email: req.body.email 
+      email: req.body.email,
+      requestBody: req.body
     });
 
     // Validate request
@@ -146,6 +147,23 @@ export class VendorController extends BaseController {
 
     try {
       const vendorData: CreateVendorRequest = req.body;
+      
+      // Log the received vendor data for debugging
+      DebugLogger.log('Received vendor creation data', {
+        firstName: vendorData.firstName,
+        lastName: vendorData.lastName,
+        email: vendorData.email,
+        companyName: vendorData.companyName,
+        businessType: vendorData.businessType,
+        contactPersonName: vendorData.contactPersonName,
+        primaryEmail: vendorData.primaryEmail,
+        primaryPhone: vendorData.primaryPhone,
+        streetAddress: vendorData.streetAddress,
+        city: vendorData.city,
+        state: vendorData.state,
+        zipCode: vendorData.zipCode,
+        country: vendorData.country
+      });
       const clientIP = this.getClientIP(req);
 
       DebugLogger.log('Creating new vendor with detailed information', { 
@@ -239,7 +257,25 @@ export class VendorController extends BaseController {
         return ApiResponseUtil.error(res, 'Invalid vendor ID', 400, 'INVALID_ID');
       }
 
-      const { first_name, last_name, email } = req.body;
+      // Extract all vendor update fields from request body
+      const {
+        first_name,
+        last_name,
+        company_name,
+        business_type,
+        license_number,
+        contact_person_name,
+        contact_title,
+        primary_email,
+        primary_phone,
+        secondary_phone,
+        street_address,
+        city,
+        state,
+        zip_code,
+        country
+      } = req.body;
+      
       const clientIP = this.getClientIP(req);
 
       // Check if vendor exists
@@ -249,12 +285,26 @@ export class VendorController extends BaseController {
         return ApiResponseUtil.notFound(res, 'Vendor not found');
       }
 
-      // Update vendor
-      const updatedVendor = await VendorRepository.updateVendor(vendorId, {
+      // Update vendor (email is intentionally excluded for security)
+      const updateData = {
         first_name,
         last_name,
-        email
-      });
+        company_name,
+        business_type,
+        license_number,
+        contact_person_name,
+        contact_title,
+        primary_email,
+        primary_phone,
+        secondary_phone,
+        street_address,
+        city,
+        state,
+        zip_code,
+        country
+      };
+
+      const updatedVendor = await VendorRepository.updateVendor(vendorId, updateData);
 
       DebugLogger.log('Vendor updated successfully', { vendorId });
 
@@ -266,14 +316,14 @@ export class VendorController extends BaseController {
         { 
           action: 'vendor_updated', 
           updated_by: req.user!.userId,
-          changes: { first_name, last_name, email }
+          changes: updateData
         },
         { ip_address: clientIP }
       );
 
       this.logAction('VENDOR_UPDATED', req.user!.userId, { 
         vendorId,
-        changes: { first_name, last_name, email },
+        changes: updateData,
         clientIP 
       });
 
@@ -513,8 +563,8 @@ export const createVendorValidation = [
     .withMessage('Please provide a valid primary email address'),
   body('primaryPhone')
     .notEmpty()
-    .matches(/^\+94\s?\d{2}\s?\d{3}\s?\d{4}$/)
-    .withMessage('Please provide a valid Sri Lankan phone number (format: +94 XX XXX XXXX)'),
+    .matches(/^(\+94|0)[1-9]\d{8}$/)
+    .withMessage('Please provide a valid Sri Lankan phone number'),
   
   // Address Information
   body('streetAddress')
@@ -531,8 +581,8 @@ export const createVendorValidation = [
     .withMessage('Please select a valid Sri Lankan province'),
   body('zipCode')
     .notEmpty()
-    .matches(/^\d{5}$/)
-    .withMessage('Please provide a valid 5-digit ZIP code'),
+    .matches(/^[A-Za-z0-9\s\-]{3,10}$/)
+    .withMessage('Valid ZIP code is required'),
   body('country')
     .optional()
     .equals('Sri Lanka')

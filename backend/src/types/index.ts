@@ -280,4 +280,5 @@ export interface DetailedVendor extends User {
   locations_count?: number;
   equipment_count?: number;
   assignments_count?: number;
+  clients_count?: number;
 }

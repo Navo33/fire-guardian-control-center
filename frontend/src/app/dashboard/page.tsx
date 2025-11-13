@@ -484,14 +484,15 @@ function AdminDashboard({ user }: { user: User }) {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Actions
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white">
                 {recentVendors.map((vendor, index) => (
-                  <tr key={vendor.id} className={`hover:bg-gray-50 transition-colors ${index !== recentVendors.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                  <tr 
+                    key={vendor.id} 
+                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${index !== recentVendors.length - 1 ? 'border-b border-gray-100' : ''}`}
+                    onClick={() => router.push(`/vendors/${vendor.id}`)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
@@ -534,20 +535,6 @@ function AdminDashboard({ user }: { user: User }) {
                         {vendor.status}
                       </span>
                       <div className="text-xs text-gray-500 mt-1">{vendor.lastActivity}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                      <Link 
-                        href={`/vendors/${vendor.id}`}
-                        className="text-red-600 hover:text-red-800 transition-colors" 
-                      >
-                        View
-                      </Link>
-                      <Link 
-                        href={`/vendors/${vendor.id}/edit`}
-                        className="text-gray-600 hover:text-gray-800 transition-colors"
-                      >
-                        Edit
-                      </Link>
                     </td>
                   </tr>
                 ))}

@@ -412,7 +412,7 @@ export default function VendorManagementPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
                       <div className="flex space-x-3">
                         <Link
-                          href={`/vendors/${vendor.id}/edit`}
+                          href={`/vendors/${vendor.id}`}
                           className="text-gray-600 hover:text-gray-800 transition-colors"
                         >
                           Edit
