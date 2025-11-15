@@ -76,6 +76,13 @@ router.get('/clients', equipmentController.getClientsForAssignment);
 router.post('/assign', equipmentController.bulkAssignEquipment);
 
 /**
+ * @route DELETE /api/equipment/:id/remove-assignment
+ * @desc Remove equipment assignment from client
+ * @access Vendor
+ */
+router.delete('/:id/remove-assignment', equipmentController.removeEquipmentAssignment);
+
+/**
  * @route POST /api/equipment
  * @desc Add new equipment instance
  * @access Vendor

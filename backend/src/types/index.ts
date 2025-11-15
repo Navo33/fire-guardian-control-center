@@ -254,10 +254,7 @@ export interface CreateVendorRequest {
   businessType: string;
   licenseNumber?: string;
   
-  // Contact Information (for vendor_contact table)
-  contactPersonName: string;
-  contactTitle?: string;
-  primaryEmail: string;
+  // Contact Information (from vendors table)
   primaryPhone: string;
   
   // Address Information (for vendor_address table)

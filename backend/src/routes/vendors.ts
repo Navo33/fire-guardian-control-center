@@ -59,38 +59,10 @@ router.post('/',
       .withMessage('Tax ID must be less than 100 characters'),
     
     // Contact Information
-    body('contactPersonName')
-      .trim()
-      .isLength({ min: 2, max: 100 })
-      .withMessage('Contact person name is required and must be between 2 and 100 characters'),
-    
-    body('contactTitle')
-      .optional()
-      .trim()
-      .isLength({ max: 100 })
-      .withMessage('Contact title must be less than 100 characters'),
-      
-    body('primaryEmail')
-      .isEmail()
-      .normalizeEmail()
-      .withMessage('Valid primary email is required'),
-      
-    body('secondaryEmail')
-      .optional()
-      .isEmail()
-      .normalizeEmail()
-      .withMessage('Secondary email must be valid if provided'),
-      
     body('primaryPhone')
       .trim()
       .isLength({ min: 10, max: 20 })
       .withMessage('Primary phone number is required'),
-      
-    body('secondaryPhone')
-      .optional()
-      .trim()
-      .isLength({ max: 20 })
-      .withMessage('Secondary phone must be less than 20 characters'),
     
     // Address Information
     body('streetAddress')
@@ -166,14 +138,6 @@ router.post('/',
 );
 
 /**
- * @route   GET /api/vendors/:id
- * @desc    Get vendor details by ID
- * @access  Private (super_admin, vendor owns the record)
- * @params  id
- */
-router.get('/:id', vendorController.getVendorById);
-
-/**
  * @route   PUT /api/vendors/:id
  * @desc    Update vendor information
  * @access  Private (super_admin, vendor owns the record)
@@ -204,6 +168,14 @@ router.put('/:id',
 );
 
 /**
+ * @route   GET /api/vendors/:id/deletion-check
+ * @desc    Check if vendor can be safely deleted
+ * @access  Private (super_admin only)
+ * @params  id
+ */
+router.get('/:id/deletion-check', vendorController.checkVendorDeletion);
+
+/**
  * @route   DELETE /api/vendors/:id
  * @desc    Soft delete vendor
  * @access  Private (super_admin only)
@@ -226,5 +198,13 @@ router.get('/:id/stats', vendorController.getVendorStats);
  * @params  id
  */
 router.get('/:id/equipment', vendorController.getVendorEquipment);
+
+/**
+ * @route   GET /api/vendors/:id
+ * @desc    Get vendor details by ID
+ * @access  Private (super_admin, vendor owns the record)
+ * @params  id
+ */
+router.get('/:id', vendorController.getVendorById);
 
 export default router;

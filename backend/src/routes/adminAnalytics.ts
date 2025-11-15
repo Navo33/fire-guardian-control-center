@@ -122,4 +122,20 @@ router.get('/users/trends', AdminAnalyticsController.getUserTrends);
  */
 router.get('/users/password-resets', AdminAnalyticsController.getPasswordResets);
 
+/**
+ * @route   GET /api/admin/analytics/report/comprehensive
+ * @desc    Get comprehensive report data for PDF export
+ * @access  Admin only
+ * @query   startDate, endDate, vendorId (optional)
+ */
+router.get('/report/comprehensive', AdminAnalyticsController.getComprehensiveReportData);
+
+/**
+ * @route   GET /api/admin/analytics/security/analytics
+ * @desc    Get security analytics for PDF reports
+ * @access  Admin only
+ * @query   startDate, endDate (optional)
+ */
+router.get('/security/analytics', AdminAnalyticsController.getSecurityAnalytics);
+
 export default router;

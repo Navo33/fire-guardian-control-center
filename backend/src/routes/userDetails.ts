@@ -13,17 +13,29 @@ const router = express.Router();
 router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
-
-    const userDetails = await UserRepository.getUserDetailById(userId);
     
-    if (!userDetails) {
-      return res.status(404).json({
+    // Validate userId
+    if (isNaN(userId) || userId <= 0) {
+      return res.status(400).json({
         success: false,
-        message: 'User not found',
-        error: 'User does not exist'
+        message: 'Invalid user ID',
+        error: 'User ID must be a valid positive number'
       });
     }
 
+    console.log(`Fetching details for user ID: ${userId}`);
+    const userDetails = await UserRepository.getUserDetailById(userId);
+    
+    if (!userDetails) {
+      console.log(`User not found with ID: ${userId}`);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'User does not exist or has been deleted'
+      });
+    }
+
+    console.log(`Successfully retrieved details for user: ${userDetails.first_name} ${userDetails.last_name} (${userDetails.user_type})`);
     res.json({
       success: true,
       message: 'User details retrieved successfully',
@@ -47,7 +59,7 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
 router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
-    const { first_name, last_name, email } = req.body;
+    const { first_name, last_name } = req.body;
 
     // Check if user exists
     const user = await UserRepository.findById(userId);
@@ -59,11 +71,10 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
       });
     }
 
-    // Update user basic information
+    // Update user basic information (email cannot be modified)
     const updatedUser = await UserRepository.updateUserInfo(userId, {
       first_name,
-      last_name,
-      email
+      last_name
     });
 
     res.json({
@@ -141,6 +152,108 @@ router.post('/:id/reset-password', authenticateToken, async (req: Request, res: 
     res.status(500).json({
       success: false,
       message: 'Failed to reset password',
+      error: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * @route GET /api/user-details/:id/deletion-check
+ * @desc Check if user can be deleted (Admin only)
+ * @access Private
+ */
+router.get('/:id/deletion-check', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    // Check if user is admin
+    if (req.user?.user_type !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin role required.',
+        error: 'Insufficient permissions'
+      });
+    }
+
+    const userId = parseInt(req.params.id);
+    
+    if (isNaN(userId) || userId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID',
+        error: 'User ID must be a valid positive number'
+      });
+    }
+
+    const deletionCheck = await UserRepository.checkUserDeletionConstraints(userId);
+
+    res.json({
+      success: true,
+      message: 'User deletion check completed',
+      data: deletionCheck
+    });
+  } catch (error) {
+    console.error('Error checking user deletion constraints:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check user deletion constraints',
+      error: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * @route DELETE /api/user-details/:id
+ * @desc Delete user (Admin only)
+ * @access Private
+ */
+router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    // Check if user is admin
+    if (req.user?.user_type !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin role required.',
+        error: 'Insufficient permissions'
+      });
+    }
+
+    const userId = parseInt(req.params.id);
+    
+    if (isNaN(userId) || userId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID',
+        error: 'User ID must be a valid positive number'
+      });
+    }
+
+    // Check deletion constraints first
+    const deletionCheck = await UserRepository.checkUserDeletionConstraints(userId);
+    
+    if (!deletionCheck.canDelete) {
+      return res.status(400).json({
+        success: false,
+        message: deletionCheck.message,
+        error: 'User cannot be deleted due to existing constraints',
+        data: deletionCheck
+      });
+    }
+
+    // Perform deletion
+    await UserRepository.deleteUser(userId);
+
+    res.json({
+      success: true,
+      message: `User deleted successfully: ${deletionCheck.message}`,
+      data: {
+        userId,
+        userType: deletionCheck.userType
+      }
+    });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete user',
       error: 'Internal server error'
     });
   }
