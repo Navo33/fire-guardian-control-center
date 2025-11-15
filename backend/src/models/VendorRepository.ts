@@ -20,12 +20,8 @@ export interface VendorUpdateData {
   business_type?: string;
   license_number?: string;
   
-  // Contact fields
-  contact_person_name?: string;
-  contact_title?: string;
-  primary_email?: string;
+  // Contact fields (only phone exists in vendors table)
   primary_phone?: string;
-  secondary_phone?: string;
   
   // Address fields
   street_address?: string;
@@ -494,11 +490,7 @@ export class VendorRepository {
         { field: 'company_name', data: updateData.company_name },
         { field: 'business_type', data: updateData.business_type },
         { field: 'license_number', data: updateData.license_number },
-        { field: 'contact_person_name', data: updateData.contact_person_name },
-        { field: 'contact_title', data: updateData.contact_title },
-        { field: 'primary_email', data: updateData.primary_email },
         { field: 'primary_phone', data: updateData.primary_phone },
-        { field: 'secondary_phone', data: updateData.secondary_phone },
         { field: 'street_address', data: updateData.street_address },
         { field: 'city', data: updateData.city },
         { field: 'state', data: updateData.state },
@@ -776,6 +768,78 @@ export class VendorRepository {
       }));
     } catch (error) {
       console.error('Error getting vendor equipment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if vendor can be safely deleted by checking for relationships
+   */
+  static async checkVendorDeletionConstraints(vendorId: number): Promise<{
+    canDelete: boolean;
+    clientsCount: number;
+    equipmentCount: number;
+    assignmentsCount: number;
+    activeTicketsCount: number;
+  }> {
+    try {
+      DebugLogger.log('Checking vendor deletion constraints', { vendorId });
+
+      // Check for clients created by this vendor (clients table doesn't have deleted_at)
+      const clientsResult = await pool.query(`
+        SELECT COUNT(*) as count 
+        FROM clients 
+        WHERE created_by_vendor_id = $1 AND status != 'inactive'
+      `, [vendorId]);
+
+      // Check for equipment instances owned by this vendor (equipment_instance has deleted_at)
+      const equipmentResult = await pool.query(`
+        SELECT COUNT(*) as count 
+        FROM equipment_instance 
+        WHERE vendor_id = $1 AND deleted_at IS NULL
+      `, [vendorId]);
+
+      // Check for active equipment assignments involving this vendor (equipment_assignment doesn't have deleted_at)
+      const assignmentsResult = await pool.query(`
+        SELECT COUNT(*) as count 
+        FROM equipment_assignment ea
+        WHERE ea.vendor_id = $1 
+        AND ea.status IN ('active', 'pending')
+      `, [vendorId]);
+
+      // Check for active maintenance tickets involving this vendor (maintenance_ticket doesn't have deleted_at)
+      const ticketsResult = await pool.query(`
+        SELECT COUNT(*) as count 
+        FROM maintenance_ticket mt
+        WHERE mt.vendor_id = $1 
+        AND mt.ticket_status IN ('open', 'in_progress', 'pending')
+      `, [vendorId]);
+
+      const clientsCount = parseInt(clientsResult.rows[0].count);
+      const equipmentCount = parseInt(equipmentResult.rows[0].count);
+      const assignmentsCount = parseInt(assignmentsResult.rows[0].count);
+      const activeTicketsCount = parseInt(ticketsResult.rows[0].count);
+
+      const canDelete = clientsCount === 0 && equipmentCount === 0 && assignmentsCount === 0 && activeTicketsCount === 0;
+
+      DebugLogger.log('Vendor deletion constraints check completed', {
+        vendorId,
+        canDelete,
+        clientsCount,
+        equipmentCount,
+        assignmentsCount,
+        activeTicketsCount
+      });
+
+      return {
+        canDelete,
+        clientsCount,
+        equipmentCount,
+        assignmentsCount,
+        activeTicketsCount
+      };
+    } catch (error) {
+      DebugLogger.error('Error checking vendor deletion constraints', error);
       throw error;
     }
   }

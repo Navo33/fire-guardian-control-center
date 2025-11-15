@@ -114,35 +114,39 @@ export class ClientAnalyticsRepository {
     DebugLogger.log('Fetching client overview', { clientId, startDate, endDate, equipmentType }, 'CLIENT_ANALYTICS');
 
     const query = `
-      WITH params AS (
+      WITH client_data AS (
           SELECT 
-              $1::int AS client_id,
-              $2::date AS start_date,
-              $3::date AS end_date,
-              $4::text AS equipment_type
+              c.id AS client_id,
+              u.display_name AS client_name
+          FROM public.clients c
+          JOIN public."user" u ON c.user_id = u.id
+          WHERE c.id = $1
+            AND c.status = 'active'
+            AND u.deleted_at IS NULL
       ),
       stats AS (
           SELECT
               COUNT(DISTINCT ei.id) AS total_assigned,
               COUNT(DISTINCT CASE WHEN ei.compliance_status = 'compliant' THEN ei.id END) AS compliant,
               COUNT(DISTINCT CASE WHEN mt.ticket_status = 'open' THEN mt.id END) AS open_requests,
-              COUNT(DISTINCT CASE WHEN ei.next_maintenance_date <= CURRENT_DATE + 30 THEN ei.id END) AS due_soon,
-              COUNT(DISTINCT CASE WHEN ei.expiry_date <= CURRENT_DATE + 30 THEN ei.id END) AS expiring_soon,
+              COUNT(DISTINCT CASE WHEN ei.next_maintenance_date <= CURRENT_DATE + INTERVAL '30 days' THEN ei.id END) AS due_soon,
+              COUNT(DISTINCT CASE WHEN ei.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN ei.id END) AS expiring_soon,
               COUNT(DISTINCT CASE WHEN n.is_read = false THEN n.id END) AS unread_notifications
-          FROM params p
-          LEFT JOIN public.equipment_instance ei ON ei.assigned_to = p.client_id
+          FROM client_data cd
+          LEFT JOIN public.equipment_instance ei ON ei.assigned_to = cd.client_id
             AND ei.status = 'assigned'
             AND ei.deleted_at IS NULL
+          LEFT JOIN public.equipment e ON e.id = ei.equipment_id
+            AND e.deleted_at IS NULL
+            AND ($4 IS NULL OR e.equipment_type = $4)
           LEFT JOIN public.maintenance_ticket mt ON mt.equipment_instance_id = ei.id 
-              AND mt.client_id = p.client_id
-          LEFT JOIN public.notification n ON n.user_id = (
-              SELECT user_id FROM public.clients WHERE id = p.client_id
-          ) AND n.is_read = false
-          WHERE (p.equipment_type IS NULL OR EXISTS (
-                SELECT 1 FROM public.equipment e 
-                WHERE e.id = ei.equipment_id 
-                  AND e.equipment_type = p.equipment_type
-            ))
+            AND mt.client_id = cd.client_id
+            AND mt.deleted_at IS NULL
+          LEFT JOIN public."user" u ON u.id = (
+              SELECT user_id FROM public.clients WHERE id = cd.client_id
+          )
+          LEFT JOIN public.notification n ON n.user_id = u.id
+            AND n.is_read = false
       )
       SELECT
           s.total_assigned::text,
@@ -686,5 +690,396 @@ export class ClientAnalyticsRepository {
       console.error('Error generating PDF report data:', error);
       throw error;
     }
+  }
+
+  /**
+   * NEW CORRECTED METHODS BASED ON SCHEMA ANALYSIS
+   */
+
+  /**
+   * Get client ticket statistics for a specific user ID
+   */
+  async getClientTicketStats(userId: number, startDate: string, endDate: string) {
+    const query = `
+      WITH client_data AS (
+          SELECT 
+              c.id AS client_id,
+              u.display_name AS client_name
+          FROM public.clients c
+          JOIN public."user" u ON c.user_id = u.id
+          WHERE u.id = $1  -- logged-in client user_id
+            AND c.status = 'active'
+            AND u.deleted_at IS NULL
+      ),
+      ticket_stats AS (
+          SELECT
+              COUNT(*)::text AS total_tickets,
+              COUNT(*) FILTER (WHERE mt.ticket_status = 'open')::text AS open_tickets,
+              COUNT(*) FILTER (WHERE mt.priority = 'high')::text AS high_priority_tickets,
+              COUNT(*) FILTER (WHERE mt.ticket_status = 'resolved')::text AS resolved_tickets
+          FROM public.maintenance_ticket mt
+          JOIN client_data cd ON mt.client_id = cd.client_id
+          WHERE mt.created_at::date BETWEEN $2 AND $3
+            AND mt.deleted_at IS NULL
+      )
+      SELECT
+          cd.client_name,
+          ts.total_tickets,
+          ts.open_tickets,
+          ts.high_priority_tickets,
+          ts.resolved_tickets
+      FROM client_data cd
+      CROSS JOIN ticket_stats ts;
+    `;
+
+    const result = await this.pool.query(query, [userId, startDate, endDate]);
+    return result.rows[0] || {};
+  }
+
+  /**
+   * Get client equipment summary for a specific user ID
+   */
+  async getClientEquipmentSummary(userId: number) {
+    const query = `
+      WITH client_data AS (
+          SELECT 
+              c.id AS client_id
+          FROM public.clients c
+          JOIN public."user" u ON c.user_id = u.id
+          WHERE u.id = $1
+            AND c.status = 'active'
+            AND u.deleted_at IS NULL
+      ),
+      instances AS (
+          SELECT 
+              ei.id,
+              ei.serial_number,
+              ei.location,
+              ei.compliance_status,
+              ei.next_maintenance_date,
+              ei.expiry_date
+          FROM public.equipment_instance ei
+          WHERE ei.assigned_to = (SELECT client_id FROM client_data)
+            AND ei.status = 'assigned'
+            AND ei.deleted_at IS NULL
+      )
+      SELECT
+          COUNT(*)::text AS total_equipment,
+          COUNT(*) FILTER (WHERE compliance_status = 'compliant')::text AS compliant,
+          COUNT(*) FILTER (WHERE compliance_status = 'expired')::text AS expired,
+          COUNT(*) FILTER (WHERE compliance_status = 'overdue')::text AS overdue,
+          COUNT(*) FILTER (WHERE next_maintenance_date <= CURRENT_DATE + INTERVAL '30 days')::text AS due_soon
+      FROM instances;
+    `;
+
+    const result = await this.pool.query(query, [userId]);
+    return result.rows[0] || {};
+  }
+
+  /**
+   * Get client upcoming events for a specific user ID
+   */
+  async getClientUpcomingEvents(userId: number) {
+    const query = `
+      WITH client_data AS (
+          SELECT 
+              c.id AS client_id
+          FROM public.clients c
+          JOIN public."user" u ON c.user_id = u.id
+          WHERE u.id = $1
+            AND c.status = 'active'
+            AND u.deleted_at IS NULL
+      ),
+      events AS (
+          SELECT
+              'maintenance' AS type,
+              e.equipment_name AS equipment,
+              ei.serial_number,
+              ei.next_maintenance_date AS event_date,
+              (ei.next_maintenance_date - CURRENT_DATE)::text AS days_until
+          FROM public.equipment_instance ei
+          JOIN public.equipment e ON ei.equipment_id = e.id
+          WHERE ei.assigned_to = (SELECT client_id FROM client_data)
+            AND ei.status = 'assigned'
+            AND ei.deleted_at IS NULL
+            AND ei.next_maintenance_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+          
+          UNION ALL
+          
+          SELECT
+              'expiry' AS type,
+              e.equipment_name AS equipment,
+              ei.serial_number,
+              ei.expiry_date AS event_date,
+              (ei.expiry_date - CURRENT_DATE)::text AS days_until
+          FROM public.equipment_instance ei
+          JOIN public.equipment e ON ei.equipment_id = e.id
+          WHERE ei.assigned_to = (SELECT client_id FROM client_data)
+            AND ei.status = 'assigned'
+            AND ei.deleted_at IS NULL
+            AND ei.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+          
+          UNION ALL
+          
+          SELECT
+              'warranty' AS type,
+              e.equipment_name AS equipment,
+              ei.serial_number,
+              ei.warranty_expiry AS event_date,
+              (ei.warranty_expiry - CURRENT_DATE)::text AS days_until
+          FROM public.equipment_instance ei
+          JOIN public.equipment e ON ei.equipment_id = e.id
+          WHERE ei.assigned_to = (SELECT client_id FROM client_data)
+            AND ei.status = 'assigned'
+            AND ei.deleted_at IS NULL
+            AND ei.warranty_expiry BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+      )
+      SELECT
+          COUNT(*) FILTER (WHERE days_until::int <= 7)::text AS critical_next_7d,
+          COALESCE(jsonb_agg(jsonb_build_object(
+              'type', type,
+              'equipment', equipment,
+              'serial_number', serial_number,
+              'event_date', TO_CHAR(event_date, 'Mon DD, YYYY'),
+              'days_until', days_until
+          ) ORDER BY days_until::int ASC) FILTER (WHERE event_date IS NOT NULL), '[]'::jsonb) AS upcoming_events
+      FROM events;
+    `;
+
+    const result = await this.pool.query(query, [userId]);
+    return result.rows[0] || {};
+  }
+
+  /**
+   * Get client compliance trends
+   */
+  async getClientComplianceTrends(clientId: number, startDate: string, endDate: string) {
+    const query = `
+      SELECT
+          DATE_TRUNC('month', ei.updated_at)::date AS month,
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE ei.compliance_status = 'compliant') AS compliant,
+          COALESCE(ROUND(
+              COUNT(*) FILTER (WHERE ei.compliance_status = 'compliant')::float / NULLIF(COUNT(*), 0) * 100, 1
+          ), 0) AS compliance_rate_pct
+      FROM public.equipment_instance ei
+      WHERE ei.assigned_to = $1
+        AND ei.status = 'assigned'
+        AND ei.deleted_at IS NULL
+        AND ei.updated_at::date BETWEEN $2 AND $3
+      GROUP BY month
+      ORDER BY month;
+    `;
+
+    const result = await this.pool.query(query, [clientId, startDate, endDate]);
+    return result.rows;
+  }
+
+  /**
+   * Get client maintenance ticket trends
+   */
+  async getClientMaintenanceTrends(clientId: number, startDate: string, endDate: string) {
+    const query = `
+      SELECT
+          DATE_TRUNC('month', mt.created_at)::date AS month,
+          COUNT(*) AS submitted,
+          COUNT(*) FILTER (WHERE mt.ticket_status = 'resolved') AS resolved,
+          COUNT(*) FILTER (WHERE mt.priority = 'high') AS high_priority,
+          ROUND(AVG(CASE WHEN mt.ticket_status = 'resolved'
+               THEN EXTRACT(EPOCH FROM (mt.resolved_at - mt.created_at))/86400 
+               ELSE NULL END), 1) AS avg_resolution_days
+      FROM public.maintenance_ticket mt
+      WHERE mt.client_id = $1
+        AND mt.deleted_at IS NULL
+        AND mt.created_at::date BETWEEN $2 AND $3
+      GROUP BY month
+      ORDER BY month;
+    `;
+
+    const result = await this.pool.query(query, [clientId, startDate, endDate]);
+    return result.rows;
+  }
+
+  /**
+   * Get equipment compliance distribution
+   */
+  async getClientEquipmentCompliance(clientId: number) {
+    const query = `
+      SELECT
+          ei.compliance_status AS status,
+          COUNT(*) AS count
+      FROM public.equipment_instance ei
+      WHERE ei.assigned_to = $1
+        AND ei.status = 'assigned'
+        AND ei.deleted_at IS NULL
+      GROUP BY ei.compliance_status
+      ORDER BY count DESC;
+    `;
+
+    const result = await this.pool.query(query, [clientId]);
+    return result.rows;
+  }
+
+  /**
+   * Get maintenance ticket types distribution
+   */
+  async getClientTicketTypes(clientId: number, startDate: string, endDate: string) {
+    const query = `
+      SELECT
+          mt.support_type AS type,
+          COUNT(*) AS count
+      FROM public.maintenance_ticket mt
+      WHERE mt.client_id = $1
+        AND mt.deleted_at IS NULL
+        AND mt.created_at::date BETWEEN $2 AND $3
+      GROUP BY mt.support_type
+      ORDER BY count DESC;
+    `;
+
+    const result = await this.pool.query(query, [clientId, startDate, endDate]);
+    return result.rows;
+  }
+
+  /**
+   * Get equipment type distribution
+   */
+  async getClientEquipmentTypes(clientId: number) {
+    const query = `
+      SELECT
+          e.equipment_type,
+          COUNT(ei.id) AS instance_count
+      FROM public.equipment_instance ei
+      JOIN public.equipment e ON ei.equipment_id = e.id
+      WHERE ei.assigned_to = $1
+        AND ei.status = 'assigned'
+        AND ei.deleted_at IS NULL
+      GROUP BY e.equipment_type
+      ORDER BY instance_count DESC;
+    `;
+
+    const result = await this.pool.query(query, [clientId]);
+    return result.rows;
+  }
+
+  /**
+   * Get equipment age distribution
+   */
+  async getClientEquipmentAges(clientId: number) {
+    const query = `
+      SELECT
+          DATE_TRUNC('year', ei.purchase_date)::date AS year,
+          COUNT(*) AS count
+      FROM public.equipment_instance ei
+      WHERE ei.assigned_to = $1
+        AND ei.status = 'assigned'
+        AND ei.deleted_at IS NULL
+        AND ei.purchase_date IS NOT NULL
+      GROUP BY year
+      ORDER BY year ASC;
+    `;
+
+    const result = await this.pool.query(query, [clientId]);
+    return result.rows;
+  }
+
+  /**
+   * Get non-compliant equipment details
+   */
+  async getClientNonCompliantEquipment(clientId: number) {
+    const query = `
+      SELECT
+          e.equipment_name,
+          ei.serial_number,
+          ei.compliance_status,
+          TO_CHAR(ei.next_maintenance_date, 'Mon DD, YYYY') AS next_maintenance,
+          (ei.next_maintenance_date - CURRENT_DATE)::text AS days_until_maintenance,
+          ei.location
+      FROM public.equipment_instance ei
+      JOIN public.equipment e ON ei.equipment_id = e.id
+      WHERE ei.assigned_to = $1
+        AND ei.status = 'assigned'
+        AND ei.deleted_at IS NULL
+        AND ei.compliance_status IN ('expired', 'overdue', 'due_soon')
+      ORDER BY 
+        CASE ei.compliance_status 
+          WHEN 'expired' THEN 1 
+          WHEN 'overdue' THEN 2 
+          WHEN 'due_soon' THEN 3 
+          ELSE 4 
+        END,
+        days_until_maintenance::int ASC NULLS LAST;
+    `;
+
+    const result = await this.pool.query(query, [clientId]);
+    return result.rows;
+  }
+
+  /**
+   * Get recent maintenance tickets
+   */
+  async getClientRecentTickets(clientId: number) {
+    const query = `
+      SELECT
+          mt.ticket_number,
+          COALESCE(e.equipment_name, 'System') AS equipment,
+          mt.issue_description,
+          mt.ticket_status AS status,
+          TO_CHAR(mt.scheduled_date, 'Mon DD, YYYY') AS scheduled_date,
+          TO_CHAR(mt.resolved_at, 'Mon DD, YYYY HH12:MI AM') AS resolved_date
+      FROM public.maintenance_ticket mt
+      LEFT JOIN public.equipment_instance ei ON mt.equipment_instance_id = ei.id
+      LEFT JOIN public.equipment e ON ei.equipment_id = e.id
+      WHERE mt.client_id = $1
+        AND mt.deleted_at IS NULL
+      ORDER BY mt.created_at DESC
+      LIMIT 10;
+    `;
+
+    const result = await this.pool.query(query, [clientId]);
+    return result.rows;
+  }
+
+  /**
+   * Get client user activity (sessions)
+   */
+  async getClientUserActivity(clientId: number, startDate: string, endDate: string) {
+    const query = `
+      SELECT
+          DATE_TRUNC('week', us.last_activity)::date AS week,
+          COUNT(*) AS sessions
+      FROM public.user_sessions us
+      JOIN public."user" u ON us.user_id = u.id
+      JOIN public.clients c ON u.id = c.user_id
+      WHERE c.id = $1
+        AND us.is_active = true
+        AND us.last_activity::date BETWEEN $2 AND $3
+      GROUP BY week
+      ORDER BY week;
+    `;
+
+    const result = await this.pool.query(query, [clientId, startDate, endDate]);
+    return result.rows;
+  }
+
+  /**
+   * Get client notifications
+   */
+  async getClientNotifications(clientId: number) {
+    const query = `
+      SELECT
+          n.title,
+          n.message,
+          n.priority,
+          TO_CHAR(n.created_at, 'Mon DD, YYYY HH12:MI AM') AS created_at
+      FROM public.notification n
+      JOIN public."user" u ON n.user_id = u.id
+      JOIN public.clients c ON u.id = c.user_id
+      WHERE c.id = $1
+      ORDER BY n.created_at DESC
+      LIMIT 10;
+    `;
+
+    const result = await this.pool.query(query, [clientId]);
+    return result.rows;
   }
 }

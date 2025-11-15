@@ -659,9 +659,11 @@ export class DashboardRepository {
         al.table_name,
         al.action_type,
         al.created_at,
-        al.metadata
+        al.metadata,
+        u.display_name as changed_by_name
       FROM audit_log al
-      WHERE al.changed_by = $1
+      LEFT JOIN "user" u ON al.changed_by = u.id
+      WHERE al.vendor_id = $1
       ORDER BY al.created_at DESC
       LIMIT $2 OFFSET $3
     `;
@@ -671,7 +673,7 @@ export class DashboardRepository {
   }
 
   static async getVendorActivityCount(vendorId: number): Promise<number> {
-    const result = await pool.query('SELECT COUNT(*) FROM audit_log WHERE changed_by = $1', [vendorId]);
+    const result = await pool.query('SELECT COUNT(*) FROM audit_log WHERE vendor_id = $1', [vendorId]);
     return parseInt(result.rows[0].count);
   }
 

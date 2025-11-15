@@ -1032,4 +1032,98 @@ export class EquipmentRepository {
       client.release();
     }
   }
+
+  /**
+   * Remove equipment assignment from client
+   */
+  static async removeEquipmentAssignment(equipmentInstanceId: number, vendorId: number) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Removing equipment assignment', { equipmentInstanceId, vendorId }, 'EQUIPMENT_REPO');
+
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // First, verify the equipment belongs to this vendor and is assigned
+      const checkQuery = `
+        SELECT ei.id, ei.assigned_to, ei.status, c.id as client_id
+        FROM equipment_instance ei
+        LEFT JOIN clients c ON ei.assigned_to = c.id
+        WHERE ei.id = $1 AND ei.vendor_id = $2 AND ei.deleted_at IS NULL
+      `;
+      
+      const checkResult = await client.query(checkQuery, [equipmentInstanceId, vendorId]);
+      
+      if (checkResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return { 
+          success: false, 
+          message: 'Equipment instance not found or does not belong to your vendor account' 
+        };
+      }
+
+      const equipment = checkResult.rows[0];
+      
+      if (equipment.status !== 'assigned' || !equipment.assigned_to) {
+        await client.query('ROLLBACK');
+        return { 
+          success: false, 
+          message: 'Equipment is not currently assigned to any client' 
+        };
+      }
+
+      const clientId = equipment.client_id;
+
+      // Remove from assignment_item table (if exists in formal assignments)
+      const removeAssignmentItemQuery = `
+        DELETE FROM assignment_item 
+        WHERE equipment_instance_id = $1
+      `;
+      await client.query(removeAssignmentItemQuery, [equipmentInstanceId]);
+
+      // Update equipment instance to remove assignment
+      const updateEquipmentQuery = `
+        UPDATE equipment_instance 
+        SET 
+          status = 'available',
+          assigned_to = NULL,
+          assigned_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `;
+      
+      await client.query(updateEquipmentQuery, [equipmentInstanceId]);
+
+      // Check if there are any assignments with no items left and mark them as inactive
+      const cleanupAssignmentsQuery = `
+        UPDATE equipment_assignment 
+        SET status = 'inactive', updated_at = CURRENT_TIMESTAMP
+        WHERE id IN (
+          SELECT ea.id 
+          FROM equipment_assignment ea
+          LEFT JOIN assignment_item ai ON ea.id = ai.assignment_id
+          WHERE ea.status = 'active' AND ai.assignment_id IS NULL
+        )
+      `;
+      await client.query(cleanupAssignmentsQuery);
+
+      await client.query('COMMIT');
+
+      DebugLogger.performance('Equipment assignment removal', startTime);
+      
+      return {
+        success: true,
+        clientId: clientId,
+        message: 'Equipment assignment removed successfully'
+      };
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      DebugLogger.error('Error removing equipment assignment', error, { equipmentInstanceId, vendorId });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
