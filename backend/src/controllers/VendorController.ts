@@ -155,8 +155,6 @@ export class VendorController extends BaseController {
         email: vendorData.email,
         companyName: vendorData.companyName,
         businessType: vendorData.businessType,
-        contactPersonName: vendorData.contactPersonName,
-        primaryEmail: vendorData.primaryEmail,
         primaryPhone: vendorData.primaryPhone,
         streetAddress: vendorData.streetAddress,
         city: vendorData.city,
@@ -168,8 +166,7 @@ export class VendorController extends BaseController {
 
       DebugLogger.log('Creating new vendor with detailed information', { 
         companyName: vendorData.companyName,
-        email: vendorData.email,
-        contactPersonName: vendorData.contactPersonName
+        email: vendorData.email
       });
 
       // Check if vendor already exists
@@ -230,6 +227,17 @@ export class VendorController extends BaseController {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       console.error('Error creating vendor:', error);
+      
+      // Handle specific database constraint errors
+      if (error instanceof Error) {
+        if (error.message.includes('duplicate key value violates unique constraint "user_email_key"')) {
+          return ApiResponseUtil.conflict(res, 'A user with this email address already exists');
+        }
+        if (error.message.includes('unique constraint')) {
+          return ApiResponseUtil.conflict(res, 'This information conflicts with existing data');
+        }
+      }
+      
       return ApiResponseUtil.internalError(res);
     }
   });
@@ -257,18 +265,14 @@ export class VendorController extends BaseController {
         return ApiResponseUtil.error(res, 'Invalid vendor ID', 400, 'INVALID_ID');
       }
 
-      // Extract all vendor update fields from request body
+      // Extract vendor update fields from request body (only fields that exist in DB schema)
       const {
         first_name,
         last_name,
         company_name,
         business_type,
         license_number,
-        contact_person_name,
-        contact_title,
-        primary_email,
         primary_phone,
-        secondary_phone,
         street_address,
         city,
         state,
@@ -285,18 +289,14 @@ export class VendorController extends BaseController {
         return ApiResponseUtil.notFound(res, 'Vendor not found');
       }
 
-      // Update vendor (email is intentionally excluded for security)
+      // Update vendor (only fields that exist in database schema)
       const updateData = {
         first_name,
         last_name,
         company_name,
         business_type,
         license_number,
-        contact_person_name,
-        contact_title,
-        primary_email,
         primary_phone,
-        secondary_phone,
         street_address,
         city,
         state,
@@ -336,6 +336,51 @@ export class VendorController extends BaseController {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       console.error('Error updating vendor:', error);
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * GET /api/vendors/:id/deletion-check
+   * Check if vendor can be safely deleted (admin only)
+   */
+  checkVendorDeletion = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    DebugLogger.log('VendorController.checkVendorDeletion called', { 
+      userId: req.user?.userId,
+      vendorId: req.params.id 
+    });
+
+    // Check permissions
+    if (!this.requireRole(req, res, ['admin'])) return;
+
+    try {
+      const vendorId = parseInt(req.params.id);
+      if (isNaN(vendorId)) {
+        DebugLogger.log('Invalid vendor ID for deletion check', { vendorId: req.params.id }, 'WARNING');
+        return ApiResponseUtil.error(res, 'Invalid vendor ID', 400, 'INVALID_ID');
+      }
+
+      // Check if vendor exists
+      const existingVendor = await VendorRepository.getVendorById(vendorId);
+      if (!existingVendor) {
+        DebugLogger.log('Vendor not found for deletion check', { vendorId }, 'WARNING');
+        return ApiResponseUtil.notFound(res, 'Vendor not found');
+      }
+
+      // Check deletion constraints
+      const deletionCheck = await VendorRepository.checkVendorDeletionConstraints(vendorId);
+
+      DebugLogger.log('Vendor deletion check completed', { 
+        vendorId,
+        canDelete: deletionCheck.canDelete,
+        constraints: deletionCheck
+      });
+
+      ApiResponseUtil.success(res, deletionCheck, 'Vendor deletion check completed');
+
+    } catch (error) {
+      DebugLogger.error('Error checking vendor deletion', error);
+      console.error('Error checking vendor deletion:', error);
       return ApiResponseUtil.internalError(res);
     }
   });
@@ -549,22 +594,10 @@ export const createVendorValidation = [
     .withMessage('License number must be less than 100 characters'),
   
   // Contact Information
-  body('contactPersonName')
-    .notEmpty()
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Contact person name is required and must be between 2 and 100 characters'),
-  body('contactTitle')
-    .optional()
-    .isLength({ max: 100 })
-    .withMessage('Contact title must be less than 100 characters'),
-  body('primaryEmail')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid primary email address'),
   body('primaryPhone')
     .notEmpty()
     .matches(/^(\+94|0)[1-9]\d{8}$/)
-    .withMessage('Please provide a valid Sri Lankan phone number'),
+    .withMessage('Please enter a valid Sri Lankan phone number'),
   
   // Address Information
   body('streetAddress')

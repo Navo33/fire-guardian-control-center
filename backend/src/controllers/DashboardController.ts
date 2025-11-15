@@ -203,7 +203,12 @@ export class DashboardController extends BaseController {
           insights = await DashboardRepository.getAdminInsights();
           break;
         case 'vendor':
-          insights = await DashboardRepository.getVendorInsights(userId);
+          // Get vendor ID from user ID
+          const vendorIdForInsights = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorIdForInsights) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
+          insights = await DashboardRepository.getVendorInsights(vendorIdForInsights);
           break;
         case 'client':
           insights = await DashboardRepository.getClientInsights(userId);
@@ -248,9 +253,14 @@ export class DashboardController extends BaseController {
           ]);
           break;
         case 'vendor':
+          // Get vendor ID from user ID
+          const vendorIdForActivity = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorIdForActivity) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
           [activities, total] = await Promise.all([
-            DashboardRepository.getVendorRecentActivity(userId, pagination),
-            DashboardRepository.getVendorActivityCount(userId)
+            DashboardRepository.getVendorRecentActivity(vendorIdForActivity, pagination),
+            DashboardRepository.getVendorActivityCount(vendorIdForActivity)
           ]);
           break;
         case 'client':
@@ -320,8 +330,13 @@ export class DashboardController extends BaseController {
           );
           break;
         case 'vendor':
+          // Get vendor ID from user ID
+          const vendorIdForChart = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorIdForChart) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
           chartData = await DashboardRepository.getVendorChartData(
-            userId,
+            vendorIdForChart,
             chartType,
             period as string,
             groupBy as string
@@ -381,7 +396,12 @@ export class DashboardController extends BaseController {
           exportData = await DashboardRepository.getAdminExportData(type as string);
           break;
         case 'vendor':
-          exportData = await DashboardRepository.getVendorExportData(userId, type as string);
+          // Get vendor ID from user ID
+          const vendorIdForExport = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorIdForExport) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
+          exportData = await DashboardRepository.getVendorExportData(vendorIdForExport, type as string);
           break;
         case 'client':
           exportData = await DashboardRepository.getClientExportData(userId, type as string);

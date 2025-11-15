@@ -348,6 +348,71 @@ export class EquipmentController extends BaseController {
   });
 
   /**
+   * DELETE /api/equipment/:id/remove-assignment
+   * Remove equipment assignment from client
+   */
+  removeEquipmentAssignment = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.api('DELETE', `/api/equipment/${req.params.id}/remove-assignment`);
+
+    try {
+      const userId = req.user!.userId;
+      const userType = req.user!.user_type;
+
+      if (userType !== 'vendor') {
+        DebugLogger.error('Non-vendor user attempted to remove equipment assignment', { userId, userType });
+        return ApiResponseUtil.forbidden(res, 'Access denied. Vendor access required.');
+      }
+
+      const equipmentInstanceId = parseInt(req.params.id);
+      if (isNaN(equipmentInstanceId)) {
+        return ApiResponseUtil.badRequest(res, 'Invalid equipment instance ID');
+      }
+
+      // Get vendor ID from user ID
+      const vendorId = await DashboardRepository.getVendorIdFromUserId(userId);
+      if (!vendorId) {
+        return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+      }
+
+      DebugLogger.log('Removing equipment assignment', { 
+        vendorId, 
+        equipmentInstanceId 
+      }, 'EQUIPMENT');
+
+      const result = await EquipmentRepository.removeEquipmentAssignment(equipmentInstanceId, vendorId);
+
+      if (!result.success) {
+        return ApiResponseUtil.notFound(res, result.message || 'Equipment instance not found or not assigned');
+      }
+
+      DebugLogger.log('Equipment assignment removed successfully', { 
+        vendorId, 
+        equipmentInstanceId,
+        clientId: result.clientId
+      }, 'EQUIPMENT');
+      
+      this.logAction('EQUIPMENT_ASSIGNMENT_REMOVED', userId, { 
+        vendorId, 
+        equipmentInstanceId,
+        clientId: result.clientId
+      });
+
+      DebugLogger.performance('Equipment assignment removal', startTime, { vendorId, equipmentInstanceId });
+      ApiResponseUtil.success(res, { equipmentInstanceId, clientId: result.clientId }, 'Equipment assignment removed successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error removing equipment assignment', error, { userId: req.user?.userId });
+      this.logAction('EQUIPMENT_ASSIGNMENT_REMOVE_ERROR', req.user?.userId, { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
    * GET /api/equipment/:id
    * Get equipment type details with comprehensive metrics and instance data
    */
