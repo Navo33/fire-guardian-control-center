@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { BaseController } from './BaseController';
 import { UserRepository } from '../models/UserRepository';
 import { AuditRepository } from '../models/AuditRepository';
+import { SystemSettingsRepository } from '../models/SystemSettingsRepository';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { AuthenticatedRequest } from '../types/api';
 import { LoginRequest, CreateUserRequest } from '../types';
@@ -50,9 +51,19 @@ export class AuthController extends BaseController {
         // Increment failed attempts
         await UserRepository.incrementFailedAttempts(user.id);
         
-        // Lock account after 5 failed attempts
-        if (user.failed_login_attempts >= 4) {
-          await UserRepository.lockAccount(user.id, 30); // Lock for 30 minutes
+        // Get dynamic settings for failed attempts and lock duration
+        const maxFailedAttempts = await SystemSettingsRepository.getTypedValue<number>(
+          'max_failed_login_attempts',
+          5
+        );
+        const lockDurationMinutes = await SystemSettingsRepository.getTypedValue<number>(
+          'account_lock_duration_minutes',
+          30
+        );
+        
+        // Lock account after max failed attempts (subtract 1 because we already incremented)
+        if (user.failed_login_attempts >= (maxFailedAttempts - 1)) {
+          await UserRepository.lockAccount(user.id, lockDurationMinutes);
         }
 
         return ApiResponseUtil.unauthorized(res, 'Invalid credentials');
@@ -65,6 +76,12 @@ export class AuthController extends BaseController {
         return ApiResponseUtil.internalError(res, 'Server configuration error');
       }
       
+      // Get session timeout from settings
+      const sessionTimeoutMinutes = await SystemSettingsRepository.getTypedValue<number>(
+        'session_timeout_minutes',
+        30
+      );
+      
       const token = jwt.sign(
         { 
           userId: user.id, 
@@ -73,7 +90,7 @@ export class AuthController extends BaseController {
           role_id: user.role_id
         },
         jwtSecret,
-        { expiresIn: '24h' }
+        { expiresIn: `${sessionTimeoutMinutes}m` }
       );
 
       // Update last login information

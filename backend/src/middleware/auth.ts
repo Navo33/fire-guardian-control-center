@@ -21,10 +21,15 @@ export const authenticateToken = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    if (req.url.includes('bulk')) {
+      console.error('🔐🔐🔐 AUTH MIDDLEWARE - BULK REQUEST 🔐🔐🔐');
+    }
+    
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (!token) {
+      console.error('❌ AUTH FAILED - No token provided');
       res.status(401).json({
         success: false,
         message: 'Access token required'
@@ -67,6 +72,9 @@ export const authenticateToken = async (
 
     // Add user info to request
     req.user = decoded;
+    if (req.url.includes('bulk')) {
+      console.error('✅ AUTH SUCCESS - User authenticated:', decoded.userId);
+    }
     next();
 
   } catch (error) {
