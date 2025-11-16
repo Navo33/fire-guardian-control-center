@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { XMarkIcon, CubeIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, CubeIcon, InformationCircleIcon, DocumentTextIcon, BuildingOfficeIcon } from '@heroicons/react/24/outline';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import DebugLogger from '@/utils/DebugLogger';
 import { useToast } from '@/components/providers/ToastProvider';
@@ -13,7 +13,6 @@ interface AddEquipmentTypeModalProps {
 }
 
 interface EquipmentTypeFormData {
-  equipment_code: string;
   equipment_name: string;
   description: string;
   equipment_type: string;
@@ -48,7 +47,6 @@ const AddEquipmentTypeModal: React.FC<AddEquipmentTypeModalProps> = ({
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<EquipmentTypeFormData>({
-    equipment_code: '',
     equipment_name: '',
     description: '',
     equipment_type: '',
@@ -69,7 +67,6 @@ const AddEquipmentTypeModal: React.FC<AddEquipmentTypeModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setFormData({
-        equipment_code: '',
         equipment_name: '',
         description: '',
         equipment_type: '',
@@ -177,9 +174,6 @@ const AddEquipmentTypeModal: React.FC<AddEquipmentTypeModalProps> = ({
     const newErrors: Record<string, string> = {};
 
     // Required fields
-    if (!formData.equipment_code.trim()) {
-      newErrors.equipment_code = 'Equipment code is required';
-    }
     if (!formData.equipment_name.trim()) {
       newErrors.equipment_name = 'Equipment name is required';
     }
@@ -298,287 +292,292 @@ const AddEquipmentTypeModal: React.FC<AddEquipmentTypeModalProps> = ({
             </button>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="p-6">
-            <div className="space-y-6">
-              {/* Equipment Code & Name */}
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="equipment_code" className="block text-sm font-medium text-gray-700 mb-2">
-                    Equipment Code *
-                  </label>
-                  <input
-                    ref={firstInputRef}
-                    type="text"
-                    id="equipment_code"
-                    name="equipment_code"
-                    value={formData.equipment_code}
-                    onChange={handleInputChange}
-                    className={`w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-colors ${
-                      errors.equipment_code 
-                        ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
-                        : 'border-gray-200 focus:border-red-500 focus:ring-red-200'
-                    }`}
-                    placeholder="e.g., LGT-EM-01"
-                  />
-                  {errors.equipment_code && (
-                    <p className="mt-1 text-sm text-red-600">{errors.equipment_code}</p>
-                  )}
+          {/* Form Content */}
+          <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+            <form onSubmit={handleSubmit} className="p-6 space-y-8">
+              {/* Basic Information Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <CubeIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
                 </div>
-
-                <div>
-                  <label htmlFor="equipment_name" className="block text-sm font-medium text-gray-700 mb-2">
-                    Equipment Name *
-                  </label>
-                  <input
-                    type="text"
-                    id="equipment_name"
-                    name="equipment_name"
-                    value={formData.equipment_name}
-                    onChange={handleInputChange}
-                    className={`w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-colors ${
-                      errors.equipment_name 
-                        ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
-                        : 'border-gray-200 focus:border-red-500 focus:ring-red-200'
-                    }`}
-                    placeholder="e.g., Emergency Light Standard"
-                  />
-                  {errors.equipment_name && (
-                    <p className="mt-1 text-sm text-red-600">{errors.equipment_name}</p>
-                  )}
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-700">
+                    <InformationCircleIcon className="h-4 w-4 inline mr-1" />
+                    Equipment code will be automatically generated based on the equipment type and manufacturer.
+                  </p>
                 </div>
-              </div>
-
-              {/* Equipment Type */}
-              <div>
-                <label htmlFor="equipment_type" className="block text-sm font-medium text-gray-700 mb-2">
-                  Equipment Type *
-                </label>
-                <select
-                  id="equipment_type"
-                  name="equipment_type"
-                  value={formData.equipment_type}
-                  onChange={handleInputChange}
-                  className={`w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-colors ${
-                    errors.equipment_type 
-                      ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
-                      : 'border-gray-200 focus:border-red-500 focus:ring-red-200'
-                  }`}
-                >
-                  <option value="">Select equipment type</option>
-                  {EQUIPMENT_TYPES.map(type => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-                {errors.equipment_type && (
-                  <p className="mt-1 text-sm text-red-600">{errors.equipment_type}</p>
-                )}
-              </div>
-
-              {/* Manufacturer & Model */}
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="manufacturer" className="block text-sm font-medium text-gray-700 mb-2">
-                    Manufacturer *
-                  </label>
-                  <input
-                    type="text"
-                    id="manufacturer"
-                    name="manufacturer"
-                    value={formData.manufacturer}
-                    onChange={handleInputChange}
-                    className={`w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-colors ${
-                      errors.manufacturer 
-                        ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
-                        : 'border-gray-200 focus:border-red-500 focus:ring-red-200'
-                    }`}
-                    placeholder="e.g., ProGuard"
-                  />
-                  {errors.manufacturer && (
-                    <p className="mt-1 text-sm text-red-600">{errors.manufacturer}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-2">
-                    Model *
-                  </label>
-                  <input
-                    type="text"
-                    id="model"
-                    name="model"
-                    value={formData.model}
-                    onChange={handleInputChange}
-                    className={`w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-colors ${
-                      errors.model 
-                        ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
-                        : 'border-gray-200 focus:border-red-500 focus:ring-red-200'
-                    }`}
-                    placeholder="e.g., EM-01"
-                  />
-                  {errors.model && (
-                    <p className="mt-1 text-sm text-red-600">{errors.model}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  id="description"
-                  name="description"
-                  rows={3}
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200 transition-colors"
-                  placeholder="Brief description of the equipment..."
-                />
-              </div>
-
-              {/* Physical Properties */}
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                <div>
-                  <label htmlFor="weight_kg" className="block text-sm font-medium text-gray-700 mb-2">
-                    Weight (kg)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    id="weight_kg"
-                    name="weight_kg"
-                    value={formData.weight_kg ?? ''}
-                    onChange={handleInputChange}
-                    className={`w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-colors ${
-                      errors.weight_kg 
-                        ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
-                        : 'border-gray-200 focus:border-red-500 focus:ring-red-200'
-                    }`}
-                    placeholder="1.50"
-                  />
-                  {errors.weight_kg && (
-                    <p className="mt-1 text-sm text-red-600">{errors.weight_kg}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="dimensions" className="block text-sm font-medium text-gray-700 mb-2">
-                    Dimensions
-                  </label>
-                  <input
-                    type="text"
-                    id="dimensions"
-                    name="dimensions"
-                    value={formData.dimensions}
-                    onChange={handleInputChange}
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200 transition-colors"
-                    placeholder="120x80mm"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="warranty_years" className="block text-sm font-medium text-gray-700 mb-2">
-                    Warranty (years)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    id="warranty_years"
-                    name="warranty_years"
-                    value={formData.warranty_years ?? ''}
-                    onChange={handleInputChange}
-                    className={`w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-colors ${
-                      errors.warranty_years 
-                        ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
-                        : 'border-gray-200 focus:border-red-500 focus:ring-red-200'
-                    }`}
-                    placeholder="2"
-                  />
-                  {errors.warranty_years && (
-                    <p className="mt-1 text-sm text-red-600">{errors.warranty_years}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Default Lifespan */}
-              <div>
-                <label htmlFor="default_lifespan_years" className="block text-sm font-medium text-gray-700 mb-2">
-                  Default Lifespan (years)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  id="default_lifespan_years"
-                  name="default_lifespan_years"
-                  value={formData.default_lifespan_years ?? ''}
-                  onChange={handleInputChange}
-                  className={`w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-colors ${
-                    errors.default_lifespan_years 
-                      ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
-                      : 'border-gray-200 focus:border-red-500 focus:ring-red-200'
-                  }`}
-                  placeholder="5"
-                />
-                {errors.default_lifespan_years && (
-                  <p className="mt-1 text-sm text-red-600">{errors.default_lifespan_years}</p>
-                )}
-              </div>
-
-              {/* Specifications */}
-              <div>
-                <div className="flex items-center space-x-2 mb-2">
-                  <label htmlFor="specifications" className="block text-sm font-medium text-gray-700">
-                    Technical Specifications (JSON)
-                  </label>
-                  <div className="group relative">
-                    <InformationCircleIcon className="h-4 w-4 text-gray-400 cursor-help" />
-                    <div className="invisible group-hover:visible absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm text-white bg-gray-900 rounded-lg whitespace-nowrap z-10">
-                      Example: {"{"}"lumens": 300, "backup_hours": 3{"}"}
-                    </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="equipment_name" className="block text-sm font-medium text-gray-700 mb-2">
+                      Equipment Name *
+                    </label>
+                    <input
+                      ref={firstInputRef}
+                      type="text"
+                      id="equipment_name"
+                      name="equipment_name"
+                      value={formData.equipment_name}
+                      onChange={handleInputChange}
+                      className={`input-field ${
+                        errors.equipment_name ? 'border-red-500' : ''
+                      }`}
+                      placeholder="e.g., Emergency Light Standard"
+                    />
+                    {errors.equipment_name && (
+                      <p className="mt-1 text-sm text-red-600">{errors.equipment_name}</p>
+                    )}
                   </div>
                 </div>
-                <textarea
-                  id="specifications"
-                  name="specifications"
-                  rows={4}
-                  value={specificationsJson}
-                  onChange={handleSpecificationsChange}
-                  className={`w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 transition-colors font-mono ${
-                    errors.specifications 
-                      ? 'border-red-300 focus:border-red-500 focus:ring-red-200' 
-                      : 'border-gray-200 focus:border-red-500 focus:ring-red-200'
-                  }`}
-                  placeholder='{"lumens": 300, "backup_hours": 3}'
-                />
-                {errors.specifications && (
-                  <p className="mt-1 text-sm text-red-600">{errors.specifications}</p>
-                )}
               </div>
-            </div>
 
-            {/* Actions */}
-            <div className="mt-8 flex justify-end space-x-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSubmitting ? 'Creating...' : 'Create Equipment Type'}
-              </button>
-            </div>
-          </form>
+              {/* Equipment Type Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <DocumentTextIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">Equipment Type</h3>
+                </div>
+                
+                <div>
+                  <label htmlFor="equipment_type" className="block text-sm font-medium text-gray-700 mb-2">
+                    Equipment Type *
+                  </label>
+                  <select
+                    id="equipment_type"
+                    name="equipment_type"
+                    value={formData.equipment_type}
+                    onChange={handleInputChange}
+                    className={`input-field ${
+                      errors.equipment_type ? 'border-red-500' : ''
+                    }`}
+                  >
+                    <option value="">Select equipment type</option>
+                    {EQUIPMENT_TYPES.map(type => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.equipment_type && (
+                    <p className="mt-1 text-sm text-red-600">{errors.equipment_type}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    id="description"
+                    name="description"
+                    rows={3}
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    className="input-field"
+                    placeholder="Brief description of the equipment..."
+                  />
+                </div>
+              </div>
+
+              {/* Manufacturer Information Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <BuildingOfficeIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">Manufacturer Information</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="manufacturer" className="block text-sm font-medium text-gray-700 mb-2">
+                      Manufacturer *
+                    </label>
+                    <input
+                      type="text"
+                      id="manufacturer"
+                      name="manufacturer"
+                      value={formData.manufacturer}
+                      onChange={handleInputChange}
+                      className={`input-field ${
+                        errors.manufacturer ? 'border-red-500' : ''
+                      }`}
+                      placeholder="e.g., ProGuard"
+                    />
+                    {errors.manufacturer && (
+                      <p className="mt-1 text-sm text-red-600">{errors.manufacturer}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-2">
+                      Model *
+                    </label>
+                    <input
+                      type="text"
+                      id="model"
+                      name="model"
+                      value={formData.model}
+                      onChange={handleInputChange}
+                      className={`input-field ${
+                        errors.model ? 'border-red-500' : ''
+                      }`}
+                      placeholder="e.g., EM-01"
+                    />
+                    {errors.model && (
+                      <p className="mt-1 text-sm text-red-600">{errors.model}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+
+
+              {/* Physical Properties Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <CubeIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">Physical Properties</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor="weight_kg" className="block text-sm font-medium text-gray-700 mb-2">
+                      Weight (kg)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      id="weight_kg"
+                      name="weight_kg"
+                      value={formData.weight_kg ?? ''}
+                      onChange={handleInputChange}
+                      className={`input-field ${
+                        errors.weight_kg ? 'border-red-500' : ''
+                      }`}
+                      placeholder="1.50"
+                    />
+                    {errors.weight_kg && (
+                      <p className="mt-1 text-sm text-red-600">{errors.weight_kg}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label htmlFor="dimensions" className="block text-sm font-medium text-gray-700 mb-2">
+                      Dimensions
+                    </label>
+                    <input
+                      type="text"
+                      id="dimensions"
+                      name="dimensions"
+                      value={formData.dimensions}
+                      onChange={handleInputChange}
+                      className="input-field"
+                      placeholder="120x80mm"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="warranty_years" className="block text-sm font-medium text-gray-700 mb-2">
+                      Warranty (years)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      id="warranty_years"
+                      name="warranty_years"
+                      value={formData.warranty_years ?? ''}
+                      onChange={handleInputChange}
+                      className={`input-field ${
+                        errors.warranty_years ? 'border-red-500' : ''
+                      }`}
+                      placeholder="2"
+                    />
+                    {errors.warranty_years && (
+                      <p className="mt-1 text-sm text-red-600">{errors.warranty_years}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="default_lifespan_years" className="block text-sm font-medium text-gray-700 mb-2">
+                    Default Lifespan (years)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    id="default_lifespan_years"
+                    name="default_lifespan_years"
+                    value={formData.default_lifespan_years ?? ''}
+                    onChange={handleInputChange}
+                    className={`input-field ${
+                      errors.default_lifespan_years ? 'border-red-500' : ''
+                    }`}
+                    placeholder="5"
+                  />
+                  {errors.default_lifespan_years && (
+                    <p className="mt-1 text-sm text-red-600">{errors.default_lifespan_years}</p>
+                  )}
+                </div>
+              </div>
+
+
+
+              {/* Technical Specifications Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <DocumentTextIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">Technical Specifications</h3>
+                </div>
+                
+                <div>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <label htmlFor="specifications" className="block text-sm font-medium text-gray-700">
+                      Specifications (JSON Format)
+                    </label>
+                    <div className="group relative">
+                      <InformationCircleIcon className="h-4 w-4 text-gray-400 cursor-help" />
+                      <div className="invisible group-hover:visible absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm text-white bg-gray-900 rounded-lg whitespace-nowrap z-10">
+                        Example: {"{"}"lumens": 300, "backup_hours": 3{"}"}
+                      </div>
+                    </div>
+                  </div>
+                  <textarea
+                    id="specifications"
+                    name="specifications"
+                    rows={4}
+                    value={specificationsJson}
+                    onChange={handleSpecificationsChange}
+                    className={`input-field font-mono ${
+                      errors.specifications ? 'border-red-500' : ''
+                    }`}
+                    placeholder='{"lumens": 300, "backup_hours": 3}'
+                  />
+                  {errors.specifications && (
+                    <p className="mt-1 text-sm text-red-600">{errors.specifications}</p>
+                  )}
+                </div>
+              </div>
+              {/* Form Actions */}
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Equipment Type'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>
