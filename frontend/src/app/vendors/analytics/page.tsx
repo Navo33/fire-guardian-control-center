@@ -171,10 +171,7 @@ export default function VendorAnalyticsPage() {
   const [selectedClient, setSelectedClient] = useState<number | null>(null);
   const [selectedEquipmentType, setSelectedEquipmentType] = useState<string>('');
 
-  // Get current vendor ID from localStorage or user context
-  const [vendorId, setVendorId] = useState<number | null>(null);
-
-  // Initialize date filters and vendor ID
+  // Initialize date filters
   useEffect(() => {
     const endDate = new Date();
     const startDate = new Date();
@@ -184,32 +181,25 @@ export default function VendorAnalyticsPage() {
       startDate: startDate.toISOString().split('T')[0],
       endDate: endDate.toISOString().split('T')[0]
     });
-
-    // Get vendor ID from user context or localStorage
-    // For demo purposes, using vendor_id = 1
-    // In production, this would come from the authenticated user's vendor association
-    setVendorId(1);
   }, []);
 
-  // Fetch filter options
+  // Fetch filter options when component mounts
   useEffect(() => {
-    if (vendorId) {
-      fetchClients();
-      fetchEquipmentTypes();
-    }
-  }, [vendorId]);
+    fetchClients();
+    fetchEquipmentTypes();
+  }, []);
 
   // Fetch all analytics data when filters change
   useEffect(() => {
-    if (vendorId && dateRange.startDate && dateRange.endDate) {
+    if (dateRange.startDate && dateRange.endDate) {
       fetchAllAnalytics();
     }
-  }, [vendorId, dateRange, selectedClient, selectedEquipmentType]);
+  }, [dateRange, selectedClient, selectedEquipmentType]);
 
   const fetchClients = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token || !vendorId) return;
+      if (!token) return;
 
       const headers = {
         'Authorization': `Bearer ${token}`,
@@ -217,7 +207,7 @@ export default function VendorAnalyticsPage() {
       };
 
       const response = await fetch(
-        `${API_BASE_URL}/vendor/analytics/clients/dropdown?vendor_id=${vendorId}`,
+        `${API_BASE_URL}/vendor/analytics/clients/dropdown`,
         { headers }
       );
 
@@ -235,7 +225,7 @@ export default function VendorAnalyticsPage() {
   const fetchEquipmentTypes = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token || !vendorId) return;
+      if (!token) return;
 
       const headers = {
         'Authorization': `Bearer ${token}`,
@@ -243,7 +233,7 @@ export default function VendorAnalyticsPage() {
       };
 
       const response = await fetch(
-        `${API_BASE_URL}/vendor/analytics/equipment/types?vendor_id=${vendorId}`,
+        `${API_BASE_URL}/vendor/analytics/equipment/types`,
         { headers }
       );
 
@@ -264,7 +254,7 @@ export default function VendorAnalyticsPage() {
     
     try {
       const token = localStorage.getItem('token');
-      if (!token || !vendorId) throw new Error('Authentication required');
+      if (!token) throw new Error('Authentication required');
 
       const headers = {
         'Authorization': `Bearer ${token}`,
@@ -273,7 +263,6 @@ export default function VendorAnalyticsPage() {
 
       // Build query parameters
       const params = new URLSearchParams({
-        vendor_id: vendorId.toString(),
         start: dateRange.startDate,
         end: dateRange.endDate
       });
@@ -287,10 +276,6 @@ export default function VendorAnalyticsPage() {
       }
 
       // Fetch all data in parallel
-      console.log('Making API calls with vendorId:', vendorId, 'params:', params);
-      console.log('API_BASE_URL value:', API_BASE_URL);
-      console.log('First URL example:', `${API_BASE_URL}/vendor/analytics/overview?${params}`);
-      
       const [
         overviewRes,
         complianceByClientRes,
@@ -306,17 +291,17 @@ export default function VendorAnalyticsPage() {
         vendorAuditsRes
       ] = await Promise.all([
         fetch(`${API_BASE_URL}/vendor/analytics/overview?${params}`, { headers }),
-        fetch(`${API_BASE_URL}/vendor/analytics/compliance/by-client?vendor_id=${vendorId}`, { headers }),
+        fetch(`${API_BASE_URL}/vendor/analytics/compliance/by-client`, { headers }),
         fetch(`${API_BASE_URL}/vendor/analytics/compliance/trend?${params}`, { headers }),
         fetch(`${API_BASE_URL}/vendor/analytics/tickets/trend?${params}`, { headers }),
-        fetch(`${API_BASE_URL}/vendor/analytics/tickets/by-type?vendor_id=${vendorId}`, { headers }),
-        fetch(`${API_BASE_URL}/vendor/analytics/clients/ranking?vendor_id=${vendorId}`, { headers }),
-        fetch(`${API_BASE_URL}/vendor/analytics/equipment/categories?vendor_id=${vendorId}`, { headers }),
-        fetch(`${API_BASE_URL}/vendor/analytics/equipment/high-risk?vendor_id=${vendorId}`, { headers }),
-        fetch(`${API_BASE_URL}/vendor/analytics/users/technicians?vendor_id=${vendorId}`, { headers }),
+        fetch(`${API_BASE_URL}/vendor/analytics/tickets/by-type`, { headers }),
+        fetch(`${API_BASE_URL}/vendor/analytics/clients/ranking`, { headers }),
+        fetch(`${API_BASE_URL}/vendor/analytics/equipment/categories`, { headers }),
+        fetch(`${API_BASE_URL}/vendor/analytics/equipment/high-risk`, { headers }),
+        fetch(`${API_BASE_URL}/vendor/analytics/users/technicians`, { headers }),
         fetch(`${API_BASE_URL}/vendor/analytics/users/logins?${params}`, { headers }),
-        fetch(`${API_BASE_URL}/vendor/analytics/users/resets?vendor_id=${vendorId}`, { headers }),
-        fetch(`${API_BASE_URL}/vendor/analytics/audit/recent?vendor_id=${vendorId}`, { headers })
+        fetch(`${API_BASE_URL}/vendor/analytics/users/resets`, { headers }),
+        fetch(`${API_BASE_URL}/vendor/analytics/audit/recent`, { headers })
       ]);
 
       // Debug: Check response status codes
@@ -615,31 +600,33 @@ export default function VendorAnalyticsPage() {
     <RequireRole allowedRoles={['vendor']}>
       <DashboardLayout>
         <div className="space-y-6">
-          {/* Header */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          {/* Page Header */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-3">
+              <div className="flex-shrink-0">
+                <ChartBarIcon className="h-8 w-8 text-gray-900" />
+              </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Vendor Analytics Dashboard</h1>
-                <p className="mt-1 text-sm text-gray-600">
+                <h1 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
+                <p className="text-gray-600 mt-1">
                   Operational insights, client performance, and business growth metrics
                 </p>
               </div>
-              
-              <div className="mt-4 sm:mt-0">
-                <button
-                  onClick={exportToPDF}
-                  disabled={exportingPDF}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
-                  {exportingPDF ? 'Generating...' : 'Export PDF'}
-                </button>
-              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={exportToPDF}
+                disabled={exportingPDF}
+                className="btn-primary flex items-center space-x-2"
+              >
+                <DocumentArrowDownIcon className="h-5 w-5" />
+                <span>{exportingPDF ? 'Generating...' : 'Export PDF'}</span>
+              </button>
             </div>
           </div>
 
           {/* Filters */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
             <div className="flex items-center mb-4">
               <FunnelIcon className="h-5 w-5 text-gray-400 mr-2" />
               <h2 className="text-lg font-medium text-gray-900">Filters</h2>
@@ -655,13 +642,13 @@ export default function VendorAnalyticsPage() {
                     type="date"
                     value={dateRange.startDate}
                     onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                    className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    className="input-field"
                   />
                   <input
                     type="date"
                     value={dateRange.endDate}
                     onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                    className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    className="input-field"
                   />
                 </div>
               </div>
@@ -674,7 +661,7 @@ export default function VendorAnalyticsPage() {
                   id="client-filter"
                   value={selectedClient || ''}
                   onChange={(e) => setSelectedClient(e.target.value ? Number(e.target.value) : null)}
-                  className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="input-field"
                 >
                   <option value="">All Clients</option>
                   {clients.map(client => (
@@ -693,7 +680,7 @@ export default function VendorAnalyticsPage() {
                   id="equipment-type-filter"
                   value={selectedEquipmentType}
                   onChange={(e) => setSelectedEquipmentType(e.target.value)}
-                  className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="input-field"
                 >
                   <option value="">All Equipment Types</option>
                   {equipmentTypes.map(type => (
@@ -707,7 +694,7 @@ export default function VendorAnalyticsPage() {
               <div className="flex items-end">
                 <button
                   onClick={fetchAllAnalytics}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="w-full btn-secondary"
                 >
                   Refresh Data
                 </button>
@@ -717,7 +704,7 @@ export default function VendorAnalyticsPage() {
 
           {/* Vendor Overview Section */}
           {vendorOverview && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
                 <BuildingOfficeIcon className="h-6 w-6 text-indigo-600 mr-2" />
                 Vendor Overview
@@ -802,7 +789,7 @@ export default function VendorAnalyticsPage() {
           {/* Compliance Analytics Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Compliance by Client */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <ShieldCheckIcon className="h-6 w-6 text-green-600 mr-2" />
                 Compliance by Client
@@ -830,7 +817,7 @@ export default function VendorAnalyticsPage() {
             </div>
 
             {/* Compliance Trend */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <ChartBarIcon className="h-6 w-6 text-green-600 mr-2" />
                 Compliance Trend
@@ -858,7 +845,7 @@ export default function VendorAnalyticsPage() {
           {/* Tickets & Maintenance Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Ticket Trends */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <ExclamationTriangleIcon className="h-6 w-6 text-orange-600 mr-2" />
                 Ticket Trends
@@ -885,7 +872,7 @@ export default function VendorAnalyticsPage() {
             </div>
 
             {/* Tickets by Type */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <FireIcon className="h-6 w-6 text-red-600 mr-2" />
                 Tickets by Type
@@ -926,7 +913,7 @@ export default function VendorAnalyticsPage() {
           {/* Client Performance & Equipment */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Client Rankings */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <BuildingOfficeIcon className="h-6 w-6 text-blue-600 mr-2" />
                 Top Client Performance
@@ -967,7 +954,7 @@ export default function VendorAnalyticsPage() {
             </div>
 
             {/* Equipment Categories */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <WrenchScrewdriverIcon className="h-6 w-6 text-indigo-600 mr-2" />
                 Equipment Categories
@@ -1008,7 +995,7 @@ export default function VendorAnalyticsPage() {
           {/* High-Risk Equipment & Technician Performance */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* High-Risk Equipment */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <ExclamationTriangleIcon className="h-6 w-6 text-red-600 mr-2" />
                 High-Risk Equipment
@@ -1051,7 +1038,7 @@ export default function VendorAnalyticsPage() {
             </div>
 
             {/* Technician Performance */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <UserGroupIcon className="h-6 w-6 text-purple-600 mr-2" />
                 Technician Performance
@@ -1080,7 +1067,7 @@ export default function VendorAnalyticsPage() {
           {/* User & Security Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* User Login Trends */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <UserGroupIcon className="h-6 w-6 text-indigo-600 mr-2" />
                 Staff Login Trends
@@ -1106,7 +1093,7 @@ export default function VendorAnalyticsPage() {
             </div>
 
             {/* Password Resets */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                 <LockClosedIcon className="h-6 w-6 text-amber-600 mr-2" />
                 Password Reset Reasons
@@ -1145,7 +1132,7 @@ export default function VendorAnalyticsPage() {
           </div>
 
           {/* Recent Vendor Audits */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
             <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
               <DocumentMagnifyingGlassIcon className="h-6 w-6 text-gray-600 mr-2" />
               Recent Activity Audit

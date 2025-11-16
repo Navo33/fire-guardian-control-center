@@ -8,8 +8,10 @@ import RequireRole from '@/components/auth/RequireRole';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import CreateInstanceModal from '@/components/modals/CreateInstanceModal';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall, API_BASE_URL } from '@/config/api';
 import DebugLogger from '@/utils/DebugLogger';
+import { useToast } from '@/components/providers/ToastProvider';
 import { 
   FireIcon,
   Cog6ToothIcon,
@@ -26,7 +28,8 @@ import {
   DocumentTextIcon,
   TagIcon,
   CubeIcon,
-  UserIcon
+  UserIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 // Types
@@ -75,17 +78,7 @@ interface EquipmentInstanceData {
   warranty_expiry?: string;
 }
 
-interface AssignmentData {
-  assignment_id: number;
-  assignment_number: string;
-  client_name: string;
-  quantity: number;
-  start_date?: string;
-  end_date?: string;
-  assigned_at: string;
-  status: string;
-  notes?: string;
-}
+
 
 interface EquipmentInstance {
   id: number;
@@ -210,7 +203,71 @@ export default function EquipmentDetailsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [isEditing, setIsEditing] = useState(false);
   const [isCreateInstanceModalOpen, setIsCreateInstanceModalOpen] = useState(false);
+  const [removeAssignmentModal, setRemoveAssignmentModal] = useState<{
+    isOpen: boolean;
+    equipmentId: number | null;
+    equipmentName: string;
+  }>({ isOpen: false, equipmentId: null, equipmentName: '' });
+  const { showToast } = useToast();
+
+  // Form data for inline editing
+  const [editFormData, setEditFormData] = useState({
+    equipment_name: '',
+    description: '',
+    manufacturer: '',
+    model: '',
+    default_lifespan_years: 0,
+    warranty_years: 0,
+    weight_kg: 0,
+    dimensions: '',
+    specifications: {}
+  });
+
+  const handleRemoveAssignment = async () => {
+    if (!removeAssignmentModal.equipmentId) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const url = `${apiBaseUrl}/equipment/${removeAssignmentModal.equipmentId}/remove-assignment`;
+
+      logApiCall('DELETE', url);
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to remove assignment');
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to remove assignment');
+      }
+
+      showToast('success', `Assignment removed successfully for ${removeAssignmentModal.equipmentName}`);
+      
+      // Refresh equipment data
+      await fetchEquipmentTypeDetails();
+      
+      // Close modal
+      setRemoveAssignmentModal({ isOpen: false, equipmentId: null, equipmentName: '' });
+    } catch (err) {
+      console.error('Error removing assignment:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove assignment';
+      showToast('error', errorMessage);
+    }
+  };
 
   // Fetch equipment type details
   const fetchEquipmentTypeDetails = async () => {
@@ -241,7 +298,21 @@ export default function EquipmentDetailsPage() {
         throw new Error(typeResult.message || 'Failed to fetch equipment type details');
       }
 
-      setEquipmentType(typeResult.data);
+      const equipmentData = typeResult.data;
+      setEquipmentType(equipmentData);
+      
+      // Initialize edit form data
+      setEditFormData({
+        equipment_name: equipmentData.equipment_name || '',
+        description: equipmentData.description || '',
+        manufacturer: equipmentData.manufacturer || '',
+        model: equipmentData.model || '',
+        default_lifespan_years: equipmentData.default_lifespan_years || 0,
+        warranty_years: equipmentData.warranty_years || 0,
+        weight_kg: equipmentData.weight_kg || 0,
+        dimensions: equipmentData.dimensions || '',
+        specifications: equipmentData.specifications || {}
+      });
 
       // Fetch equipment instances for this type
       const instanceUrl = `${API_BASE_URL}/equipment?equipment_type_id=${equipmentId}`;
@@ -257,6 +328,63 @@ export default function EquipmentDetailsPage() {
       setError(err instanceof Error ? err.message : 'Failed to fetch equipment details');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = '/login';
+        return;
+      }
+
+      const headers = {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json'
+      };
+
+      const updateUrl = `${API_BASE_URL}/equipment/types/${equipmentId}`;
+      logApiCall('PUT', updateUrl);
+      
+      const response = await fetch(updateUrl, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(editFormData)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to update equipment type');
+      }
+
+      showToast('success', 'Equipment type updated successfully');
+      setIsEditing(false);
+      fetchEquipmentTypeDetails(); // Refresh data
+
+    } catch (err) {
+      console.error('Error updating equipment type:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update equipment type';
+      showToast('error', errorMessage);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    // Reset form data to original values
+    if (equipmentType) {
+      setEditFormData({
+        equipment_name: equipmentType.equipment_name || '',
+        description: equipmentType.description || '',
+        manufacturer: equipmentType.manufacturer || '',
+        model: equipmentType.model || '',
+        default_lifespan_years: equipmentType.default_lifespan_years || 0,
+        warranty_years: equipmentType.warranty_years || 0,
+        weight_kg: equipmentType.weight_kg || 0,
+        dimensions: equipmentType.dimensions || '',
+        specifications: equipmentType.specifications || {}
+      });
     }
   };
 
@@ -337,14 +465,13 @@ export default function EquipmentDetailsPage() {
                 <CubeIcon className="h-4 w-4" />
                 <span>Create Instance</span>
               </button>
-              <button className="btn-secondary flex items-center space-x-2">
-                <PencilIcon className="h-4 w-4" />
-                <span>Edit Type</span>
-              </button>
+              
               <button
-                className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-full hover:bg-red-100 transition-colors"
+                onClick={() => setIsEditing(!isEditing)}
+                className="btn-secondary flex items-center space-x-2"
               >
-                <TrashIcon className="h-4 w-4" />
+                <PencilIcon className="h-4 w-4" />
+                <span>{isEditing ? 'Cancel' : 'Edit Details'}</span>
               </button>
             </div>
           </div>
@@ -414,9 +541,7 @@ export default function EquipmentDetailsPage() {
                 {[
                   { id: 'overview', name: 'Overview', icon: CubeIcon },
                   { id: 'instances', name: `Instances (${equipmentType?.total_instances || 0})`, icon: FireIcon },
-                  { id: 'assignments', name: `Assignments (${equipmentType?.assignments?.length || 0})`, icon: UserGroupIcon },
-                  { id: 'specifications', name: 'Specifications', icon: DocumentTextIcon },
-                  { id: 'maintenance', name: 'Maintenance', icon: WrenchScrewdriverIcon }
+                  { id: 'specifications', name: 'Specifications', icon: DocumentTextIcon }
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -438,50 +563,189 @@ export default function EquipmentDetailsPage() {
               {/* Overview Tab */}
               {activeTab === 'overview' && (
                 <div className="space-y-8">
-                  {/* Basic Information */}
+                  {/* Equipment Details */}
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                      <CubeIcon className="h-5 w-5 text-red-600 mr-2" />
-                      Equipment Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Equipment Name</label>
-                        <p className="text-sm text-gray-900">{equipmentType.equipment_name}</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Equipment Code</label>
-                        <p className="text-sm text-gray-900">{equipmentType.equipment_code}</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Equipment Type</label>
-                        <p className="text-sm text-gray-900">{equipmentType.equipment_type}</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Manufacturer</label>
-                        <p className="text-sm text-gray-900">{equipmentType.manufacturer}</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Model</label>
-                        <p className="text-sm text-gray-900">{equipmentType.model}</p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Lifespan</label>
-                        <p className="text-sm text-gray-900">{equipmentType.default_lifespan_years} years</p>
-                      </div>
-                      
-                      {equipmentType.description && (
-                        <div className="md:col-span-3">
-                          <label className="block text-sm font-medium text-gray-700">Description</label>
-                          <p className="text-sm text-gray-900">{equipmentType.description}</p>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                        <CubeIcon className="h-5 w-5 text-red-600 mr-2" />
+                        Equipment Information
+                      </h3>
+                      {isEditing && (
+                        <div className="flex space-x-3">
+                          <button 
+                            onClick={handleSaveChanges}
+                            className="btn-primary"
+                          >
+                            Save Changes
+                          </button>
+                          <button 
+                            onClick={handleCancelEdit}
+                            className="btn-secondary"
+                          >
+                            Cancel
+                          </button>
                         </div>
                       )}
                     </div>
+                    
+                    {isEditing ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Equipment Name
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.equipment_name}
+                              onChange={(e) => setEditFormData({...editFormData, equipment_name: e.target.value})}
+                              className="input-field"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Manufacturer
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.manufacturer}
+                              onChange={(e) => setEditFormData({...editFormData, manufacturer: e.target.value})}
+                              className="input-field"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Model
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.model}
+                              onChange={(e) => setEditFormData({...editFormData, model: e.target.value})}
+                              className="input-field"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Default Lifespan (Years)
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.default_lifespan_years}
+                              onChange={(e) => setEditFormData({...editFormData, default_lifespan_years: parseInt(e.target.value) || 0})}
+                              className="input-field"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Warranty (Years)
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.warranty_years}
+                              onChange={(e) => setEditFormData({...editFormData, warranty_years: parseInt(e.target.value) || 0})}
+                              className="input-field"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Weight (kg)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={editFormData.weight_kg}
+                              onChange={(e) => setEditFormData({...editFormData, weight_kg: parseFloat(e.target.value) || 0})}
+                              className="input-field"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Dimensions
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.dimensions}
+                              onChange={(e) => setEditFormData({...editFormData, dimensions: e.target.value})}
+                              className="input-field"
+                              placeholder="L x W x H"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Description
+                          </label>
+                          <textarea
+                            value={editFormData.description}
+                            onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
+                            rows={3}
+                            className="input-field"
+                            placeholder="Equipment description..."
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Equipment Name</label>
+                          <p className="text-sm text-gray-900">{equipmentType.equipment_name}</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Equipment Code</label>
+                          <p className="text-sm text-gray-500">{equipmentType.equipment_code}</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Equipment Type</label>
+                          <p className="text-sm text-gray-500">{equipmentType.equipment_type}</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Manufacturer</label>
+                          <p className="text-sm text-gray-900">{equipmentType.manufacturer}</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Model</label>
+                          <p className="text-sm text-gray-900">{equipmentType.model}</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Lifespan</label>
+                          <p className="text-sm text-gray-900">{equipmentType.default_lifespan_years} years</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Warranty Period</label>
+                          <p className="text-sm text-gray-900">{equipmentType.warranty_years || 0} years</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Weight</label>
+                          <p className="text-sm text-gray-900">{equipmentType.weight_kg || 0} kg</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Dimensions</label>
+                          <p className="text-sm text-gray-900">{equipmentType.dimensions || 'Not specified'}</p>
+                        </div>
+                        
+                        {equipmentType.description && (
+                          <div className="md:col-span-3">
+                            <label className="block text-sm font-medium text-gray-700">Description</label>
+                            <p className="text-sm text-gray-900 mt-1">{equipmentType.description}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -520,6 +784,9 @@ export default function EquipmentDetailsPage() {
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                               Expiry Date
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                              Actions
                             </th>
                           </tr>
                         </thead>
@@ -564,6 +831,24 @@ export default function EquipmentDetailsPage() {
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {new Date(instance.expiry_date).toLocaleDateString()}
                               </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center space-x-2">
+                                  {instance.status === 'assigned' && instance.client_name && instance.client_name !== 'Unassigned' ? (
+                                    <button
+                                      onClick={() => setRemoveAssignmentModal({
+                                        isOpen: true,
+                                        equipmentId: instance.id,
+                                        equipmentName: `${equipmentType?.equipment_name} - ${instance.serial_number}`
+                                      })}
+                                      className="text-red-600 hover:text-red-900 text-sm font-medium transition-colors"
+                                    >
+                                      Remove Assignment
+                                    </button>
+                                  ) : (
+                                    <span className="text-gray-400 text-sm">No actions</span>
+                                  )}
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -578,149 +863,54 @@ export default function EquipmentDetailsPage() {
                 </div>
               )}
 
-              {/* Assignments Tab */}
-              {activeTab === 'assignments' && (
-                <div className="space-y-8">
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                      <UserGroupIcon className="h-5 w-5 text-red-600 mr-2" />
-                      Equipment Assignments
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-6">
-                      View all assignment records for this equipment type's instances.
-                    </p>
-                  </div>
-
-                  {equipmentType?.assignments && equipmentType.assignments.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                              Assignment #
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                              Client
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                              Quantity
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                              Start Date
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                              End Date
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                              Status
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                              Notes
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                          {equipmentType.assignments.map((assignment, index) => (
-                            <tr key={assignment.assignment_id} className={`hover:bg-gray-50 transition-colors ${index !== equipmentType.assignments.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{assignment.assignment_number}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{assignment.client_name}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {assignment.quantity}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {assignment.start_date ? new Date(assignment.start_date).toLocaleDateString() : 'N/A'}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {assignment.end_date ? new Date(assignment.end_date).toLocaleDateString() : 'N/A'}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                                  assignment.status === 'active' ? 'bg-green-100 text-green-800' :
-                                  assignment.status === 'closed' ? 'bg-gray-100 text-gray-800' :
-                                  assignment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                  assignment.status === 'completed' ? 'bg-blue-100 text-blue-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {assignment.status.charAt(0).toUpperCase() + assignment.status.slice(1)}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                <span className="truncate max-w-xs" title={assignment.notes || ''}>
-                                  {assignment.notes || 'No notes'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 bg-gray-50 rounded-lg">
-                      <UserGroupIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-sm text-gray-500">No assignments found for this equipment type</p>
-                      <p className="text-xs text-gray-400 mt-2">
-                        Assignments will appear here when instances of this equipment are assigned to clients.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Specifications Tab */}
               {activeTab === 'specifications' && (
                 <div className="space-y-8">
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                       <DocumentTextIcon className="h-5 w-5 text-red-600 mr-2" />
-                      Technical Specifications
+                      Technical Specifications & Maintenance
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Manufacturer</label>
-                        <p className="text-sm text-gray-900">{equipmentType.manufacturer}</p>
+                        <label className="block text-sm font-medium text-gray-700">Weight</label>
+                        <p className="text-sm text-gray-900">{equipmentType.weight_kg || 'Not specified'} kg</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Dimensions</label>
+                        <p className="text-sm text-gray-900">{equipmentType.dimensions || 'Not specified'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Warranty Period</label>
+                        <p className="text-sm text-gray-900">{equipmentType.warranty_years || 0} years</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Maintenance Interval</label>
+                        <p className="text-sm text-gray-900">{equipmentType.maintenance_interval_months || 12} months</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Instances in Maintenance</label>
+                        <p className="text-sm text-gray-900">{equipmentType.maintenance_instances || 0}</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Default Lifespan</label>
                         <p className="text-sm text-gray-900">{equipmentType.default_lifespan_years} years</p>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Maintenance Interval</label>
-                        <p className="text-sm text-gray-900">{equipmentType.maintenance_interval_months} months</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Warranty Period</label>
-                        <p className="text-sm text-gray-900">{equipmentType.warranty_period_months} months</p>
-                      </div>
+                      
+                      {equipmentType.specifications && Object.keys(equipmentType.specifications).length > 0 && (
+                        <div className="md:col-span-3">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Additional Specifications</label>
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <pre className="text-sm text-gray-900">{JSON.stringify(equipmentType.specifications, null, 2)}</pre>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Maintenance Tab */}
-              {activeTab === 'maintenance' && (
-                <div className="space-y-8">
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                      <WrenchScrewdriverIcon className="h-5 w-5 text-red-600 mr-2" />
-                      Maintenance Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Standard Maintenance Interval</label>
-                        <p className="text-sm text-gray-900">{equipmentType.maintenance_interval_months} months</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Total Instances Requiring Maintenance</label>
-                        <p className="text-sm text-gray-900">{equipmentType.maintenance_count || 0}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+
             </div>
           </div>
         </div>
@@ -738,6 +928,18 @@ export default function EquipmentDetailsPage() {
             equipmentName={equipmentType.equipment_name}
           />
         )}
+
+        {/* Remove Assignment Confirmation Modal */}
+        <ConfirmModal
+          isOpen={removeAssignmentModal.isOpen}
+          onCancel={() => setRemoveAssignmentModal({ isOpen: false, equipmentId: null, equipmentName: '' })}
+          onConfirm={handleRemoveAssignment}
+          title="Remove Equipment Assignment"
+          message={`Are you sure you want to remove the assignment for "${removeAssignmentModal.equipmentName}"? This equipment will become available for reassignment.`}
+          confirmText="Remove Assignment"
+          cancelText="Cancel"
+          type="danger"
+        />
       </DashboardLayout>
     </RequireRole>
   );
