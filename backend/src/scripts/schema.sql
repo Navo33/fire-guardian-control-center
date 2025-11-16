@@ -212,6 +212,7 @@ CREATE INDEX idx_vendor_specialization_vendor_id ON public.vendor_specialization
 CREATE SEQUENCE IF NOT EXISTS equipment_id_seq;
 CREATE TABLE public.equipment (
     id int4 NOT NULL DEFAULT nextval('equipment_id_seq'::regclass),
+    vendor_id int4 NOT NULL,
     equipment_code varchar(100),
     equipment_name varchar(300) NOT NULL,
     description text,
@@ -226,6 +227,7 @@ CREATE TABLE public.equipment (
     created_at timestamptz DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamptz,
+    CONSTRAINT equipment_vendor_id_fkey FOREIGN KEY (vendor_id) REFERENCES public.vendors(id) ON DELETE CASCADE,
     PRIMARY KEY (id)
 );
 CREATE UNIQUE INDEX equipment_equipment_code_key ON public.equipment USING btree (equipment_code);
@@ -233,6 +235,7 @@ CREATE INDEX idx_equipment_code ON public.equipment USING btree (equipment_code)
 CREATE INDEX idx_equipment_name ON public.equipment USING btree (equipment_name);
 CREATE INDEX idx_equipment_type ON public.equipment USING btree (equipment_type);
 CREATE INDEX idx_equipment_manufacturer ON public.equipment USING btree (manufacturer);
+CREATE INDEX idx_equipment_vendor_id ON public.equipment USING btree (vendor_id);
 CREATE INDEX idx_equipment_deleted_at ON public.equipment USING btree (deleted_at);
 
 -- Sequence and Table: equipment_instance
