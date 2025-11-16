@@ -72,6 +72,22 @@ export const authenticateToken = async (
 
     // Add user info to request
     req.user = decoded;
+    
+    // If user is a vendor but doesn't have vendorId in token (legacy tokens), fetch it
+    if (decoded.user_type === 'vendor' && !decoded.vendorId) {
+      try {
+        const { pool } = await import('../config/database');
+        const vendorQuery = 'SELECT id FROM vendors WHERE user_id = $1';
+        const vendorResult = await pool.query(vendorQuery, [decoded.userId]);
+        if (vendorResult.rows.length > 0) {
+          req.user.vendorId = vendorResult.rows[0].id;
+        }
+      } catch (error) {
+        console.error('Error fetching vendor_id in auth middleware:', error);
+        // Continue without vendor_id - will be handled by authorization middleware
+      }
+    }
+    
     if (req.url.includes('bulk')) {
       console.error('✅ AUTH SUCCESS - User authenticated:', decoded.userId);
     }

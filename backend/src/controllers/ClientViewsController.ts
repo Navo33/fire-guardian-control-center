@@ -357,6 +357,84 @@ export class ClientViewsController extends BaseController {
   }
 
   /**
+   * Create a new service request/ticket for client
+   */
+  static async createServiceRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const clientId = await ClientViewsController.getClientId(req);
+      if (!clientId) {
+        res.status(404).json({ success: false, message: 'Client not found' });
+        return;
+      }
+
+      const { equipment_serial_number, priority, issue_description } = req.body;
+
+      // Validate required fields
+      if (!equipment_serial_number || !priority || !issue_description) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Equipment, priority, and issue description are required' 
+        });
+        return;
+      }
+
+      // Validate priority
+      if (!['low', 'normal', 'high'].includes(priority)) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Priority must be low, normal, or high' 
+        });
+        return;
+      }
+
+      // Validate issue description length
+      if (issue_description.length < 10 || issue_description.length > 1000) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Issue description must be between 10 and 1000 characters' 
+        });
+        return;
+      }
+
+      // Find equipment instance ID by serial number and verify it belongs to the client
+      const equipmentInstance = await ClientViewsRepository.getEquipmentBySerialNumber(clientId, equipment_serial_number);
+      
+      if (!equipmentInstance) {
+        res.status(404).json({ 
+          success: false, 
+          message: 'Equipment not found or not assigned to your account' 
+        });
+        return;
+      }
+
+      const ticketData = {
+        equipment_instance_id: equipmentInstance.id,
+        priority,
+        issue_description,
+        support_type: 'maintenance' // Client tickets are always maintenance type
+      };
+
+      const result = await ClientViewsRepository.createServiceRequest(clientId, ticketData);
+      
+      if (result.success) {
+        res.status(201).json({ 
+          success: true, 
+          data: result.data,
+          message: 'Service request created successfully' 
+        });
+      } else {
+        res.status(400).json({ 
+          success: false, 
+          message: result.message || 'Failed to create service request' 
+        });
+      }
+    } catch (error) {
+      console.error('Error creating service request:', error);
+      res.status(500).json({ success: false, message: 'Failed to create service request' });
+    }
+  }
+
+  /**
    * Get service request details for a client
    */
   static async getServiceRequestDetails(req: AuthenticatedRequest, res: Response): Promise<void> {

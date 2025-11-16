@@ -8,6 +8,7 @@ import { SystemSettingsRepository } from '../models/SystemSettingsRepository';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { AuthenticatedRequest } from '../types/api';
 import { LoginRequest, CreateUserRequest } from '../types';
+import { pool } from '../config/database';
 
 /**
  * Authentication Controller
@@ -82,12 +83,28 @@ export class AuthController extends BaseController {
         30
       );
       
+      // Get vendor_id if user is a vendor
+      let vendorId = null;
+      if (user.user_type === 'vendor') {
+        try {
+          const vendorQuery = 'SELECT id FROM vendors WHERE user_id = $1';
+          const vendorResult = await pool.query(vendorQuery, [user.id]);
+          if (vendorResult.rows.length > 0) {
+            vendorId = vendorResult.rows[0].id;
+          }
+        } catch (error) {
+          console.error('Error fetching vendor_id:', error);
+          // Continue without vendor_id - will be handled by authorization middleware
+        }
+      }
+      
       const token = jwt.sign(
         { 
           userId: user.id, 
           email: user.email, 
           user_type: user.user_type,
-          role_id: user.role_id
+          role_id: user.role_id,
+          vendorId: vendorId
         },
         jwtSecret,
         { expiresIn: `${sessionTimeoutMinutes}m` }

@@ -226,15 +226,15 @@ INSERT INTO public.vendor_specialization (vendor_id, specialization_id, certific
 -- 11. equipment (catalog)
 -- --------------------------------------------------------------
 INSERT INTO public.equipment (
-  id, equipment_code, equipment_name, description, equipment_type,
+  id, vendor_id, equipment_code, equipment_name, description, equipment_type,
   manufacturer, model, specifications, weight_kg, dimensions,
   warranty_years, default_lifespan_years, created_at, updated_at
 ) VALUES
-  (1,'EXT-ABC-10','Fire Extinguisher ABC 10kg','CO2 + Dry Powder','extinguisher','SafeFire','ABC-10','{"pressure":"150 psi"}',10.5,'30x20x60 cm',2,7,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (2,'LGT-EM-01','Emergency Light Standard','Battery backup 3h','lighting','ProGuard','EM-01','{"lumens":300}',2.1,'15x10x8 cm',1,5,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (3,'ALM-FAS-01','Fire Alarm System','Smoke + Heat','alarm','FireShield','FAS-01','{"zones":8}',4.8,'40x30x12 cm',3,10,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (4,'DR-FD-A','Fire Door Type A','2-hour rated','door','SafeHomes','FD-A','{"material":"steel"}',85.0,'210x90 cm',5,20,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (5,'KIT-TRN-B','Training Kit Basic','Manual + Dummy Extinguisher','training','SafeHomes','TRN-B','{}',12.0,'50x40x30 cm',0,5,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30');
+  (1,1,'EXT-ABC-10','Fire Extinguisher ABC 10kg','CO2 + Dry Powder','extinguisher','SafeFire','ABC-10','{"pressure":"150 psi"}',10.5,'30x20x60 cm',2,7,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
+  (2,2,'LGT-EM-01','Emergency Light Standard','Battery backup 3h','lighting','ProGuard','EM-01','{"lumens":300}',2.1,'15x10x8 cm',1,5,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
+  (3,3,'ALM-FAS-01','Fire Alarm System','Smoke + Heat','alarm','FireShield','FAS-01','{"zones":8}',4.8,'40x30x12 cm',3,10,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
+  (4,4,'DR-FD-A','Fire Door Type A','2-hour rated','door','SafeHomes','FD-A','{"material":"steel"}',85.0,'210x90 cm',5,20,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
+  (5,5,'KIT-TRN-B','Training Kit Basic','Manual + Dummy Extinguisher','training','SafeHomes','TRN-B','{}',12.0,'50x40x30 cm',0,5,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30');
 
 -- --------------------------------------------------------------
 -- 12. equipment_instance (24 rows – past, present, future)
@@ -338,6 +338,25 @@ INSERT INTO public.password_reset (id, user_id, reset_token, ip_address, user_ag
 
 INSERT INTO public.user_sessions (id, user_id, session_token, ip_address, user_agent, last_activity, expires_at, created_at, is_active) VALUES
   (1,1,'sess-001','::1','Mozilla/5.0','2025-10-25 11:25:00+05:30','2025-10-26 11:25:00+05:30','2025-10-25 11:25:00+05:30',true);
+
+-- ==============================================================
+--  SEQUENCE RESETS - Fix auto-increment after explicit inserts
+-- ==============================================================
+
+-- Reset all sequences to proper values after explicit ID inserts
+SELECT setval('user_id_seq', (SELECT MAX(id) FROM public.user));
+SELECT setval('system_settings_id_seq', (SELECT MAX(id) FROM public.system_settings));
+SELECT setval('role_id_seq', (SELECT MAX(id) FROM public.role));
+SELECT setval('vendor_id_seq', (SELECT MAX(id) FROM public.vendors));
+SELECT setval('client_id_seq', (SELECT MAX(id) FROM public.clients));
+SELECT setval('specialization_id_seq', (SELECT MAX(id) FROM public.specialization));
+SELECT setval('equipment_id_seq', (SELECT MAX(id) FROM public.equipment));
+SELECT setval('equipment_instance_id_seq', (SELECT MAX(id) FROM public.equipment_instance));
+SELECT setval('equipment_assignment_id_seq', (SELECT MAX(id) FROM public.equipment_assignment));
+SELECT setval('maintenance_ticket_id_seq', (SELECT MAX(id) FROM public.maintenance_ticket));
+SELECT setval('notification_id_seq', (SELECT MAX(id) FROM public.notification));
+SELECT setval('audit_log_id_seq', (SELECT MAX(id) FROM public.audit_log));
+SELECT setval('user_sessions_id_seq', (SELECT MAX(id) FROM public.user_sessions));
 
 -- ==============================================================
 --  END OF SEED FILE

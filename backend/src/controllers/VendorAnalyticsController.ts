@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { VendorAnalyticsRepository } from '../models/VendorAnalyticsRepository';
 import { ApiResponseUtil } from '../utils/ApiResponse';
+import { AuthenticatedRequest } from '../types/api';
+import { DashboardRepository } from '../models/DashboardRepository';
 
 export class VendorAnalyticsController extends BaseController {
   private vendorAnalyticsRepo: VendorAnalyticsRepository;
@@ -12,24 +14,35 @@ export class VendorAnalyticsController extends BaseController {
   }
 
   /**
+   * Get vendor ID from authenticated user
+   */
+  private async getVendorId(req: AuthenticatedRequest): Promise<number | null> {
+    if (!req.user?.userId) {
+      return null;
+    }
+    const vendorId = await DashboardRepository.getVendorIdFromUserId(req.user.userId);
+    return vendorId;
+  }
+
+  /**
    * GET /api/vendor/overview
    * Get vendor overview KPIs including active clients, total equipment, tickets, and compliance
    */
-  async getVendorOverview(req: Request, res: Response): Promise<void> {
+  async getVendorOverview(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id, start, end, client_id, equipment_type } = req.query;
-
-      // Validate required parameters
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
+
+      const { start, end, client_id, equipment_type } = req.query;
 
       // Set default date range if not provided (last 90 days)
       const endDate = end ? String(end) : new Date().toISOString().split('T')[0];
       const startDate = start ? String(start) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       const overview = await this.vendorAnalyticsRepo.getVendorOverview(
-        Number(vendor_id),
+        vendorId,
         startDate,
         endDate,
         client_id ? Number(client_id) : undefined,
@@ -47,15 +60,14 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/compliance/by-client
    * Get compliance data broken down by client for stacked bar chart
    */
-  async getComplianceByClient(req: Request, res: Response): Promise<void> {
+  async getComplianceByClient(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      const compliance = await this.vendorAnalyticsRepo.getComplianceByClient(Number(vendor_id));
+      const compliance = await this.vendorAnalyticsRepo.getComplianceByClient(vendorId);
       ApiResponseUtil.success(res, compliance);
     } catch (error) {
       console.error('Error fetching compliance by client:', error);
@@ -67,20 +79,21 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/compliance/trend
    * Get compliance trend over time for line chart
    */
-  async getComplianceTrend(req: Request, res: Response): Promise<void> {
+  async getComplianceTrend(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id, start, end, client_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
+
+      const { start, end, client_id } = req.query;
 
       // Set default date range if not provided (last 12 months)
       const endDate = end ? String(end) : new Date().toISOString().split('T')[0];
       const startDate = start ? String(start) : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       const trend = await this.vendorAnalyticsRepo.getComplianceTrend(
-        Number(vendor_id),
+        vendorId,
         startDate,
         endDate,
         client_id ? Number(client_id) : undefined
@@ -97,20 +110,21 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/tickets/trend
    * Get ticket trends over time for line chart
    */
-  async getTicketTrends(req: Request, res: Response): Promise<void> {
+  async getTicketTrends(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id, start, end, client_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
+
+      const { start, end, client_id } = req.query;
 
       // Set default date range if not provided (last 12 months)
       const endDate = end ? String(end) : new Date().toISOString().split('T')[0];
       const startDate = start ? String(start) : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       const trends = await this.vendorAnalyticsRepo.getTicketTrends(
-        Number(vendor_id),
+        vendorId,
         startDate,
         endDate,
         client_id ? Number(client_id) : undefined
@@ -127,16 +141,15 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/tickets/by-type
    * Get tickets broken down by support type for pie chart
    */
-  async getTicketsByType(req: Request, res: Response): Promise<void> {
+  async getTicketsByType(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      const ticketTypes = await this.vendorAnalyticsRepo.getTicketsByType(Number(vendor_id));
-      ApiResponseUtil.success(res, ticketTypes);
+      const ticketsByType = await this.vendorAnalyticsRepo.getTicketsByType(vendorId);
+      ApiResponseUtil.success(res, ticketsByType);
     } catch (error) {
       console.error('Error fetching tickets by type:', error);
       return ApiResponseUtil.internalError(res, 'Failed to fetch tickets by type');
@@ -147,15 +160,14 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/clients/ranking
    * Get client performance rankings (top 10 clients)
    */
-  async getClientRankings(req: Request, res: Response): Promise<void> {
+  async getClientRankings(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      const rankings = await this.vendorAnalyticsRepo.getClientRankings(Number(vendor_id));
+      const rankings = await this.vendorAnalyticsRepo.getClientRankings(vendorId);
       ApiResponseUtil.success(res, rankings);
     } catch (error) {
       console.error('Error fetching client rankings:', error);
@@ -167,15 +179,14 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/equipment/categories
    * Get equipment breakdown by categories for pie chart
    */
-  async getEquipmentCategories(req: Request, res: Response): Promise<void> {
+  async getEquipmentCategories(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      const categories = await this.vendorAnalyticsRepo.getEquipmentCategories(Number(vendor_id));
+      const categories = await this.vendorAnalyticsRepo.getEquipmentCategories(vendorId);
       ApiResponseUtil.success(res, categories);
     } catch (error) {
       console.error('Error fetching equipment categories:', error);
@@ -187,15 +198,14 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/equipment/high-risk
    * Get high-risk equipment that needs attention
    */
-  async getHighRiskEquipment(req: Request, res: Response): Promise<void> {
+  async getHighRiskEquipment(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      const equipment = await this.vendorAnalyticsRepo.getHighRiskEquipment(Number(vendor_id));
+      const equipment = await this.vendorAnalyticsRepo.getHighRiskEquipment(vendorId);
       ApiResponseUtil.success(res, equipment);
     } catch (error) {
       console.error('Error fetching high-risk equipment:', error);
@@ -207,15 +217,14 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/users/technicians
    * Get technician performance metrics
    */
-  async getTechnicianPerformance(req: Request, res: Response): Promise<void> {
+  async getTechnicianPerformance(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      const performance = await this.vendorAnalyticsRepo.getTechnicianPerformance(Number(vendor_id));
+      const performance = await this.vendorAnalyticsRepo.getTechnicianPerformance(vendorId);
       ApiResponseUtil.success(res, performance);
     } catch (error) {
       console.error('Error fetching technician performance:', error);
@@ -227,20 +236,21 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/users/logins
    * Get user login trends for vendor staff
    */
-  async getUserLoginTrends(req: Request, res: Response): Promise<void> {
+  async getUserLoginTrends(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id, start, end } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
+
+      const { start, end } = req.query;
 
       // Set default date range if not provided (last 12 weeks)
       const endDate = end ? String(end) : new Date().toISOString().split('T')[0];
       const startDate = start ? String(start) : new Date(Date.now() - 84 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       const trends = await this.vendorAnalyticsRepo.getUserLoginTrends(
-        Number(vendor_id),
+        vendorId,
         startDate,
         endDate
       );
@@ -256,15 +266,14 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/users/resets
    * Get password reset reasons for pie chart
    */
-  async getPasswordResets(req: Request, res: Response): Promise<void> {
+  async getPasswordResets(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      const resets = await this.vendorAnalyticsRepo.getPasswordResets(Number(vendor_id));
+      const resets = await this.vendorAnalyticsRepo.getPasswordResets(vendorId);
       ApiResponseUtil.success(res, resets);
     } catch (error) {
       console.error('Error fetching password resets:', error);
@@ -276,15 +285,14 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/audit/recent
    * Get recent vendor audit events
    */
-  async getRecentVendorAudits(req: Request, res: Response): Promise<void> {
+  async getRecentVendorAudits(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      const audits = await this.vendorAnalyticsRepo.getRecentVendorAudits(Number(vendor_id));
+      const audits = await this.vendorAnalyticsRepo.getRecentVendorAudits(vendorId);
       ApiResponseUtil.success(res, audits);
     } catch (error) {
       console.error('Error fetching recent vendor audits:', error);
@@ -296,12 +304,11 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/clients/dropdown
    * Get list of clients for dropdown filter
    */
-  async getClientsForDropdown(req: Request, res: Response): Promise<void> {
+  async getClientsForDropdown(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
       // Simple query to get client list for dropdown
@@ -313,7 +320,7 @@ export class VendorAnalyticsController extends BaseController {
         ORDER BY company_name
       `;
       
-      const result = await this.vendorAnalyticsRepo['pool'].query(query, [Number(vendor_id)]);
+      const result = await this.vendorAnalyticsRepo['pool'].query(query, [vendorId]);
       ApiResponseUtil.success(res, result.rows);
     } catch (error) {
       console.error('Error fetching clients for dropdown:', error);
@@ -325,12 +332,11 @@ export class VendorAnalyticsController extends BaseController {
    * GET /api/vendor/equipment/types
    * Get list of equipment types for dropdown filter
    */
-  async getEquipmentTypesForDropdown(req: Request, res: Response): Promise<void> {
+  async getEquipmentTypesForDropdown(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { vendor_id } = req.query;
-
-      if (!vendor_id) {
-        return ApiResponseUtil.badRequest(res, 'vendor_id is required');
+      const vendorId = await this.getVendorId(req);
+      if (!vendorId) {
+        return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
       // Simple query to get equipment types for dropdown
@@ -343,7 +349,7 @@ export class VendorAnalyticsController extends BaseController {
         ORDER BY e.equipment_type
       `;
       
-      const result = await this.vendorAnalyticsRepo['pool'].query(query, [Number(vendor_id)]);
+      const result = await this.vendorAnalyticsRepo['pool'].query(query, [vendorId]);
       ApiResponseUtil.success(res, result.rows);
     } catch (error) {
       console.error('Error fetching equipment types for dropdown:', error);

@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { BaseController } from './BaseController';
-import { EquipmentRepository, EquipmentFilters, CreateEquipmentInstanceData, UpdateEquipmentInstanceData, AssignEquipmentData, BulkAssignEquipmentData, CreateEquipmentTypeData } from '../models/EquipmentRepository';
+import { EquipmentRepository, EquipmentFilters, CreateEquipmentInstanceData, UpdateEquipmentInstanceData, AssignEquipmentData, BulkAssignEquipmentData, CreateEquipmentTypeData, UpdateEquipmentTypeData } from '../models/EquipmentRepository';
 import { DashboardRepository } from '../models/DashboardRepository';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { DebugLogger } from '../utils/DebugLogger';
@@ -873,6 +873,19 @@ export class EquipmentController extends BaseController {
         return ApiResponseUtil.forbidden(res, 'Access denied. Vendor or Admin access required.');
       }
 
+      // Get vendor ID from user ID (only for vendor users)
+      let vendorId: number;
+      if (userType === 'vendor') {
+        const vendorIdFromUser = await DashboardRepository.getVendorIdFromUserId(userId);
+        if (!vendorIdFromUser) {
+          return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+        }
+        vendorId = vendorIdFromUser;
+      } else {
+        // For admin users, vendor_id should be provided in request body or default to some logic
+        return ApiResponseUtil.badRequest(res, 'Admin equipment type creation not yet implemented');
+      }
+
       const {
         equipment_code,
         equipment_name,
@@ -888,11 +901,12 @@ export class EquipmentController extends BaseController {
       } = req.body;
 
       // Validate required fields
-      if (!equipment_code || !equipment_name || !equipment_type || !manufacturer || !model) {
-        return ApiResponseUtil.badRequest(res, 'Missing required fields: equipment_code, equipment_name, equipment_type, manufacturer, model');
+      if (!equipment_name || !equipment_type || !manufacturer || !model) {
+        return ApiResponseUtil.badRequest(res, 'Missing required fields: equipment_name, equipment_type, manufacturer, model');
       }
 
       const equipmentTypeData: CreateEquipmentTypeData = {
+        vendor_id: vendorId,
         equipment_code,
         equipment_name,
         description,
@@ -935,6 +949,97 @@ export class EquipmentController extends BaseController {
           return ApiResponseUtil.badRequest(res, 'Equipment code already exists');
         }
       }
+
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * PUT /api/equipment/types/:id
+   * Update equipment type details (restricted fields)
+   */
+  updateEquipmentType = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+    if (!this.requireRole(req, res, ['vendor'])) return;
+
+    const startTime = Date.now();
+    const equipmentTypeId = parseInt(req.params.id);
+    
+    if (!equipmentTypeId || isNaN(equipmentTypeId)) {
+      return ApiResponseUtil.badRequest(res, 'Invalid equipment type ID');
+    }
+
+    try {
+      const {
+        equipment_name,
+        manufacturer,
+        model,
+        description,
+        warranty_years,
+        weight_kg,
+        dimensions,
+        default_lifespan_years,
+        specifications
+      } = req.body;
+
+      // Validate required fields
+      if (!equipment_name?.trim()) {
+        return ApiResponseUtil.badRequest(res, 'Equipment name is required');
+      }
+
+      // Get user's vendor ID
+      const vendorId = req.user!.vendorId;
+      if (!vendorId) {
+        return ApiResponseUtil.forbidden(res, 'Vendor access required');
+      }
+
+      // Verify the equipment type exists and belongs to the vendor
+      const existingEquipmentType = await EquipmentRepository.getEquipmentTypeDetails(equipmentTypeId, vendorId);
+      if (!existingEquipmentType) {
+        return ApiResponseUtil.notFound(res, 'Equipment type not found');
+      }
+
+      // Prepare update data (only allowed fields)
+      const updateData = {
+        equipment_name: equipment_name.trim(),
+        manufacturer: manufacturer?.trim() || null,
+        model: model?.trim() || null,
+        description: description?.trim() || null,
+        warranty_years: warranty_years ? parseInt(warranty_years) : null,
+        weight_kg: weight_kg ? parseFloat(weight_kg) : null,
+        dimensions: dimensions?.trim() || null,
+        default_lifespan_years: default_lifespan_years ? parseInt(default_lifespan_years) : null,
+        specifications: specifications || null
+      };
+
+      // Log the update action
+      this.logAction('EQUIPMENT_TYPE_UPDATE', req.user!.userId, { 
+        equipmentTypeId,
+        vendorId,
+        updateData
+      });
+
+      // Update the equipment type
+      const updatedEquipmentType = await EquipmentRepository.updateEquipmentType(equipmentTypeId, vendorId, updateData);
+
+      DebugLogger.performance('Equipment type update', startTime, { 
+        equipmentTypeId,
+        vendorId
+      });
+      
+      ApiResponseUtil.success(res, updatedEquipmentType, 'Equipment type updated successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error updating equipment type', error, { 
+        userId: req.user?.userId,
+        equipmentTypeId,
+        body: req.body 
+      });
+      
+      this.logAction('EQUIPMENT_TYPE_UPDATE_ERROR', req.user?.userId, { 
+        equipmentTypeId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
 
       return ApiResponseUtil.internalError(res);
     }

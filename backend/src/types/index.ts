@@ -185,6 +185,7 @@ export interface JwtPayload {
   email: string;
   user_type: string;
   role_id?: number;
+  vendorId?: number;
   iat?: number;
   exp?: number;
 }

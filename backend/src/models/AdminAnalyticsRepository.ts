@@ -302,7 +302,8 @@ export class AdminAnalyticsRepository {
       FROM public.equipment e
       LEFT JOIN public.equipment_instance ei ON e.id = ei.equipment_id AND ei.deleted_at IS NULL
       WHERE e.deleted_at IS NULL
-        AND ($1::int IS NULL OR ei.vendor_id = $1::int)
+        AND ($1::int IS NULL OR e.vendor_id = $1::int)
+        AND ($1::int IS NULL OR ei.vendor_id = $1::int OR ei.vendor_id IS NULL)
       GROUP BY e.equipment_type
       ORDER BY instance_count DESC;
     `;
@@ -447,7 +448,9 @@ export class AdminAnalyticsRepository {
           ROUND(COUNT(*) FILTER (WHERE ei.compliance_status = 'compliant')::numeric / COUNT(ei.id) * 100, 1) AS compliance_rate
         FROM public.equipment e
         LEFT JOIN public.equipment_instance ei ON e.id = ei.equipment_id AND ei.deleted_at IS NULL
-        WHERE e.deleted_at IS NULL AND ($3::int IS NULL OR ei.vendor_id = $3::int)
+        WHERE e.deleted_at IS NULL 
+          AND ($3::int IS NULL OR e.vendor_id = $3::int)
+          AND ($3::int IS NULL OR ei.vendor_id = $3::int OR ei.vendor_id IS NULL)
         GROUP BY e.equipment_type
         ORDER BY count DESC
       ),
