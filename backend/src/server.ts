@@ -31,6 +31,7 @@ import maintenanceTicketRoutes from './routes/maintenanceTickets';
 import reportsRoutes from './routes/reports';
 import clientViewsRoutes from './routes/clientViews';
 import clientAnalyticsRoutes from './routes/clientAnalytics';
+import notificationRoutes from './routes/notifications';
 
 // Load environment variables
 dotenv.config();
@@ -138,7 +139,7 @@ const corsOptions = {
   },
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 
@@ -204,6 +205,7 @@ app.use('/api/vendor/clients', securityMiddleware, clientRoutes);
 app.use('/api/vendor/tickets', securityMiddleware, maintenanceTicketRoutes);
 app.use('/api/reports', securityMiddleware, reportsRoutes);
 app.use('/api/client-views', securityMiddleware, clientViewsRoutes);
+app.use('/api/notifications', securityMiddleware, notificationRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

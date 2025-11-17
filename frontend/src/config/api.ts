@@ -192,6 +192,15 @@ export const API_ENDPOINTS = {
     MAINTENANCE_REPORT: `${API_BASE_URL}/reports/maintenance-report`,
   },
 
+  // Notifications
+  NOTIFICATIONS: {
+    LIST: `${API_BASE_URL}/notifications`,
+    KPIS: `${API_BASE_URL}/notifications/kpis`,
+    MARK_READ: (id: string | number) => `${API_BASE_URL}/notifications/${id}/read`,
+    MARK_ALL_READ: `${API_BASE_URL}/notifications/mark-all-read`,
+    ARCHIVE: (id: string | number) => `${API_BASE_URL}/notifications/${id}/archive`,
+  },
+
   // Client Views (for client users)
   CLIENT: {
     DASHBOARD: {
