@@ -5,6 +5,7 @@ import { XMarkIcon, CubeIcon, InformationCircleIcon, CalendarIcon, MapPinIcon } 
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import DebugLogger from '@/utils/DebugLogger';
 import { useToast } from '@/components/providers/ToastProvider';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 interface CreateInstanceModalProps {
   isOpen: boolean;
@@ -175,8 +176,8 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-100">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <CubeIcon className="h-6 w-6 text-blue-600" />
+              <div className="p-2 bg-red-50 rounded-xl">
+                <CubeIcon className="h-6 w-6 text-red-600" />
               </div>
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">Create Equipment Instance</h2>
@@ -187,22 +188,27 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
               onClick={onClose}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
-              <XMarkIcon className="h-5 w-5 text-gray-500" />
+              <XMarkIcon className="h-6 w-6 text-gray-500" />
             </button>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="p-6">
-            <div className="space-y-6">
-              {/* Basic Information */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
+          {/* Form Content */}
+          <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+            <form onSubmit={handleSubmit} className="p-6 space-y-8">
+              
+              {/* Basic Information Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <CubeIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+                </div>
+                
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Serial Number */}
                   <div>
                     <label htmlFor="serial_number" className="block text-sm font-medium text-gray-700 mb-2">
-                      Serial Number <span className="text-red-500">*</span>
+                      Serial Number *
                     </label>
                     <input
                       type="text"
@@ -210,7 +216,7 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
                       name="serial_number"
                       value={formData.serial_number}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="input-field"
                       placeholder="Enter serial number"
                       required
                     />
@@ -219,7 +225,6 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
                   {/* Location */}
                   <div>
                     <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-2">
-                      <MapPinIcon className="h-4 w-4 inline mr-1" />
                       Location
                     </label>
                     <input
@@ -228,26 +233,25 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
                       name="location"
                       value={formData.location}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="input-field"
                       placeholder="e.g., Warehouse A1"
                     />
                   </div>
-
                 </div>
               </div>
 
-              {/* Dates */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">
-                  <CalendarIcon className="h-5 w-5 inline mr-2" />
-                  Date Information
-                </h3>
+              {/* Date Information Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <CalendarIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">Date Information</h3>
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Purchase Date */}
                   <div>
                     <label htmlFor="purchase_date" className="block text-sm font-medium text-gray-700 mb-2">
-                      Purchase Date <span className="text-red-500">*</span>
+                      Purchase Date *
                     </label>
                     <input
                       type="date"
@@ -255,7 +259,7 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
                       name="purchase_date"
                       value={formData.purchase_date}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="input-field"
                       required
                     />
                   </div>
@@ -271,15 +275,18 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
                       name="warranty_expiry"
                       value={formData.warranty_expiry}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="input-field"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Maintenance */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Maintenance Settings</h3>
+              {/* Maintenance Settings Section */}
+              <div className="space-y-6">
+                <div className="flex items-center space-x-2">
+                  <InformationCircleIcon className="h-5 w-5 text-red-600" />
+                  <h3 className="text-lg font-medium text-gray-900">Maintenance Settings</h3>
+                </div>
                 
                 <div>
                   <label htmlFor="maintenance_interval_days" className="block text-sm font-medium text-gray-700 mb-2">
@@ -293,7 +300,7 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
                     onChange={handleInputChange}
                     min="1"
                     max="3650"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="input-field"
                     placeholder="365"
                   />
                   <p className="mt-1 text-sm text-gray-500">
@@ -303,7 +310,7 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
               </div>
 
               {/* Info Notice */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <div className="flex">
                   <InformationCircleIcon className="h-5 w-5 text-blue-600 mt-0.5" />
                   <div className="ml-3">
@@ -313,37 +320,34 @@ const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Actions */}
-            <div className="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-lg transition-colors flex items-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Creating...</span>
-                  </>
-                ) : (
-                  <>
-                    <CubeIcon className="h-4 w-4" />
-                    <span>Create Instance</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+              {/* Form Actions */}
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <span className="flex items-center space-x-2">
+                      <LoadingSpinner size="sm" />
+                      <span>Creating...</span>
+                    </span>
+                  ) : (
+                    'Create Instance'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>

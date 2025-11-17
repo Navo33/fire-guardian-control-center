@@ -38,7 +38,7 @@ export default function LoginPage() {
         toast.warning('Your session has expired. Please log in again.');
       }
     }
-  }, [toast]);
+  }, []); // Only run once on mount
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);

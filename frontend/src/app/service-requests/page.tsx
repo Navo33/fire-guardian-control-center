@@ -9,6 +9,7 @@ import RequireRole from '@/components/auth/RequireRole';
 
 import { useToast } from '@/components/providers/ToastProvider';
 import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
+import CreateClientTicketModal from '@/components/modals/CreateClientTicketModal';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
@@ -85,7 +86,8 @@ export default function ServiceRequestsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   
-  // No modal states needed for read-only client view
+  // Modal states
+  const [isCreateTicketModalOpen, setIsCreateTicketModalOpen] = useState(false);
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -159,6 +161,11 @@ export default function ServiceRequestsPage() {
     loadData();
   }, [fetchTickets]);
 
+  // Handle ticket creation success
+  const handleTicketCreated = useCallback(() => {
+    fetchTickets(); // Refresh the ticket list
+  }, [fetchTickets]);
+
   // Handle ticket click
   const handleTicketClick = (ticketId: number) => {
     router.push(`/service-requests/${ticketId}`);
@@ -225,13 +232,18 @@ export default function ServiceRequestsPage() {
         <DashboardLayout>
           <div className="flex items-center justify-center min-h-64">
             <LoadingSpinner size="lg" />
-          </div>
-        </DashboardLayout>
+        </div>
+        
+        {/* Create Ticket Modal */}
+        <CreateClientTicketModal
+          isOpen={isCreateTicketModalOpen}
+          onClose={() => setIsCreateTicketModalOpen(false)}
+          onSuccess={handleTicketCreated}
+        />
+      </DashboardLayout>
       </RequireRole>
     );
-  }
-
-  if (error) {
+  }  if (error) {
     return (
       <RequireRole allowedRoles={['client']}>
         <DashboardLayout>
@@ -258,7 +270,16 @@ export default function ServiceRequestsPage() {
               </p>
             </div>
           </div>
-
+          
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setIsCreateTicketModalOpen(true)}
+              className="btn-primary flex items-center space-x-2"
+            >
+              <ClipboardDocumentListIcon className="w-4 h-4" />
+              <span>Create Service Request</span>
+            </button>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -462,7 +483,13 @@ export default function ServiceRequestsPage() {
         </div>
         </div>
       </div>
-
+        
+        {/* Create Ticket Modal */}
+        <CreateClientTicketModal
+          isOpen={isCreateTicketModalOpen}
+          onClose={() => setIsCreateTicketModalOpen(false)}
+          onSuccess={handleTicketCreated}
+        />
 
     </DashboardLayout>
     </RequireRole>

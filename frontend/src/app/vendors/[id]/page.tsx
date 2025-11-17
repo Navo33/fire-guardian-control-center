@@ -27,6 +27,7 @@ import {
   ShieldCheckIcon,
   DocumentTextIcon
 } from '@heroicons/react/24/outline';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 
 interface VendorDetails {
   // User details
@@ -71,6 +72,7 @@ interface VendorDetails {
   // Counts and metrics
   equipment_count: number;
   assignments_count: number;
+  clients_count?: number;
   
   // Computed fields for display
   name?: string;
@@ -112,24 +114,47 @@ function VendorDetailsContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletionCheck, setDeletionCheck] = useState<{
+    canDelete: boolean;
+    clientsCount: number;
+    equipmentCount: number;
+    activeTicketsCount: number;
+    assignmentsCount: number;
+  } | null>(null);
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: '',
-    email: '',
     company_name: '',
     business_type: '',
     license_number: '',
-    contact_person_name: '',
-    contact_title: '',
-    primary_email: '',
     primary_phone: '',
-    secondary_phone: '',
     street_address: '',
     city: '',
     state: '',
     zip_code: '',
     country: 'Sri Lanka'
   });
+
+  // Dropdown options (matching AddVendorModal)
+  const businessTypes = [
+    'Private Limited',
+    'LLC', 
+    'Partnership',
+    'Sole Proprietorship'
+  ];
+
+  const sriLankanProvinces = [
+    'Western Province',
+    'Central Province',
+    'Southern Province',
+    'Northern Province',
+    'Eastern Province',
+    'North Western Province',
+    'North Central Province',
+    'Uva Province',
+    'Sabaragamuwa Province'
+  ];
 
   useEffect(() => {
     const fetchVendorData = async () => {
@@ -170,19 +195,14 @@ function VendorDetailsContent() {
           
           setVendor(transformedVendor);
           
-          // Populate edit form
+          // Populate edit form (only fields that exist in database schema)
           setEditForm({
             first_name: vendorData.first_name || '',
             last_name: vendorData.last_name || '',
-            email: vendorData.email || '',
             company_name: vendorData.company?.company_name || '',
             business_type: vendorData.company?.business_type || '',
             license_number: vendorData.company?.license_number || '',
-            contact_person_name: vendorData.contact?.contact_person_name || '',
-            contact_title: vendorData.contact?.contact_title || '',
-            primary_email: vendorData.contact?.primary_email || '',
-            primary_phone: vendorData.contact?.primary_phone || '',
-            secondary_phone: vendorData.contact?.secondary_phone || '',
+            primary_phone: vendorData.contact?.primary_phone || vendorData.phone || '',
             street_address: vendorData.address?.street_address || '',
             city: vendorData.address?.city || '',
             state: vendorData.address?.state || '',
@@ -296,20 +316,15 @@ function VendorDetailsContent() {
 
   const handleCancelEdit = () => {
     setIsEditing(false);
-    // Reset form to original values
+    // Reset form to original values (only fields that exist in database)
     if (vendor) {
       setEditForm({
         first_name: vendor.first_name || '',
         last_name: vendor.last_name || '',
-        email: vendor.email || '',
         company_name: vendor.company?.company_name || '',
         business_type: vendor.company?.business_type || '',
         license_number: vendor.company?.license_number || '',
-        contact_person_name: vendor.contact?.contact_person_name || '',
-        contact_title: vendor.contact?.contact_title || '',
-        primary_email: vendor.contact?.primary_email || '',
-        primary_phone: vendor.contact?.primary_phone || '',
-        secondary_phone: vendor.contact?.secondary_phone || '',
+        primary_phone: vendor.contact?.primary_phone || vendor.phone || '',
         street_address: vendor.address?.street_address || '',
         city: vendor.address?.city || '',
         state: vendor.address?.state || '',
@@ -319,11 +334,35 @@ function VendorDetailsContent() {
     }
   };
 
-  const handleDeleteVendor = async () => {
-    if (!confirm('Are you sure you want to delete this vendor? This action cannot be undone.')) {
-      return;
-    }
+  const checkVendorDeletion = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
 
+      const headers = getAuthHeaders();
+      const url = `${API_ENDPOINTS.VENDORS.BY_ID(vendorId)}/deletion-check`;
+
+      logApiCall('GET', url);
+      const response = await fetch(url, { headers });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to check vendor deletion status');
+      }
+
+      if (result.success && result.data) {
+        setDeletionCheck(result.data);
+        setShowDeleteConfirm(true);
+      }
+    } catch (err) {
+      console.error('Error checking vendor deletion:', err);
+      alert(err instanceof Error ? err.message : 'Failed to check vendor deletion status');
+    }
+  };
+
+  const handleDeleteVendor = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -345,10 +384,43 @@ function VendorDetailsContent() {
         throw new Error(result.message || 'Failed to delete vendor');
       }
 
+      setShowDeleteConfirm(false);
       router.push('/vendors');
     } catch (err) {
       console.error('Error deleting vendor:', err);
       alert(err instanceof Error ? err.message : 'Failed to delete vendor');
+    }
+  };
+
+  const getDeleteModalContent = () => {
+    if (!deletionCheck) return { title: '', message: '', type: 'danger' as const };
+
+    if (deletionCheck.canDelete) {
+      return {
+        title: 'Delete Vendor',
+        message: `Are you sure you want to delete "${vendor?.name}"? This action cannot be undone.`,
+        type: 'danger' as const
+      };
+    } else {
+      const issues = [];
+      if (deletionCheck.clientsCount > 0) {
+        issues.push(`${deletionCheck.clientsCount} client${deletionCheck.clientsCount > 1 ? 's' : ''}`);
+      }
+      if (deletionCheck.equipmentCount > 0) {
+        issues.push(`${deletionCheck.equipmentCount} equipment instance${deletionCheck.equipmentCount > 1 ? 's' : ''}`);
+      }
+      if (deletionCheck.assignmentsCount > 0) {
+        issues.push(`${deletionCheck.assignmentsCount} active assignment${deletionCheck.assignmentsCount > 1 ? 's' : ''}`);
+      }
+      if (deletionCheck.activeTicketsCount > 0) {
+        issues.push(`${deletionCheck.activeTicketsCount} active ticket${deletionCheck.activeTicketsCount > 1 ? 's' : ''}`);
+      }
+
+      return {
+        title: 'Cannot Delete Vendor',
+        message: `"${vendor?.name}" cannot be deleted because they have ${issues.join(', ')}. Please reassign or remove these items first.`,
+        type: 'alert' as const
+      };
     }
   };
 
@@ -479,7 +551,7 @@ function VendorDetailsContent() {
                   <span>Reset Password</span>
                 </button>
                 <button
-                  onClick={handleDeleteVendor}
+                  onClick={checkVendorDeletion}
                   className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-full hover:bg-red-100 transition-colors"
                 >
                   <TrashIcon className="h-4 w-4" />
@@ -588,7 +660,7 @@ function VendorDetailsContent() {
                               type="text"
                               value={editForm.first_name}
                               onChange={(e) => setEditForm({...editForm, first_name: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                              className="input-field"
                             />
                           </div>
                           <div>
@@ -597,17 +669,14 @@ function VendorDetailsContent() {
                               type="text"
                               value={editForm.last_name}
                               onChange={(e) => setEditForm({...editForm, last_name: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                              className="input-field"
                             />
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                            <input
-                              type="email"
-                              value={editForm.email}
-                              onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                            />
+                            <p className="text-sm text-gray-900 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                              {vendor.email} <span className="text-xs text-gray-500">(Cannot be modified)</span>
+                            </p>
                           </div>
                         </div>
                         
@@ -620,17 +689,21 @@ function VendorDetailsContent() {
                               type="text"
                               value={editForm.company_name}
                               onChange={(e) => setEditForm({...editForm, company_name: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                              className="input-field"
                             />
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Business Type</label>
-                            <input
-                              type="text"
+                            <select
                               value={editForm.business_type}
                               onChange={(e) => setEditForm({...editForm, business_type: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                            />
+                              className="input-field"
+                            >
+                              <option value="">Select business type</option>
+                              {businessTypes.map(type => (
+                                <option key={type} value={type}>{type}</option>
+                              ))}
+                            </select>
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">License Number</label>
@@ -638,7 +711,7 @@ function VendorDetailsContent() {
                               type="text"
                               value={editForm.license_number}
                               onChange={(e) => setEditForm({...editForm, license_number: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                              className="input-field"
                             />
                           </div>
                         </div>
@@ -649,39 +722,13 @@ function VendorDetailsContent() {
                         <div className="space-y-4">
                           <h4 className="text-md font-medium text-gray-800">Contact Details</h4>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
-                            <input
-                              type="text"
-                              value={editForm.contact_person_name}
-                              onChange={(e) => setEditForm({...editForm, contact_person_name: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Contact Title</label>
-                            <input
-                              type="text"
-                              value={editForm.contact_title}
-                              onChange={(e) => setEditForm({...editForm, contact_title: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                            />
-                          </div>
-                          <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Primary Phone</label>
                             <input
                               type="tel"
                               value={editForm.primary_phone}
                               onChange={(e) => setEditForm({...editForm, primary_phone: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Secondary Phone</label>
-                            <input
-                              type="tel"
-                              value={editForm.secondary_phone}
-                              onChange={(e) => setEditForm({...editForm, secondary_phone: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                              className="input-field"
+                              placeholder="+94 XX XXX XXXX"
                             />
                           </div>
                         </div>
@@ -695,7 +742,7 @@ function VendorDetailsContent() {
                               type="text"
                               value={editForm.street_address}
                               onChange={(e) => setEditForm({...editForm, street_address: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                              className="input-field"
                             />
                           </div>
                           <div>
@@ -704,17 +751,21 @@ function VendorDetailsContent() {
                               type="text"
                               value={editForm.city}
                               onChange={(e) => setEditForm({...editForm, city: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                              className="input-field"
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                            <input
-                              type="text"
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Province</label>
+                            <select
                               value={editForm.state}
                               onChange={(e) => setEditForm({...editForm, state: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                            />
+                              className="input-field"
+                            >
+                              <option value="">Select province</option>
+                              {sriLankanProvinces.map(province => (
+                                <option key={province} value={province}>{province}</option>
+                              ))}
+                            </select>
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
@@ -722,7 +773,7 @@ function VendorDetailsContent() {
                               type="text"
                               value={editForm.zip_code}
                               onChange={(e) => setEditForm({...editForm, zip_code: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                              className="input-field"
                             />
                           </div>
                         </div>
@@ -733,13 +784,12 @@ function VendorDetailsContent() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Contact Person</label>
-                          <p className="text-sm text-gray-900">{vendor.contact?.contact_person_name || 'N/A'}</p>
-                          <p className="text-xs text-gray-500">{vendor.contact?.contact_title || ''}</p>
+                          <label className="block text-sm font-medium text-gray-700">Name</label>
+                          <p className="text-sm text-gray-900">{vendor.display_name || `${vendor.first_name} ${vendor.last_name}`}</p>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Primary Email</label>
-                          <p className="text-sm text-gray-900">{vendor.contact?.primary_email || vendor.email}</p>
+                          <label className="block text-sm font-medium text-gray-700">Email</label>
+                          <p className="text-sm text-gray-900">{vendor.email}</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Primary Phone</label>
@@ -913,6 +963,20 @@ function VendorDetailsContent() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && deletionCheck && (
+        <ConfirmModal
+          isOpen={showDeleteConfirm}
+          title={getDeleteModalContent().title}
+          message={getDeleteModalContent().message}
+          type={getDeleteModalContent().type}
+          confirmText={deletionCheck.canDelete ? "Delete Vendor" : "OK"}
+          cancelText={deletionCheck.canDelete ? "Cancel" : undefined}
+          onConfirm={deletionCheck.canDelete ? handleDeleteVendor : () => setShowDeleteConfirm(false)}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </DashboardLayout>
   );
 }

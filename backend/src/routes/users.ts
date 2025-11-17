@@ -21,11 +21,30 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       });
     }
 
-    const users = await UserRepository.getAllUsers();
+    // Get pagination parameters
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    // Validate pagination parameters
+    if (page < 1 || limit < 1 || limit > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid pagination parameters',
+        error: 'Page must be >= 1 and limit must be between 1 and 100'
+      });
+    }
+
+    const result = await UserRepository.getUsersPaginated(page, limit);
     res.json({
       success: true,
       message: 'Users retrieved successfully',
-      data: users
+      data: result.users,
+      pagination: {
+        currentPage: result.currentPage,
+        totalPages: result.totalPages,
+        totalCount: result.totalCount,
+        limit
+      }
     });
   } catch (error) {
     console.error('Error getting users:', error);

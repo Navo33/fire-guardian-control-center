@@ -349,6 +349,33 @@ export class ClientViewsRepository {
   }
 
   /**
+   * Get equipment instance by serial number for client
+   */
+  static async getEquipmentBySerialNumber(clientId: number, serialNumber: string) {
+    try {
+      const query = `
+        SELECT 
+          ei.id,
+          ei.serial_number,
+          e.equipment_name,
+          ei.compliance_status
+        FROM equipment_instance ei
+        JOIN equipment e ON ei.equipment_id = e.id
+        WHERE ei.assigned_to = $1 
+          AND ei.serial_number = $2
+          AND ei.deleted_at IS NULL
+        LIMIT 1
+      `;
+      
+      const result = await pool.query(query, [clientId, serialNumber]);
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } catch (error) {
+      console.error('Error getting equipment by serial number:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get equipment list for client
    */
   static async getEquipmentList(
@@ -1076,6 +1103,100 @@ export class ClientViewsRepository {
     } catch (error) {
       console.error('Error getting service request details:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Create a new service request for a client
+   */
+  static async createServiceRequest(clientId: number, ticketData: {
+    equipment_instance_id: number;
+    priority: string;
+    issue_description: string;
+    support_type: string;
+  }) {
+    try {
+      // First, verify that equipment belongs to this client and get vendor info
+      const equipmentQuery = `
+        SELECT 
+          ei.id,
+          ei.vendor_id,
+          e.equipment_name,
+          ei.serial_number
+        FROM public.equipment_instance ei
+        JOIN public.equipment e ON ei.equipment_id = e.id
+        WHERE ei.id = $1 
+          AND ei.assigned_to = $2 
+          AND ei.status = 'assigned'
+          AND ei.deleted_at IS NULL
+      `;
+      
+      const equipmentResult = await pool.query(equipmentQuery, [ticketData.equipment_instance_id, clientId]);
+      
+      if (equipmentResult.rows.length === 0) {
+        return {
+          success: false,
+          message: 'Equipment not found or not assigned to your account'
+        };
+      }
+
+      const equipment = equipmentResult.rows[0];
+      const vendorId = equipment.vendor_id;
+
+      // Insert the maintenance ticket - database trigger will automatically generate ticket_number
+      const insertQuery = `
+        INSERT INTO public.maintenance_ticket (
+          equipment_instance_id,
+          client_id,
+          vendor_id,
+          ticket_status,
+          support_type,
+          issue_description,
+          priority,
+          created_at,
+          updated_at
+        ) VALUES (
+          $1, $2, $3, 'open', $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ) RETURNING 
+          id,
+          ticket_number,
+          ticket_status,
+          support_type,
+          priority,
+          created_at
+      `;
+
+      const insertResult = await pool.query(insertQuery, [
+        ticketData.equipment_instance_id,
+        clientId,
+        vendorId,
+        ticketData.support_type,
+        ticketData.issue_description,
+        ticketData.priority
+      ]);
+
+      const newTicket = insertResult.rows[0];
+
+      return {
+        success: true,
+        data: {
+          id: newTicket.id,
+          ticket_number: newTicket.ticket_number,
+          status: newTicket.ticket_status,
+          priority: newTicket.priority,
+          equipment_name: equipment.equipment_name,
+          serial_number: equipment.serial_number,
+          created_at: newTicket.created_at
+        },
+        message: 'Service request created successfully'
+      };
+
+    } catch (error) {
+      console.error('Error creating service request:', error);
+      return {
+        success: false,
+        message: 'Failed to create service request due to database error'
+      };
     }
   }
 }

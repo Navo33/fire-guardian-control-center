@@ -135,7 +135,8 @@ export class VendorController extends BaseController {
   createVendor = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     DebugLogger.log('VendorController.createVendor called', { 
       userId: req.user?.userId,
-      email: req.body.email 
+      email: req.body.email,
+      requestBody: req.body
     });
 
     // Validate request
@@ -146,12 +147,26 @@ export class VendorController extends BaseController {
 
     try {
       const vendorData: CreateVendorRequest = req.body;
+      
+      // Log the received vendor data for debugging
+      DebugLogger.log('Received vendor creation data', {
+        firstName: vendorData.firstName,
+        lastName: vendorData.lastName,
+        email: vendorData.email,
+        companyName: vendorData.companyName,
+        businessType: vendorData.businessType,
+        primaryPhone: vendorData.primaryPhone,
+        streetAddress: vendorData.streetAddress,
+        city: vendorData.city,
+        state: vendorData.state,
+        zipCode: vendorData.zipCode,
+        country: vendorData.country
+      });
       const clientIP = this.getClientIP(req);
 
       DebugLogger.log('Creating new vendor with detailed information', { 
         companyName: vendorData.companyName,
-        email: vendorData.email,
-        contactPersonName: vendorData.contactPersonName
+        email: vendorData.email
       });
 
       // Check if vendor already exists
@@ -212,6 +227,17 @@ export class VendorController extends BaseController {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       console.error('Error creating vendor:', error);
+      
+      // Handle specific database constraint errors
+      if (error instanceof Error) {
+        if (error.message.includes('duplicate key value violates unique constraint "user_email_key"')) {
+          return ApiResponseUtil.conflict(res, 'A user with this email address already exists');
+        }
+        if (error.message.includes('unique constraint')) {
+          return ApiResponseUtil.conflict(res, 'This information conflicts with existing data');
+        }
+      }
+      
       return ApiResponseUtil.internalError(res);
     }
   });
@@ -239,7 +265,21 @@ export class VendorController extends BaseController {
         return ApiResponseUtil.error(res, 'Invalid vendor ID', 400, 'INVALID_ID');
       }
 
-      const { first_name, last_name, email } = req.body;
+      // Extract vendor update fields from request body (only fields that exist in DB schema)
+      const {
+        first_name,
+        last_name,
+        company_name,
+        business_type,
+        license_number,
+        primary_phone,
+        street_address,
+        city,
+        state,
+        zip_code,
+        country
+      } = req.body;
+      
       const clientIP = this.getClientIP(req);
 
       // Check if vendor exists
@@ -249,12 +289,22 @@ export class VendorController extends BaseController {
         return ApiResponseUtil.notFound(res, 'Vendor not found');
       }
 
-      // Update vendor
-      const updatedVendor = await VendorRepository.updateVendor(vendorId, {
+      // Update vendor (only fields that exist in database schema)
+      const updateData = {
         first_name,
         last_name,
-        email
-      });
+        company_name,
+        business_type,
+        license_number,
+        primary_phone,
+        street_address,
+        city,
+        state,
+        zip_code,
+        country
+      };
+
+      const updatedVendor = await VendorRepository.updateVendor(vendorId, updateData);
 
       DebugLogger.log('Vendor updated successfully', { vendorId });
 
@@ -266,14 +316,14 @@ export class VendorController extends BaseController {
         { 
           action: 'vendor_updated', 
           updated_by: req.user!.userId,
-          changes: { first_name, last_name, email }
+          changes: updateData
         },
         { ip_address: clientIP }
       );
 
       this.logAction('VENDOR_UPDATED', req.user!.userId, { 
         vendorId,
-        changes: { first_name, last_name, email },
+        changes: updateData,
         clientIP 
       });
 
@@ -286,6 +336,51 @@ export class VendorController extends BaseController {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       console.error('Error updating vendor:', error);
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * GET /api/vendors/:id/deletion-check
+   * Check if vendor can be safely deleted (admin only)
+   */
+  checkVendorDeletion = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    DebugLogger.log('VendorController.checkVendorDeletion called', { 
+      userId: req.user?.userId,
+      vendorId: req.params.id 
+    });
+
+    // Check permissions
+    if (!this.requireRole(req, res, ['admin'])) return;
+
+    try {
+      const vendorId = parseInt(req.params.id);
+      if (isNaN(vendorId)) {
+        DebugLogger.log('Invalid vendor ID for deletion check', { vendorId: req.params.id }, 'WARNING');
+        return ApiResponseUtil.error(res, 'Invalid vendor ID', 400, 'INVALID_ID');
+      }
+
+      // Check if vendor exists
+      const existingVendor = await VendorRepository.getVendorById(vendorId);
+      if (!existingVendor) {
+        DebugLogger.log('Vendor not found for deletion check', { vendorId }, 'WARNING');
+        return ApiResponseUtil.notFound(res, 'Vendor not found');
+      }
+
+      // Check deletion constraints
+      const deletionCheck = await VendorRepository.checkVendorDeletionConstraints(vendorId);
+
+      DebugLogger.log('Vendor deletion check completed', { 
+        vendorId,
+        canDelete: deletionCheck.canDelete,
+        constraints: deletionCheck
+      });
+
+      ApiResponseUtil.success(res, deletionCheck, 'Vendor deletion check completed');
+
+    } catch (error) {
+      DebugLogger.error('Error checking vendor deletion', error);
+      console.error('Error checking vendor deletion:', error);
       return ApiResponseUtil.internalError(res);
     }
   });
@@ -499,22 +594,10 @@ export const createVendorValidation = [
     .withMessage('License number must be less than 100 characters'),
   
   // Contact Information
-  body('contactPersonName')
-    .notEmpty()
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Contact person name is required and must be between 2 and 100 characters'),
-  body('contactTitle')
-    .optional()
-    .isLength({ max: 100 })
-    .withMessage('Contact title must be less than 100 characters'),
-  body('primaryEmail')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid primary email address'),
   body('primaryPhone')
     .notEmpty()
-    .matches(/^\+94\s?\d{2}\s?\d{3}\s?\d{4}$/)
-    .withMessage('Please provide a valid Sri Lankan phone number (format: +94 XX XXX XXXX)'),
+    .matches(/^(\+94|0)[1-9]\d{8}$/)
+    .withMessage('Please enter a valid Sri Lankan phone number'),
   
   // Address Information
   body('streetAddress')
@@ -531,8 +614,8 @@ export const createVendorValidation = [
     .withMessage('Please select a valid Sri Lankan province'),
   body('zipCode')
     .notEmpty()
-    .matches(/^\d{5}$/)
-    .withMessage('Please provide a valid 5-digit ZIP code'),
+    .matches(/^[A-Za-z0-9\s\-]{3,10}$/)
+    .withMessage('Valid ZIP code is required'),
   body('country')
     .optional()
     .equals('Sri Lanka')

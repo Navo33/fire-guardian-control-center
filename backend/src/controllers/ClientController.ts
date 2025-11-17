@@ -140,14 +140,15 @@ export class ClientController extends BaseController {
       primary_phone,
       street_address,
       city,
-      zip_code
+      zip_code,
+      country
     } = req.body;
 
     // Validate required fields
     const requiredFields = [
       'first_name', 'last_name', 'email', 'password', 'phone',
       'company_name', 'business_type', 'primary_phone', 
-      'street_address', 'city', 'zip_code'
+      'street_address', 'city', 'zip_code', 'country'
     ];
 
     const missingFields = requiredFields.filter(field => !req.body[field]);
@@ -188,7 +189,8 @@ export class ClientController extends BaseController {
       primary_phone,
       street_address,
       city,
-      zip_code
+      zip_code,
+      country
     };
 
     const newClient = await this.clientRepository.createClient(vendorId, clientData);

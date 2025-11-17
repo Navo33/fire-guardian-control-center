@@ -57,6 +57,8 @@ export const API_ENDPOINTS = {
     BY_ID: (id: string | number) => `${API_BASE_URL}/user-details/${id}`,
     UPDATE: (id: string | number) => `${API_BASE_URL}/user-details/${id}`,
     RESET_PASSWORD: (id: string | number) => `${API_BASE_URL}/user-details/${id}/reset-password`,
+    DELETION_CHECK: (id: string | number) => `${API_BASE_URL}/user-details/${id}/deletion-check`,
+    DELETE: (id: string | number) => `${API_BASE_URL}/user-details/${id}`,
   },
   
   // Profile
@@ -108,10 +110,14 @@ export const API_ENDPOINTS = {
       TRENDS: `${API_BASE_URL}/admin/analytics/users/trends`,
       PASSWORD_RESETS: `${API_BASE_URL}/admin/analytics/users/password-resets`,
     },
+    // New comprehensive reporting endpoints
+    COMPREHENSIVE_REPORT: `${API_BASE_URL}/admin/analytics/report/comprehensive`,
+    SECURITY_ANALYTICS: `${API_BASE_URL}/admin/analytics/security/analytics`,
   },
   
   // Equipment
   EQUIPMENT: {
+    BASE: `${API_BASE_URL}/equipment`,
     LIST: `${API_BASE_URL}/equipment`,
     CREATE: `${API_BASE_URL}/equipment`,
     TYPES: `${API_BASE_URL}/equipment/types`,
@@ -126,6 +132,7 @@ export const API_ENDPOINTS = {
     MAINTENANCE: (id: string | number) => `${API_BASE_URL}/equipment/${id}/maintenance`,
     ASSIGN: `${API_BASE_URL}/equipment/assign`,
     ASSIGN_SINGLE: (id: string | number) => `${API_BASE_URL}/equipment/${id}/assign`,
+    REMOVE_ASSIGNMENT: (id: string | number) => `${API_BASE_URL}/equipment/${id}/remove-assignment`,
   },
 
   // Clients (Vendor-specific)

@@ -4,9 +4,11 @@ import jwt from 'jsonwebtoken';
 import { BaseController } from './BaseController';
 import { UserRepository } from '../models/UserRepository';
 import { AuditRepository } from '../models/AuditRepository';
+import { SystemSettingsRepository } from '../models/SystemSettingsRepository';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { AuthenticatedRequest } from '../types/api';
 import { LoginRequest, CreateUserRequest } from '../types';
+import { pool } from '../config/database';
 
 /**
  * Authentication Controller
@@ -50,9 +52,19 @@ export class AuthController extends BaseController {
         // Increment failed attempts
         await UserRepository.incrementFailedAttempts(user.id);
         
-        // Lock account after 5 failed attempts
-        if (user.failed_login_attempts >= 4) {
-          await UserRepository.lockAccount(user.id, 30); // Lock for 30 minutes
+        // Get dynamic settings for failed attempts and lock duration
+        const maxFailedAttempts = await SystemSettingsRepository.getTypedValue<number>(
+          'max_failed_login_attempts',
+          5
+        );
+        const lockDurationMinutes = await SystemSettingsRepository.getTypedValue<number>(
+          'account_lock_duration_minutes',
+          30
+        );
+        
+        // Lock account after max failed attempts (subtract 1 because we already incremented)
+        if (user.failed_login_attempts >= (maxFailedAttempts - 1)) {
+          await UserRepository.lockAccount(user.id, lockDurationMinutes);
         }
 
         return ApiResponseUtil.unauthorized(res, 'Invalid credentials');
@@ -65,15 +77,37 @@ export class AuthController extends BaseController {
         return ApiResponseUtil.internalError(res, 'Server configuration error');
       }
       
+      // Get session timeout from settings
+      const sessionTimeoutMinutes = await SystemSettingsRepository.getTypedValue<number>(
+        'session_timeout_minutes',
+        30
+      );
+      
+      // Get vendor_id if user is a vendor
+      let vendorId = null;
+      if (user.user_type === 'vendor') {
+        try {
+          const vendorQuery = 'SELECT id FROM vendors WHERE user_id = $1';
+          const vendorResult = await pool.query(vendorQuery, [user.id]);
+          if (vendorResult.rows.length > 0) {
+            vendorId = vendorResult.rows[0].id;
+          }
+        } catch (error) {
+          console.error('Error fetching vendor_id:', error);
+          // Continue without vendor_id - will be handled by authorization middleware
+        }
+      }
+      
       const token = jwt.sign(
         { 
           userId: user.id, 
           email: user.email, 
           user_type: user.user_type,
-          role_id: user.role_id
+          role_id: user.role_id,
+          vendorId: vendorId
         },
         jwtSecret,
-        { expiresIn: '24h' }
+        { expiresIn: `${sessionTimeoutMinutes}m` }
       );
 
       // Update last login information

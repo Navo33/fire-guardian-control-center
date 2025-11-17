@@ -51,6 +51,23 @@ router.get('/types', equipmentController.getEquipmentTypes);
 router.post('/types', equipmentController.createEquipmentType);
 
 /**
+ * @route PUT /api/equipment/types/:id
+ * @desc Update existing equipment type
+ * @access Vendor
+ * @param id - Equipment type ID
+ * @body equipment_name - Name of the equipment
+ * @body manufacturer - Equipment manufacturer
+ * @body model - Equipment model
+ * @body description - Optional description
+ * @body warranty_years - Warranty period
+ * @body weight_kg - Weight in kilograms
+ * @body dimensions - Physical dimensions
+ * @body default_lifespan_years - Default lifespan
+ * @note equipment_code and equipment_type cannot be modified
+ */
+router.put('/types/:id', equipmentController.updateEquipmentType);
+
+/**
  * @route GET /api/equipment/stats
  * @desc Get aggregated equipment statistics for management page
  * @access Vendor/Admin
@@ -74,6 +91,13 @@ router.get('/clients', equipmentController.getClientsForAssignment);
  * @body notes - Assignment notes (optional)
  */
 router.post('/assign', equipmentController.bulkAssignEquipment);
+
+/**
+ * @route DELETE /api/equipment/:id/remove-assignment
+ * @desc Remove equipment assignment from client
+ * @access Vendor
+ */
+router.delete('/:id/remove-assignment', equipmentController.removeEquipmentAssignment);
 
 /**
  * @route POST /api/equipment

@@ -102,42 +102,36 @@ export default function ResolveTicketModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="modal-container">
       {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-        onClick={handleClose}
-      />
+      <div className="modal-backdrop" onClick={handleClose} />
       
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div 
-          className="relative w-full max-w-md transform rounded-2xl bg-white shadow-2xl transition-all"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="modal-content">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <div className="flex items-center justify-between p-6 border-b border-gray-100">
             <div className="flex items-center space-x-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
-                <CheckCircleIcon className="h-5 w-5 text-green-600" />
+              <div className="p-2 bg-red-50 rounded-xl">
+                <CheckCircleIcon className="h-6 w-6 text-red-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Resolve Ticket</h3>
+                <h2 className="text-xl font-semibold text-gray-900">Resolve Ticket</h2>
                 <p className="text-sm text-gray-600">{ticketNumber}</p>
               </div>
             </div>
             <button
               onClick={handleClose}
               disabled={isLoading}
-              className="rounded-lg p-2 text-gray-400 hover:bg-gray-50 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50"
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
-              <XMarkIcon className="h-5 w-5" />
+              <XMarkIcon className="h-6 w-6 text-gray-500" />
             </button>
           </div>
 
-          {/* Body */}
-          <form onSubmit={handleSubmit(onFormSubmit)} className="p-6">
-            <div className="space-y-4">
+          {/* Form Content */}
+          <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+            <form onSubmit={handleSubmit(onFormSubmit)} className="p-6 space-y-6">
               
               {/* Resolution Description */}
               <div>
@@ -147,7 +141,7 @@ export default function ResolveTicketModal({
                 <textarea
                   {...register('resolution_description')}
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+                  className="input-field resize-none"
                   placeholder="Describe how the issue was resolved..."
                   disabled={isLoading}
                 />
@@ -170,7 +164,7 @@ export default function ResolveTicketModal({
                   min="0"
                   max="100"
                   {...register('actual_hours')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  className="input-field"
                   placeholder="e.g., 2.5"
                   disabled={isLoading}
                 />
@@ -182,37 +176,33 @@ export default function ResolveTicketModal({
                 </p>
               </div>
 
-            </div>
-
-            {/* Actions */}
-            <div className="mt-8 flex space-x-3">
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={isLoading}
-                className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="flex-1 flex items-center justify-center rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? (
-                  <>
-                    <LoadingSpinner size="sm" />
-                    Resolving...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircleIcon className="mr-2 h-4 w-4" />
-                    Resolve Ticket
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+              {/* Form Actions */}
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  disabled={isLoading}
+                  className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? (
+                    <span className="flex items-center space-x-2">
+                      <LoadingSpinner size="sm" />
+                      <span>Resolving...</span>
+                    </span>
+                  ) : (
+                    'Resolve Ticket'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>

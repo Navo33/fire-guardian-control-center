@@ -185,6 +185,7 @@ export interface JwtPayload {
   email: string;
   user_type: string;
   role_id?: number;
+  vendorId?: number;
   iat?: number;
   exp?: number;
 }
@@ -254,10 +255,7 @@ export interface CreateVendorRequest {
   businessType: string;
   licenseNumber?: string;
   
-  // Contact Information (for vendor_contact table)
-  contactPersonName: string;
-  contactTitle?: string;
-  primaryEmail: string;
+  // Contact Information (from vendors table)
   primaryPhone: string;
   
   // Address Information (for vendor_address table)
@@ -280,4 +278,5 @@ export interface DetailedVendor extends User {
   locations_count?: number;
   equipment_count?: number;
   assignments_count?: number;
+  clients_count?: number;
 }

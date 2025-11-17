@@ -75,6 +75,7 @@ export interface ClientEquipment {
   last_inspection_date: string | null;
   next_inspection_date: string | null;
   assigned_date: string;
+  assignment_type?: 'direct' | 'formal' | 'unknown';
 }
 
 export interface ClientMaintenanceHistory {
@@ -86,7 +87,6 @@ export interface ClientMaintenanceHistory {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   scheduled_date: string | null;
   completed_date: string | null;
-  technician_name: string | null;
   cost: number | null;
 }
 
@@ -105,6 +105,7 @@ export interface CreateClientData {
   street_address: string;
   city: string;
   zip_code: string;
+  country: string;
 }
 
 export interface UpdateClientData {
@@ -121,7 +122,9 @@ export interface UpdateClientData {
   primary_phone?: string;
   street_address?: string;
   city?: string;
+  state?: string;
   zip_code?: string;
+  country?: string;
 }
 
 export interface ClientFilters {
@@ -293,23 +296,91 @@ export class ClientRepository {
         vu.email AS vendor_email,
         CONCAT(vu.first_name, ' ', vu.last_name) AS vendor_display_name,
         v.company_name AS vendor_company_name,
-        -- Equipment counts
-        (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.deleted_at IS NULL) AS total_equipment,
-        (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.compliance_status = 'compliant' AND ei.deleted_at IS NULL) AS compliant_equipment,
-        (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.compliance_status = 'expired' AND ei.deleted_at IS NULL) AS expired_equipment,
-        (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.compliance_status = 'overdue' AND ei.deleted_at IS NULL) AS overdue_equipment,
-        (SELECT COUNT(*) FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.compliance_status = 'due_soon' AND ei.deleted_at IS NULL) AS due_soon_equipment,
-        -- Compliance percentage
+        -- Equipment counts (including both direct and formal assignments)
+        (SELECT COUNT(*) FROM (
+          -- Direct assignments
+          SELECT ei.id 
+          FROM equipment_instance ei
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.assigned_to = $1
+          UNION
+          -- Formal assignments
+          SELECT ei.id
+          FROM equipment_instance ei
+          JOIN assignment_item ai ON ai.equipment_instance_id = ei.id
+          JOIN equipment_assignment ea ON ea.id = ai.assignment_id
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL 
+          AND ea.client_id = $1 AND ea.vendor_id = $2
+        ) AS combined_equipment) AS total_equipment,
+        (SELECT COUNT(*) FROM (
+          SELECT ei.id 
+          FROM equipment_instance ei
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.compliance_status = 'compliant' AND ei.assigned_to = $1
+          UNION
+          SELECT ei.id
+          FROM equipment_instance ei
+          JOIN assignment_item ai ON ai.equipment_instance_id = ei.id
+          JOIN equipment_assignment ea ON ea.id = ai.assignment_id
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.compliance_status = 'compliant'
+          AND ea.client_id = $1 AND ea.vendor_id = $2
+        ) AS compliant_equipment_combined) AS compliant_equipment,
+        (SELECT COUNT(*) FROM (
+          SELECT ei.id 
+          FROM equipment_instance ei
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.compliance_status = 'expired' AND ei.assigned_to = $1
+          UNION
+          SELECT ei.id
+          FROM equipment_instance ei
+          JOIN assignment_item ai ON ai.equipment_instance_id = ei.id
+          JOIN equipment_assignment ea ON ea.id = ai.assignment_id
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.compliance_status = 'expired'
+          AND ea.client_id = $1 AND ea.vendor_id = $2
+        ) AS expired_equipment_combined) AS expired_equipment,
+        (SELECT COUNT(*) FROM (
+          SELECT ei.id 
+          FROM equipment_instance ei
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.compliance_status = 'overdue' AND ei.assigned_to = $1
+          UNION
+          SELECT ei.id
+          FROM equipment_instance ei
+          JOIN assignment_item ai ON ai.equipment_instance_id = ei.id
+          JOIN equipment_assignment ea ON ea.id = ai.assignment_id
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.compliance_status = 'overdue'
+          AND ea.client_id = $1 AND ea.vendor_id = $2
+        ) AS overdue_equipment_combined) AS overdue_equipment,
+        (SELECT COUNT(*) FROM (
+          SELECT ei.id 
+          FROM equipment_instance ei
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.compliance_status = 'due_soon' AND ei.assigned_to = $1
+          UNION
+          SELECT ei.id
+          FROM equipment_instance ei
+          JOIN assignment_item ai ON ai.equipment_instance_id = ei.id
+          JOIN equipment_assignment ea ON ea.id = ai.assignment_id
+          WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.compliance_status = 'due_soon'
+          AND ea.client_id = $1 AND ea.vendor_id = $2
+        ) AS due_soon_equipment_combined) AS due_soon_equipment,
+        -- Compliance percentage (including both assignment types)
         (SELECT 
           COALESCE(
             ROUND(
-              (SUM(CASE WHEN ei.compliance_status = 'compliant' THEN 1 ELSE 0 END)::float / 
-               NULLIF(COUNT(ei.id), 0) * 100)::numeric, 
+              (SUM(CASE WHEN compliance_equipment.compliance_status = 'compliant' THEN 1 ELSE 0 END)::float / 
+               NULLIF(COUNT(DISTINCT compliance_equipment.id), 0) * 100)::numeric, 
               2
             ), 
             0
           )
-         FROM equipment_instance ei WHERE ei.assigned_to = c.id AND ei.deleted_at IS NULL
+         FROM (
+           SELECT ei.id, ei.compliance_status 
+           FROM equipment_instance ei
+           WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL AND ei.assigned_to = $1
+           UNION
+           SELECT ei.id, ei.compliance_status
+           FROM equipment_instance ei
+           JOIN assignment_item ai ON ai.equipment_instance_id = ei.id
+           JOIN equipment_assignment ea ON ea.id = ai.assignment_id
+           WHERE ei.vendor_id = $2 AND ei.deleted_at IS NULL 
+           AND ea.client_id = $1 AND ea.vendor_id = $2
+         ) AS compliance_equipment
         ) AS compliance_percentage,
         -- Maintenance statistics
         (SELECT MAX(mt.resolved_at) 
@@ -387,11 +458,12 @@ export class ClientRepository {
   }
 
   /**
-   * Get equipment assigned to a client
+   * Get equipment assigned to a client (handles both direct and formal assignments)
    */
   async getClientEquipment(clientId: number, vendorId: number): Promise<ClientEquipment[]> {
     const query = `
-      SELECT 
+      -- Get unique equipment assigned to client (prioritize direct assignment over formal)
+      SELECT DISTINCT ON (ei.id)
         ei.id,
         e.equipment_name,
         e.equipment_type,
@@ -401,13 +473,22 @@ export class ClientRepository {
         ei.condition_rating,
         ei.last_maintenance_date AS last_inspection_date,
         ei.next_maintenance_date AS next_inspection_date,
-        ei.assigned_at AS assigned_date
+        COALESCE(ei.assigned_at, ea.assigned_at, ei.created_at) AS assigned_date,
+        CASE 
+          WHEN ei.assigned_to = $1 THEN 'direct'
+          ELSE 'formal'
+        END AS assignment_type
       FROM equipment_instance ei
       JOIN equipment e ON ei.equipment_id = e.id
-      WHERE ei.assigned_to = $1
-      AND ei.vendor_id = $2
+      LEFT JOIN assignment_item ai ON ai.equipment_instance_id = ei.id
+      LEFT JOIN equipment_assignment ea ON ea.id = ai.assignment_id
+      WHERE ei.vendor_id = $2 
       AND ei.deleted_at IS NULL
-      ORDER BY ei.serial_number
+      AND (
+        ei.assigned_to = $1  -- Direct assignment
+        OR (ea.client_id = $1 AND ea.vendor_id = $2)  -- Formal assignment
+      )
+      ORDER BY ei.id, ei.assigned_to DESC NULLS LAST  -- Prioritize direct assignments
     `;
 
     const result = await this.pool.query(query, [clientId, vendorId]);
@@ -428,11 +509,8 @@ export class ClientRepository {
         mt.priority,
         mt.scheduled_date,
         mt.resolved_at AS completed_date,
-        CONCAT(u.first_name, ' ', u.last_name) AS technician_name,
         mt.actual_hours AS cost
       FROM maintenance_ticket mt
-      LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
-      LEFT JOIN "user" u ON mt.assigned_technician = u.id
       WHERE mt.client_id = $1
       AND mt.vendor_id = $2
       ORDER BY mt.created_at DESC
@@ -497,7 +575,7 @@ export class ClientRepository {
           primary_phone, street_address, city, zip_code, country, status, 
           created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, 'Sri Lanka', 
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, 
           'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         ) RETURNING id, company_name
       `;
@@ -510,7 +588,8 @@ export class ClientRepository {
         clientData.primary_phone,
         clientData.street_address,
         clientData.city,
-        clientData.zip_code
+        clientData.zip_code,
+        clientData.country
       ]);
 
       await client.query('COMMIT');
@@ -554,9 +633,12 @@ export class ClientRepository {
         let userQuery = `UPDATE "user" SET ${userSetClause}`;
         
         if (updateData.first_name || updateData.last_name) {
-          const firstName = updateData.first_name || '(SELECT first_name FROM "user" WHERE id = (SELECT user_id FROM clients WHERE id = $' + (userParams.length + 2) + '))';
-          const lastName = updateData.last_name || '(SELECT last_name FROM "user" WHERE id = (SELECT user_id FROM clients WHERE id = $' + (userParams.length + 2) + '))';
-          userQuery += `, display_name = CONCAT(${firstName}, ' ', ${lastName})`;
+          // Build display_name from first_name and last_name values in the update
+          const displayName = `${updateData.first_name || ''}${updateData.last_name || ''}`.trim();
+          if (displayName) {
+            userQuery += `, display_name = $${userParams.length + 1}`;
+            userParams.push(`${updateData.first_name || ''} ${updateData.last_name || ''}`.trim());
+          }
         }
         
         userQuery += `, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM clients WHERE id = $${userParams.length + 1} AND created_by_vendor_id = $${userParams.length + 2}) AND deleted_at IS NULL`;
@@ -566,7 +648,7 @@ export class ClientRepository {
       }
 
       // Update client record if client fields are provided
-      const clientFields = ['company_name', 'business_type', 'status', 'primary_phone', 'street_address', 'city', 'zip_code'];
+      const clientFields = ['company_name', 'business_type', 'status', 'primary_phone', 'street_address', 'city', 'state', 'zip_code', 'country'];
       const clientUpdates = clientFields.filter(field => updateData[field as keyof UpdateClientData] !== undefined);
       
       if (clientUpdates.length > 0) {

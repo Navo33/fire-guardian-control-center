@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
 import AssignEquipmentModal from '@/components/modals/AssignEquipmentModal';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { useToast } from '@/components/providers/ToastProvider';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import { 
@@ -27,7 +28,8 @@ import {
   ChartBarIcon,
   UserGroupIcon,
   DocumentTextIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 interface ClientDetail {
@@ -72,6 +74,7 @@ interface ClientEquipment {
   last_inspection_date?: string;
   next_inspection_date?: string;
   assigned_date: string;
+  assignment_type?: 'direct' | 'formal' | 'unknown';
 }
 
 interface MaintenanceHistory {
@@ -83,7 +86,6 @@ interface MaintenanceHistory {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   scheduled_date?: string;
   completed_date?: string;
-  technician_name?: string;
   cost?: number;
 }
 
@@ -100,11 +102,13 @@ export default function ClientDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
+  const [currentUserType, setCurrentUserType] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: '',
     email: '',
     phone: '',
+    primary_phone: '',
     company_name: '',
     business_type: '',
     street_address: '',
@@ -114,6 +118,11 @@ export default function ClientDetailPage() {
     country: ''
   });
   const [isAssignEquipmentModalOpen, setIsAssignEquipmentModalOpen] = useState(false);
+  const [removeAssignmentModal, setRemoveAssignmentModal] = useState<{
+    isOpen: boolean;
+    equipmentId: number | null;
+    equipmentName: string;
+  }>({ isOpen: false, equipmentId: null, equipmentName: '' });
 
   // Fetch client details
   const fetchClientDetails = async () => {
@@ -142,7 +151,8 @@ export default function ClientDetailPage() {
         first_name: result.data.first_name || '',
         last_name: result.data.last_name || '',
         email: result.data.email || '',
-        phone: result.data.primary_phone || result.data.phone || '',
+        phone: result.data.phone || '',
+        primary_phone: result.data.primary_phone || '',
         company_name: result.data.company_name || '',
         business_type: result.data.business_type || '',
         street_address: result.data.street_address || '',
@@ -212,11 +222,14 @@ export default function ClientDetailPage() {
       const headers = getAuthHeaders();
       const url = API_ENDPOINTS.CLIENTS.UPDATE(clientId);
 
+      // Exclude email from update to prevent conflicts (email is locked)
+      const { email, ...updateData } = editForm;
+
       logApiCall('PUT', url);
       const response = await fetch(url, {
         method: 'PUT',
         headers,
-        body: JSON.stringify(editForm)
+        body: JSON.stringify(updateData)
       });
 
       const result = await response.json();
@@ -273,7 +286,64 @@ export default function ClientDetailPage() {
     }
   };
 
+  // Remove equipment assignment
+  const handleRemoveAssignment = async () => {
+    if (!removeAssignmentModal.equipmentId) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const url = `${apiBaseUrl}/equipment/${removeAssignmentModal.equipmentId}/remove-assignment`;
+
+      logApiCall('DELETE', url);
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to remove assignment');
+      }
+
+      showToast('success', `Assignment removed successfully for ${removeAssignmentModal.equipmentName}`);
+      
+      // Refresh data
+      fetchClientDetails();
+      fetchClientEquipment();
+      
+      // Close modal
+      setRemoveAssignmentModal({ isOpen: false, equipmentId: null, equipmentName: '' });
+    } catch (err) {
+      console.error('Error removing assignment:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove assignment';
+      showToast('error', errorMessage);
+    }
+  };
+
   useEffect(() => {
+    // Get current user type from localStorage
+    const userInfo = localStorage.getItem('user');
+    if (userInfo) {
+      try {
+        const user = JSON.parse(userInfo);
+        setCurrentUserType(user.user_type);
+        
+        // If user is vendor and current tab is vendor, switch to overview
+        if (user.user_type === 'vendor' && activeTab === 'vendor') {
+          setActiveTab('overview');
+        }
+      } catch (err) {
+        console.error('Error parsing user info:', err);
+      }
+    }
+
     if (clientId) {
       fetchClientDetails();
       fetchClientEquipment();
@@ -458,7 +528,8 @@ export default function ClientDetailPage() {
             <nav className="flex space-x-8 px-6">
               {[
                 { id: 'overview', name: 'Overview', icon: UserIcon },
-                { id: 'vendor', name: 'Vendor Details', icon: BuildingOfficeIcon },
+                // Only show vendor tab for non-vendor users (admin, client, etc.)
+                ...(currentUserType !== 'vendor' ? [{ id: 'vendor', name: 'Vendor Details', icon: BuildingOfficeIcon }] : []),
                 { id: 'equipment', name: 'Equipment', icon: FireIcon },
                 { id: 'maintenance', name: 'Maintenance History', icon: WrenchScrewdriverIcon }
               ].map((tab) => (
@@ -506,12 +577,22 @@ export default function ClientDetailPage() {
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Business Type
                           </label>
-                          <input
-                            type="text"
+                          <select
                             value={editForm.business_type}
                             onChange={(e) => setEditForm({ ...editForm, business_type: e.target.value })}
                             className="input-field"
-                          />
+                          >
+                            <option value="">Select business type</option>
+                            <option value="Restaurant">Restaurant</option>
+                            <option value="Hotel">Hotel</option>
+                            <option value="Office Building">Office Building</option>
+                            <option value="Retail Store">Retail Store</option>
+                            <option value="Manufacturing">Manufacturing</option>
+                            <option value="Warehouse">Warehouse</option>
+                            <option value="Healthcare">Healthcare</option>
+                            <option value="Education">Education</option>
+                            <option value="Other">Other</option>
+                          </select>
                         </div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -546,21 +627,38 @@ export default function ClientDetailPage() {
                           <input
                             type="email"
                             value={editForm.email}
-                            onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                            className="input-field"
+                            disabled
+                            className="input-field bg-gray-50 text-gray-500 cursor-not-allowed"
+                            title="Email cannot be changed to prevent conflicts"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Phone
+                            Personal Phone
                           </label>
                           <input
                             type="text"
                             value={editForm.phone}
                             onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                             className="input-field"
+                            placeholder="Personal phone number"
                           />
                         </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Company Phone
+                          </label>
+                          <input
+                            type="text"
+                            value={editForm.primary_phone}
+                            onChange={(e) => setEditForm({ ...editForm, primary_phone: e.target.value })}
+                            className="input-field"
+                            placeholder="Company/primary phone number"
+                          />
+                        </div>
+                        <div></div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -587,14 +685,24 @@ export default function ClientDetailPage() {
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            State
+                            Province
                           </label>
-                          <input
-                            type="text"
+                          <select
                             value={editForm.state}
                             onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
                             className="input-field"
-                          />
+                          >
+                            <option value="">Select province</option>
+                            <option value="Western Province">Western Province</option>
+                            <option value="Central Province">Central Province</option>
+                            <option value="Southern Province">Southern Province</option>
+                            <option value="Northern Province">Northern Province</option>
+                            <option value="Eastern Province">Eastern Province</option>
+                            <option value="North Western Province">North Western Province</option>
+                            <option value="North Central Province">North Central Province</option>
+                            <option value="Uva Province">Uva Province</option>
+                            <option value="Sabaragamuwa Province">Sabaragamuwa Province</option>
+                          </select>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -791,9 +899,6 @@ export default function ClientDetailPage() {
                             Status
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                            Condition
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                             Next Inspection
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
@@ -822,20 +927,6 @@ export default function ClientDetailPage() {
                                 {item.status}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-900">
-                              <div className="flex items-center">
-                                <div className="flex-1 bg-gray-200 rounded-full h-2 mr-2">
-                                  <div 
-                                    className={`h-2 rounded-full ${
-                                      item.condition_rating >= 80 ? 'bg-green-500' :
-                                      item.condition_rating >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                                    }`}
-                                    style={{ width: `${item.condition_rating}%` }}
-                                  ></div>
-                                </div>
-                                <span className="text-xs">{item.condition_rating}%</span>
-                              </div>
-                            </td>
                             <td className="px-6 py-4 text-sm text-gray-500">
                               {item.next_inspection_date ? formatDate(item.next_inspection_date) : 'Not scheduled'}
                             </td>
@@ -854,6 +945,17 @@ export default function ClientDetailPage() {
                                 >
                                   Service
                                 </Link>
+                                <span className="text-gray-300">|</span>
+                                <button
+                                  onClick={() => setRemoveAssignmentModal({
+                                    isOpen: true,
+                                    equipmentId: item.id,
+                                    equipmentName: item.equipment_name
+                                  })}
+                                  className="text-red-600 hover:text-red-900 text-sm font-medium"
+                                >
+                                  Remove
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -914,9 +1016,6 @@ export default function ClientDetailPage() {
                             Scheduled
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                            Technician
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                             Actions
                           </th>
                         </tr>
@@ -948,9 +1047,6 @@ export default function ClientDetailPage() {
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-500">
                               {ticket.scheduled_date ? formatDate(ticket.scheduled_date) : 'Not scheduled'}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-900">
-                              {ticket.technician_name || 'Not assigned'}
                             </td>
                             <td className="px-6 py-4">
                               <Link
@@ -995,6 +1091,18 @@ export default function ClientDetailPage() {
         }}
         clientId={clientId}
         clientName={client?.company_name || 'Client'}
+      />
+
+      {/* Remove Assignment Confirmation Modal */}
+      <ConfirmModal
+        isOpen={removeAssignmentModal.isOpen}
+        onCancel={() => setRemoveAssignmentModal({ isOpen: false, equipmentId: null, equipmentName: '' })}
+        onConfirm={handleRemoveAssignment}
+        title="Remove Equipment Assignment"
+        message={`Are you sure you want to remove the assignment for "${removeAssignmentModal.equipmentName}"? This equipment will become available for reassignment.`}
+        confirmText="Remove Assignment"
+        cancelText="Cancel"
+        type="danger"
       />
     </DashboardLayout>
   );

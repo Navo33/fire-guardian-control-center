@@ -259,4 +259,48 @@ export class AdminAnalyticsController extends BaseController {
       res.status(500).json({ success: false, message: 'Failed to fetch security summary' });
     }
   }
+
+  /**
+   * NEW: Comprehensive PDF Report Data
+   */
+  static async getComprehensiveReportData(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { startDate, endDate, vendorId } = req.query;
+      
+      // Default to last 90 days if no dates provided
+      const defaultEndDate = new Date().toISOString().split('T')[0];
+      const defaultStartDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const start = (startDate as string) || defaultStartDate;
+      const end = (endDate as string) || defaultEndDate;
+      const vendor = vendorId ? parseInt(vendorId as string) : undefined;
+
+      const reportData = await AdminAnalyticsRepository.getComprehensiveReportData(start, end, vendor);
+      res.json({ success: true, data: reportData });
+    } catch (error) {
+      console.error('Error fetching comprehensive report data:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch report data' });
+    }
+  }
+
+  /**
+   * NEW: Security Analytics for PDF
+   */
+  static async getSecurityAnalytics(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { startDate, endDate } = req.query;
+      
+      const defaultEndDate = new Date().toISOString().split('T')[0];
+      const defaultStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const start = (startDate as string) || defaultStartDate;
+      const end = (endDate as string) || defaultEndDate;
+
+      const securityData = await AdminAnalyticsRepository.getSecurityAnalytics(start, end);
+      res.json({ success: true, data: securityData });
+    } catch (error) {
+      console.error('Error fetching security analytics:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch security analytics' });
+    }
+  }
 }

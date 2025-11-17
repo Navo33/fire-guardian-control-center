@@ -316,7 +316,7 @@ export default function CreateTicketModal({
                   </label>
                   <select
                     {...register('support_type')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    className="input-field"
                   >
                     {supportTypes.map((type) => (
                       <option key={type.value} value={type.value}>
@@ -335,7 +335,7 @@ export default function CreateTicketModal({
                   </label>
                   <select
                     {...register('priority')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    className="input-field"
                   >
                     {priorities.map((priority) => (
                       <option key={priority.value} value={priority.value}>
@@ -359,7 +359,7 @@ export default function CreateTicketModal({
                     {...register('client_id', { 
                       setValueAs: (value) => value === '' ? undefined : Number(value)
                     })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    className="input-field"
                     disabled={isLoadingClients}
                   >
                     <option value="">Select a client...</option>
@@ -386,7 +386,7 @@ export default function CreateTicketModal({
                     {...register('equipment_instance_id', { 
                       setValueAs: (value) => value === '' ? undefined : Number(value)
                     })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    className="input-field"
                     disabled={isLoadingEquipment}
                   >
                     <option value="">Select equipment...</option>
@@ -412,7 +412,7 @@ export default function CreateTicketModal({
                 <textarea
                   {...register('issue_description')}
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  className="input-field"
                   placeholder="Describe the issue or support request in detail..."
                 />
                 {errors.issue_description && (
@@ -429,7 +429,7 @@ export default function CreateTicketModal({
                   <input
                     type="date"
                     {...register('scheduled_date')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    className="input-field"
                   />
                   {errors.scheduled_date && (
                     <p className="mt-1 text-sm text-red-600">{errors.scheduled_date.message}</p>
@@ -452,25 +452,25 @@ export default function CreateTicketModal({
               </div>
 
               {/* Form Actions */}
-              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={handleClose}
                   disabled={isLoading}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+                  className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
-                    <>
+                    <span className="flex items-center space-x-2">
                       <LoadingSpinner size="sm" />
-                      <span className="ml-2">Creating...</span>
-                    </>
+                      <span>Creating...</span>
+                    </span>
                   ) : (
                     'Create Ticket'
                   )}

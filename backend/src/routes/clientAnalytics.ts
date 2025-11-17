@@ -45,4 +45,22 @@ router.get('/account/sessions', clientAnalyticsController.getActiveSessions.bind
 // PDF Export
 router.get('/pdf-export', clientAnalyticsController.exportPDF.bind(clientAnalyticsController));
 
+/**
+ * NEW CORRECTED ROUTES BASED ON SCHEMA ANALYSIS
+ */
+
+// Corrected Analytics Routes
+router.get('/ticket-stats', clientAnalyticsController.getTicketStats.bind(clientAnalyticsController));
+router.get('/equipment-summary', clientAnalyticsController.getEquipmentSummary.bind(clientAnalyticsController));
+router.get('/upcoming-events', clientAnalyticsController.getUpcomingEvents.bind(clientAnalyticsController));
+router.get('/compliance-trends', clientAnalyticsController.getComplianceTrends.bind(clientAnalyticsController));
+router.get('/maintenance-trends', clientAnalyticsController.getMaintenanceTrends.bind(clientAnalyticsController));
+router.get('/equipment-compliance', clientAnalyticsController.getEquipmentCompliance.bind(clientAnalyticsController));
+router.get('/ticket-types', clientAnalyticsController.getTicketTypes.bind(clientAnalyticsController));
+router.get('/equipment-types', clientAnalyticsController.getEquipmentTypes.bind(clientAnalyticsController));
+router.get('/non-compliant-equipment', clientAnalyticsController.getNonCompliantEquipment.bind(clientAnalyticsController));
+router.get('/recent-tickets', clientAnalyticsController.getRecentTickets.bind(clientAnalyticsController));
+router.get('/user-activity', clientAnalyticsController.getUserActivity.bind(clientAnalyticsController));
+router.get('/notifications', clientAnalyticsController.getNotifications.bind(clientAnalyticsController));
+
 export default router;

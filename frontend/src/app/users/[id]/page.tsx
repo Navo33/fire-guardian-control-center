@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import RequireRole from '@/components/auth/RequireRole';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import { 
   UserIcon,
@@ -121,6 +122,13 @@ function UserDetailContent() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletionCheck, setDeletionCheck] = useState<{
+    canDelete: boolean;
+    userType: string;
+    constraints: any;
+    message: string;
+  } | null>(null);
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: '',
@@ -133,6 +141,11 @@ function UserDetailContent() {
       setIsLoading(true);
       setError(null);
 
+      // Validate userId
+      if (!userId || isNaN(Number(userId))) {
+        throw new Error('Invalid user ID provided');
+      }
+
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('No authentication token found');
@@ -141,19 +154,33 @@ function UserDetailContent() {
       const headers = getAuthHeaders();
       const url = API_ENDPOINTS.USER_DETAILS.BY_ID(userId);
 
+      console.log('Fetching user details for ID:', userId);
       logApiCall('GET', url);
+      
       const response = await fetch(url, { headers });
       const result = await response.json();
+
+      console.log('User details response:', { success: result.success, hasData: !!result.data });
 
       if (!response.ok) {
         throw new Error(result.message || 'Failed to fetch user details');
       }
 
+      if (!result.data) {
+        throw new Error('User not found');
+      }
+
+      console.log('Setting user data:', {
+        id: result.data.id,
+        name: `${result.data.first_name} ${result.data.last_name}`,
+        type: result.data.user_type
+      });
+
       setUser(result.data);
       setEditForm({
-        first_name: result.data.first_name,
-        last_name: result.data.last_name,
-        email: result.data.email
+        first_name: result.data.first_name || '',
+        last_name: result.data.last_name || '',
+        email: result.data.email || ''
       });
     } catch (err) {
       console.error('Error fetching user details:', err);
@@ -178,7 +205,11 @@ function UserDetailContent() {
       const response = await fetch(url, {
         method: 'PUT',
         headers,
-        body: JSON.stringify(editForm)
+        body: JSON.stringify({
+          first_name: editForm.first_name,
+          last_name: editForm.last_name
+          // email is excluded from updates
+        })
       });
 
       const result = await response.json();
@@ -230,12 +261,8 @@ function UserDetailContent() {
     }
   };
 
-  // Delete user account
-  const handleDeleteAccount = async () => {
-    if (!confirm('Are you sure you want to delete this user account? This action cannot be undone.')) {
-      return;
-    }
-
+  // Check user deletion constraints
+  const checkUserDeletion = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -243,7 +270,39 @@ function UserDetailContent() {
       }
 
       const headers = getAuthHeaders();
-      const url = API_ENDPOINTS.USERS.BY_ID(userId);
+      const url = API_ENDPOINTS.USER_DETAILS.DELETION_CHECK(userId);
+
+      logApiCall('GET', url);
+      const response = await fetch(url, { headers });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to check deletion constraints');
+      }
+
+      setDeletionCheck(result.data);
+      setShowDeleteConfirm(true);
+    } catch (err) {
+      console.error('Error checking deletion constraints:', err);
+      setError(err instanceof Error ? err.message : 'Failed to check deletion constraints');
+    }
+  };
+
+  // Handle delete account
+  const handleDeleteAccount = () => {
+    checkUserDeletion();
+  };
+
+  // Confirm user deletion
+  const confirmUserDeletion = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.USER_DETAILS.DELETE(userId);
 
       logApiCall('DELETE', url);
       const response = await fetch(url, {
@@ -257,11 +316,55 @@ function UserDetailContent() {
         throw new Error(result.message || 'Failed to delete user');
       }
 
-      // Redirect to users list
+      alert('User deleted successfully');
       router.push('/users');
     } catch (err) {
       console.error('Error deleting user:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete user');
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  // Create deletion modal content based on constraints (similar to vendor page)
+  const getDeleteModalContent = () => {
+    if (!deletionCheck) return { title: '', message: '', type: 'danger' as const };
+
+    if (deletionCheck.canDelete) {
+      return {
+        title: 'Delete User',
+        message: `Are you sure you want to delete "${user?.display_name || `${user?.first_name} ${user?.last_name}`.trim() || 'this user'}"? This action cannot be undone.`,
+        type: 'danger' as const
+      };
+    } else {
+      const issues = [];
+      
+      if (deletionCheck.userType === 'vendor') {
+        if (deletionCheck.constraints.clientsCount > 0) {
+          issues.push(`${deletionCheck.constraints.clientsCount} client${deletionCheck.constraints.clientsCount > 1 ? 's' : ''}`);
+        }
+        if (deletionCheck.constraints.equipmentCount > 0) {
+          issues.push(`${deletionCheck.constraints.equipmentCount} equipment instance${deletionCheck.constraints.equipmentCount > 1 ? 's' : ''}`);
+        }
+        if (deletionCheck.constraints.assignmentsCount > 0) {
+          issues.push(`${deletionCheck.constraints.assignmentsCount} active assignment${deletionCheck.constraints.assignmentsCount > 1 ? 's' : ''}`);
+        }
+        if (deletionCheck.constraints.activeTicketsCount > 0) {
+          issues.push(`${deletionCheck.constraints.activeTicketsCount} active ticket${deletionCheck.constraints.activeTicketsCount > 1 ? 's' : ''}`);
+        }
+      } else if (deletionCheck.userType === 'client') {
+        if (deletionCheck.constraints.equipmentCount > 0) {
+          issues.push(`${deletionCheck.constraints.equipmentCount} assigned equipment`);
+        }
+        if (deletionCheck.constraints.activeTicketsCount > 0) {
+          issues.push(`${deletionCheck.constraints.activeTicketsCount} active ticket${deletionCheck.constraints.activeTicketsCount > 1 ? 's' : ''}`);
+        }
+      }
+
+      return {
+        title: 'Cannot Delete User',
+        message: `"${user?.display_name || `${user?.first_name} ${user?.last_name}`.trim() || 'This user'}" cannot be deleted because they have ${issues.join(', ')}. Please reassign or remove these items first.`,
+        type: 'alert' as const
+      };
     }
   };
 
@@ -307,8 +410,16 @@ function UserDetailContent() {
               <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{user?.display_name}</h1>
-              <div className="flex items-center space-x-4 mt-1">
+              <h1 className="text-2xl font-bold text-gray-900">
+                {user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Unknown User'}
+              </h1>
+              {user?.user_type === 'vendor' && user?.vendor?.company_name && (
+                <p className="text-lg text-gray-600 mt-1">{user.vendor.company_name}</p>
+              )}
+              {user?.user_type === 'client' && user?.client?.company_name && (
+                <p className="text-lg text-gray-600 mt-1">{user.client.company_name}</p>
+              )}
+              <div className="flex items-center space-x-4 mt-2">
                 <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(user?.is_locked ? 'Inactive' : 'Active')}`}>
                   {user?.is_locked ? 'Inactive' : 'Active'}
                 </span>
@@ -514,12 +625,9 @@ function UserDetailContent() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Email
                         </label>
-                        <input
-                          type="email"
-                          value={editForm.email}
-                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                          className="input-field"
-                        />
+                        <p className="text-sm text-gray-900 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                          {user?.email} <span className="text-xs text-gray-500">(Cannot be modified)</span>
+                        </p>
                       </div>
                       <div className="flex space-x-3">
                         <button onClick={handleUpdateUser} className="btn-primary">
@@ -534,7 +642,9 @@ function UserDetailContent() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Full Name</label>
-                        <p className="text-sm text-gray-900">{user?.display_name}</p>
+                        <p className="text-sm text-gray-900">
+                          {user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Not provided'}
+                        </p>
                       </div>
                       
                       <div>
@@ -571,7 +681,7 @@ function UserDetailContent() {
 
 
                 {/* Company Information */}
-                {user?.company && (
+                {(user?.vendor || user?.client) && (
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                       <BuildingOfficeIcon className="h-5 w-5 text-red-600 mr-2" />
@@ -580,73 +690,55 @@ function UserDetailContent() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Company Name</label>
-                        <p className="text-sm text-gray-900">{user.company.company_name}</p>
+                        <p className="text-sm text-gray-900">
+                          {user.vendor?.company_name || user.client?.company_name || 'Not provided'}
+                        </p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Business Type</label>
-                        <p className="text-sm text-gray-900">{user.company.business_type}</p>
+                        <p className="text-sm text-gray-900">
+                          {user.vendor?.business_type || user.client?.business_type || 'Not specified'}
+                        </p>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">License Number</label>
-                        <p className="text-sm text-gray-900">{user.company.license_number || 'N/A'}</p>
-                      </div>
-                      {user.company.website && (
+                      {user.vendor?.license_number && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Website</label>
-                          <a 
-                            href={user.company.website} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 hover:underline"
-                          >
-                            {user.company.website}
-                          </a>
+                          <label className="block text-sm font-medium text-gray-700">License Number</label>
+                          <p className="text-sm text-gray-900">{user.vendor.license_number}</p>
                         </div>
                       )}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Phone</label>
+                        <p className="text-sm text-gray-900">
+                          {user.vendor?.primary_phone || user.client?.primary_phone || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Address</label>
+                        <p className="text-sm text-gray-900">
+                          {(() => {
+                            const address = user.vendor || user.client;
+                            if (!address?.street_address) return 'Not provided';
+                            const parts = [
+                              address.street_address,
+                              address.city,
+                              address.state,
+                              address.zip_code
+                            ].filter(Boolean);
+                            return parts.join(', ');
+                          })()}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Status</label>
+                        <p className="text-sm text-gray-900 capitalize">
+                          {user.vendor?.status || user.client?.status || 'Unknown'}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* Contact Information */}
-                {user?.contact && (
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                      <PhoneIcon className="h-5 w-5 text-red-600 mr-2" />
-                      Contact Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Contact Person</label>
-                          <p className="text-sm text-gray-900">{user.contact.contact_person_name || 'N/A'}</p>
-                          <p className="text-xs text-gray-500">{user.contact.contact_title || ''}</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Primary Email</label>
-                          <p className="text-sm text-gray-900">{user.contact.primary_email || user.email}</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Primary Phone</label>
-                          <p className="text-sm text-gray-900">{user.contact.primary_phone || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                        {user.addresses && user.addresses.length > 0 && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">Address</label>
-                            {user.addresses.map((address, index) => (
-                              <div key={index}>
-                                <p className="text-sm text-gray-900">{address.street_address}</p>
-                                <p className="text-sm text-gray-900">{address.city}, {address.state} {address.zip_code}</p>
-                                <p className="text-sm text-gray-900">{address.country}</p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+
               </div>
             )}
 
@@ -806,6 +898,20 @@ function UserDetailContent() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && deletionCheck && (
+        <ConfirmModal
+          isOpen={showDeleteConfirm}
+          title={getDeleteModalContent().title}
+          message={getDeleteModalContent().message}
+          type={getDeleteModalContent().type}
+          confirmText={deletionCheck.canDelete ? "Delete User" : "OK"}
+          cancelText={deletionCheck.canDelete ? "Cancel" : undefined}
+          onConfirm={deletionCheck.canDelete ? confirmUserDeletion : () => setShowDeleteConfirm(false)}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </DashboardLayout>
   );
 }

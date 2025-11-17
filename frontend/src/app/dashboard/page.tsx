@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import AddVendorModal from '../../components/modals/AddVendorModal';
+import CreateClientTicketModal from '../../components/modals/CreateClientTicketModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import ErrorDisplay from '../../components/ui/ErrorDisplay';
 import DebugLogger from '../../utils/DebugLogger';
@@ -484,14 +485,15 @@ function AdminDashboard({ user }: { user: User }) {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Actions
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white">
                 {recentVendors.map((vendor, index) => (
-                  <tr key={vendor.id} className={`hover:bg-gray-50 transition-colors ${index !== recentVendors.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                  <tr 
+                    key={vendor.id} 
+                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${index !== recentVendors.length - 1 ? 'border-b border-gray-100' : ''}`}
+                    onClick={() => router.push(`/vendors/${vendor.id}`)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
@@ -534,20 +536,6 @@ function AdminDashboard({ user }: { user: User }) {
                         {vendor.status}
                       </span>
                       <div className="text-xs text-gray-500 mt-1">{vendor.lastActivity}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                      <Link 
-                        href={`/vendors/${vendor.id}`}
-                        className="text-red-600 hover:text-red-800 transition-colors" 
-                      >
-                        View
-                      </Link>
-                      <Link 
-                        href={`/vendors/${vendor.id}/edit`}
-                        className="text-gray-600 hover:text-gray-800 transition-colors"
-                      >
-                        Edit
-                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -1006,6 +994,7 @@ function ClientDashboardComponent({ user }: { user: User }) {
   const [activity, setActivity] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isCreateTicketModalOpen, setIsCreateTicketModalOpen] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -1123,10 +1112,19 @@ function ClientDashboardComponent({ user }: { user: User }) {
               </p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-500">
-              {client_info.vendor_company_name && `Managed by ${client_info.vendor_company_name}`}
-            </p>
+          <div className="flex items-center space-x-3">
+            <div className="text-right">
+              <p className="text-sm text-gray-500">
+                {client_info.vendor_company_name && `Managed by ${client_info.vendor_company_name}`}
+              </p>
+            </div>
+            <button 
+              onClick={() => setIsCreateTicketModalOpen(true)}
+              className="btn-primary flex items-center space-x-2"
+            >
+              <ClipboardDocumentListIcon className="h-5 w-5" />
+              <span>Create Service Request</span>
+            </button>
           </div>
         </div>
 
@@ -1335,6 +1333,19 @@ function ClientDashboardComponent({ user }: { user: User }) {
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
             <div className="space-y-3">
+              <button 
+                onClick={() => setIsCreateTicketModalOpen(true)}
+                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
+              >
+                <div className="p-2 bg-red-50 rounded-lg">
+                  <PlusIcon className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Create Service Request</p>
+                  <p className="text-xs text-gray-500">Request equipment maintenance</p>
+                </div>
+              </button>
+              
               <Link 
                 href="/client-equipment"
                 className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
@@ -1356,8 +1367,8 @@ function ClientDashboardComponent({ user }: { user: User }) {
                   <ClipboardDocumentListIcon className="h-5 w-5 text-orange-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Service Requests</p>
-                  <p className="text-xs text-gray-500">Submit maintenance request</p>
+                  <p className="text-sm font-medium text-gray-900">View Service Requests</p>
+                  <p className="text-xs text-gray-500">Track your requests</p>
                 </div>
               </Link>
               
@@ -1427,6 +1438,16 @@ function ClientDashboardComponent({ user }: { user: User }) {
           </div>
         )}
       </div>
+
+      {/* Create Service Request Modal */}
+      <CreateClientTicketModal
+        isOpen={isCreateTicketModalOpen}
+        onClose={() => setIsCreateTicketModalOpen(false)}
+        onSuccess={() => {
+          fetchClientDashboard(); // Refresh dashboard data
+          toast.success('Service request created successfully!');
+        }}
+      />
     </DashboardLayout>
   );
 }

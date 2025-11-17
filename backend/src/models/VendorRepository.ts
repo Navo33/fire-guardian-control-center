@@ -11,9 +11,24 @@ export interface VendorFilters {
 }
 
 export interface VendorUpdateData {
+  // User fields (no email to prevent modification)
   first_name?: string;
   last_name?: string;
-  email?: string;
+  
+  // Company fields
+  company_name?: string;
+  business_type?: string;
+  license_number?: string;
+  
+  // Contact fields (only phone exists in vendors table)
+  primary_phone?: string;
+  
+  // Address fields
+  street_address?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
+  country?: string;
 }
 
 /**
@@ -77,7 +92,8 @@ export class VendorRepository {
 
     const query = `
       SELECT 
-        u.id, u.first_name, u.last_name, u.display_name, u.email, 
+        v.id as vendor_id,  -- This is the vendors.id that frontend needs
+        u.id as user_id, u.first_name, u.last_name, u.display_name, u.email, 
         u.user_type, u.is_locked, u.last_login, u.created_at,
         
         -- Company details from vendors table
@@ -88,8 +104,8 @@ export class VendorRepository {
         -- Equipment count (using vendor ID from vendors table)
         (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = v.id AND deleted_at IS NULL) as equipment_count,
         
-        -- Client assignments count (using vendor ID from vendors table)
-        (SELECT COUNT(DISTINCT client_id) FROM equipment_assignment WHERE vendor_id = v.id) as client_count,
+        -- Client count (clients created by this vendor)
+        (SELECT COUNT(*) FROM clients WHERE created_by_vendor_id = v.id) as client_count,
         
         -- Specializations (comma-separated)
         (SELECT STRING_AGG(s.name, ', ') 
@@ -115,6 +131,7 @@ export class VendorRepository {
 
       return result.rows.map(row => ({
         ...row,
+        id: row.vendor_id,  // Use vendor_id as the primary id for frontend
         equipment_count: parseInt(row.equipment_count) || 0,
         client_count: parseInt(row.client_count) || 0,
         // Add computed fields that frontend expects
@@ -205,7 +222,8 @@ export class VendorRepository {
   static async getVendorById(id: number): Promise<DetailedVendor | null> {
     const query = `
       SELECT 
-        u.id, u.first_name, u.last_name, u.display_name, u.email, 
+        v.id as vendor_id,  -- This is the vendors.id 
+        u.id as user_id, u.first_name, u.last_name, u.display_name, u.email, 
         u.user_type, u.is_locked, u.last_login, u.created_at,
         
         -- Company details from vendors table
@@ -215,11 +233,12 @@ export class VendorRepository {
         
         -- Aggregated counts (using vendor ID from vendors table)
         (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = v.id AND deleted_at IS NULL) as equipment_count,
-        (SELECT COUNT(*) FROM equipment_assignment ea WHERE ea.vendor_id = v.id) as assignments_count
+        (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = v.id AND assigned_to IS NOT NULL AND deleted_at IS NULL) as assignments_count,
+        (SELECT COUNT(*) FROM clients WHERE created_by_vendor_id = v.id) as clients_count
          
       FROM "user" u
       INNER JOIN vendors v ON v.user_id = u.id
-      WHERE u.id = $1 AND u.user_type = 'vendor' AND u.deleted_at IS NULL
+      WHERE v.id = $1 AND u.user_type = 'vendor' AND u.deleted_at IS NULL
     `;
 
     DebugLogger.database('GET_DETAILED_VENDOR_BY_ID', query, [id]);
@@ -234,20 +253,19 @@ export class VendorRepository {
 
       const row = result.rows[0];
 
-      // Get specializations (using vendor ID from vendors table)
+      // Get specializations (using vendor ID from vendors table)  
       const specializationQuery = `
         SELECT s.name 
         FROM vendor_specialization vs
         JOIN specialization s ON s.id = vs.specialization_id
-        JOIN vendors v ON v.id = vs.vendor_id
-        WHERE v.user_id = $1
+        WHERE vs.vendor_id = $1
       `;
       
       const specializationResult = await pool.query(specializationQuery, [id]);
       const specializations = specializationResult.rows.map(row => row.name);
 
       const detailedVendor: DetailedVendor = {
-        id: row.id,
+        id: row.vendor_id,  // Use vendor_id as the primary id
         first_name: row.first_name,
         last_name: row.last_name,
         display_name: row.display_name,
@@ -261,14 +279,14 @@ export class VendorRepository {
         
         // Maintain compatibility with existing interface
         company: {
-          vendor_id: row.id,
+          vendor_id: row.vendor_id,
           company_name: row.company_name,
           business_type: row.business_type,
           license_number: row.license_number
         },
         
         contact: {
-          vendor_id: row.id,
+          vendor_id: row.vendor_id,
           contact_person_name: row.display_name || `${row.first_name} ${row.last_name}`,
           contact_title: '',
           primary_email: row.email,
@@ -276,7 +294,7 @@ export class VendorRepository {
         },
         
         address: {
-          vendor_id: row.id,
+          vendor_id: row.vendor_id,
           street_address: row.street_address,
           city: row.city,
           state: row.state,
@@ -288,7 +306,8 @@ export class VendorRepository {
         
         // Add the counts as additional properties
         equipment_count: parseInt(row.equipment_count) || 0,
-        assignments_count: parseInt(row.assignments_count) || 0
+        assignments_count: parseInt(row.assignments_count) || 0,
+        clients_count: parseInt(row.clients_count) || 0
       };
 
       DebugLogger.database('GET_DETAILED_VENDOR_BY_ID_RESULT', undefined, undefined, detailedVendor);
@@ -385,21 +404,22 @@ export class VendorRepository {
       const vendorRecord = vendorResult.rows[0];
       const detailedVendor: DetailedVendor = {
         ...newUser,
+        id: vendorRecord.id,  // Use vendor.id as the primary id
         company: {
-          vendor_id: newUser.id,
+          vendor_id: vendorRecord.id,  // Use vendor.id, not user.id
           company_name: vendorRecord.company_name,
           business_type: vendorRecord.business_type,
           license_number: vendorRecord.license_number
         },
         contact: {
-          vendor_id: newUser.id,
+          vendor_id: vendorRecord.id,  // Use vendor.id, not user.id
           contact_person_name: newUser.display_name || `${newUser.first_name} ${newUser.last_name}`,
           contact_title: '',
           primary_email: newUser.email,
           primary_phone: vendorRecord.primary_phone
         },
         address: {
-          vendor_id: newUser.id,
+          vendor_id: vendorRecord.id,  // Use vendor.id, not user.id
           street_address: vendorRecord.street_address,
           city: vendorRecord.city,
           state: vendorRecord.state,
@@ -426,60 +446,111 @@ export class VendorRepository {
    * Update vendor information
    */
   static async updateVendor(id: number, updateData: VendorUpdateData): Promise<User> {
-    const updateFields = [];
-    const values = [];
-    let paramCount = 0;
-
-    // Build dynamic update query
-    if (updateData.first_name !== undefined) {
-      paramCount++;
-      updateFields.push(`first_name = $${paramCount}`);
-      values.push(updateData.first_name);
-    }
-
-    if (updateData.last_name !== undefined) {
-      paramCount++;
-      updateFields.push(`last_name = $${paramCount}`);
-      values.push(updateData.last_name);
-    }
-
-    if (updateData.email !== undefined) {
-      paramCount++;
-      updateFields.push(`email = $${paramCount}`);
-      values.push(updateData.email);
-    }
-
-    if (updateFields.length === 0) {
-      throw new Error('No fields to update');
-    }
-
-    values.push(id);
-    const query = `
-      UPDATE "user" 
-      SET ${updateFields.join(', ')}
-      WHERE id = $${paramCount + 1} AND user_type = 'vendor' AND deleted_at IS NULL
-      RETURNING 
-        id, first_name, last_name, display_name, email, 
-        user_type, is_locked, created_at
-    `;
-
-    DebugLogger.database('UPDATE_VENDOR', query, values);
-
+    const client = await pool.connect();
+    
     try {
-      const result = await pool.query(query, values);
+      await client.query('BEGIN');
       
-      if (result.rows.length === 0) {
-        throw new Error('Vendor not found or update failed');
+      // Step 1: Update user table (first_name, last_name only - email is protected)
+      const userFields: string[] = [];
+      const userValues: any[] = [];
+      let userParamCount = 0;
+
+      if (updateData.first_name !== undefined) {
+        userParamCount++;
+        userFields.push(`first_name = $${userParamCount}`);
+        userValues.push(updateData.first_name);
       }
 
-      const vendor = result.rows[0];
+      if (updateData.last_name !== undefined) {
+        userParamCount++;
+        userFields.push(`last_name = $${userParamCount}`);
+        userValues.push(updateData.last_name);
+      }
 
+      if (userFields.length > 0) {
+        userValues.push(id);
+        const userQuery = `
+          UPDATE "user" 
+          SET ${userFields.join(', ')}
+          WHERE id = (SELECT user_id FROM vendors WHERE id = $${userParamCount + 1}) 
+            AND user_type = 'vendor' AND deleted_at IS NULL
+        `;
+        
+        DebugLogger.database('UPDATE_VENDOR_USER', userQuery, userValues);
+        await client.query(userQuery, userValues);
+      }
+
+      // Step 2: Update vendors table
+      const vendorFields: string[] = [];
+      const vendorValues: any[] = [];
+      let vendorParamCount = 0;
+
+      const vendorFieldMappings = [
+        { field: 'company_name', data: updateData.company_name },
+        { field: 'business_type', data: updateData.business_type },
+        { field: 'license_number', data: updateData.license_number },
+        { field: 'primary_phone', data: updateData.primary_phone },
+        { field: 'street_address', data: updateData.street_address },
+        { field: 'city', data: updateData.city },
+        { field: 'state', data: updateData.state },
+        { field: 'zip_code', data: updateData.zip_code },
+        { field: 'country', data: updateData.country }
+      ];
+
+      vendorFieldMappings.forEach(mapping => {
+        if (mapping.data !== undefined) {
+          vendorParamCount++;
+          vendorFields.push(`${mapping.field} = $${vendorParamCount}`);
+          vendorValues.push(mapping.data);
+        }
+      });
+
+      if (vendorFields.length > 0) {
+        vendorValues.push(id);
+        const vendorQuery = `
+          UPDATE vendors 
+          SET ${vendorFields.join(', ')}
+          WHERE id = $${vendorParamCount + 1}
+        `;
+        
+        DebugLogger.database('UPDATE_VENDOR_DETAILS', vendorQuery, vendorValues);
+        await client.query(vendorQuery, vendorValues);
+      }
+
+      if (userFields.length === 0 && vendorFields.length === 0) {
+        throw new Error('No fields to update');
+      }
+
+      // Step 3: Return updated vendor data
+      const selectQuery = `
+        SELECT 
+          u.id, u.first_name, u.last_name, u.display_name, u.email, 
+          u.user_type, u.is_locked, u.created_at
+        FROM "user" u
+        INNER JOIN vendors v ON u.id = v.user_id
+        WHERE v.id = $1 AND u.deleted_at IS NULL
+      `;
+      
+      DebugLogger.database('GET_UPDATED_VENDOR', selectQuery, [id]);
+      const result = await client.query(selectQuery, [id]);
+      
+      if (result.rows.length === 0) {
+        throw new Error('Vendor not found after update');
+      }
+
+      await client.query('COMMIT');
+      
+      const vendor = result.rows[0];
       DebugLogger.database('UPDATE_VENDOR_RESULT', undefined, undefined, vendor);
 
       return vendor;
     } catch (error) {
+      await client.query('ROLLBACK');
       DebugLogger.error('Error updating vendor', error);
       throw error;
+    } finally {
+      client.release();
     }
   }
 
@@ -490,7 +561,8 @@ export class VendorRepository {
     const query = `
       UPDATE "user" 
       SET deleted_at = CURRENT_TIMESTAMP
-      WHERE id = $1 AND user_type = 'vendor' AND deleted_at IS NULL
+      WHERE id = (SELECT user_id FROM vendors WHERE id = $1) 
+        AND user_type = 'vendor' AND deleted_at IS NULL
     `;
 
     DebugLogger.database('DELETE_VENDOR', query, [id]);
@@ -518,37 +590,37 @@ export class VendorRepository {
       pool.query(`
         SELECT 
           COUNT(*) as total_equipment,
-          COUNT(CASE WHEN ei.status = 'assigned' THEN 1 END) as equipment_assigned,
+          COUNT(CASE WHEN ei.assigned_to IS NOT NULL THEN 1 END) as equipment_assigned,
           COUNT(CASE WHEN ei.status = 'maintenance' THEN 1 END) as equipment_maintenance,
           COUNT(CASE WHEN ei.status = 'available' THEN 1 END) as equipment_available
         FROM equipment_instance ei
-        JOIN vendor_location vl ON vl.id = ei.vendor_location_id
-        WHERE vl.vendor_id = $1 AND ei.deleted_at IS NULL
+        WHERE ei.vendor_id = $1 AND ei.deleted_at IS NULL
       `, [vendorId]),
 
       // Client stats
       pool.query(`
-        SELECT COUNT(DISTINCT ea.client_id) as total_clients
-        FROM equipment_assignment ea
-        WHERE ea.assigned_by = $1
+        SELECT COUNT(*) as total_clients
+        FROM clients
+        WHERE created_by_vendor_id = $1
       `, [vendorId]),
 
-      // Location stats
+      // Maintenance tickets stats
       pool.query(`
-        SELECT COUNT(*) as total_locations
-        FROM vendor_location
+        SELECT COUNT(*) as total_tickets
+        FROM maintenance_ticket
         WHERE vendor_id = $1
       `, [vendorId]),
 
-      // Recent activity
+      // Recent activity (using vendor's user_id for audit logs)
       pool.query(`
         SELECT 
-          DATE(created_at) as date,
+          DATE(al.created_at) as date,
           COUNT(*) as activities
-        FROM audit_log
-        WHERE changed_by = $1 
-          AND created_at >= CURRENT_DATE - INTERVAL '30 days'
-        GROUP BY DATE(created_at)
+        FROM audit_log al
+        JOIN vendors v ON v.user_id = al.changed_by
+        WHERE v.id = $1 
+          AND al.created_at >= CURRENT_DATE - INTERVAL '30 days'
+        GROUP BY DATE(al.created_at)
         ORDER BY date DESC
         LIMIT 30
       `, [vendorId])
@@ -556,7 +628,7 @@ export class VendorRepository {
 
     const equipmentStats = queries[0].rows[0];
     const clientStats = queries[1].rows[0];
-    const locationStats = queries[2].rows[0];
+    const ticketStats = queries[2].rows[0];
     const activityStats = queries[3].rows;
 
     const stats = {
@@ -569,8 +641,8 @@ export class VendorRepository {
       clients: {
         total: parseInt(clientStats.total_clients) || 0
       },
-      locations: {
-        total: parseInt(locationStats.total_locations) || 0
+      tickets: {
+        total: parseInt(ticketStats.total_tickets) || 0
       },
       recentActivity: activityStats.map(row => ({
         date: row.date,
@@ -626,9 +698,9 @@ export class VendorRepository {
         e.manufacturer,
         
         -- Client details (if assigned)
-        client.id as client_id,
-        client.display_name as client_name,
-        client.email as client_email,
+        c.id as client_id,
+        c.company_name as client_name,
+        client_user.email as client_email,
         
         -- Assignment details (if assigned)
         ea.id as assignment_id,
@@ -639,7 +711,8 @@ export class VendorRepository {
         
       FROM equipment_instance ei
       INNER JOIN equipment e ON ei.equipment_id = e.id
-      LEFT JOIN "user" client ON ei.assigned_to = client.id
+      LEFT JOIN clients c ON ei.assigned_to = c.id
+      LEFT JOIN "user" client_user ON c.user_id = client_user.id
       LEFT JOIN equipment_assignment ea ON ea.vendor_id = ei.vendor_id 
         AND ea.client_id = ei.assigned_to 
         AND ea.status = 'active'
@@ -695,6 +768,78 @@ export class VendorRepository {
       }));
     } catch (error) {
       console.error('Error getting vendor equipment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if vendor can be safely deleted by checking for relationships
+   */
+  static async checkVendorDeletionConstraints(vendorId: number): Promise<{
+    canDelete: boolean;
+    clientsCount: number;
+    equipmentCount: number;
+    assignmentsCount: number;
+    activeTicketsCount: number;
+  }> {
+    try {
+      DebugLogger.log('Checking vendor deletion constraints', { vendorId });
+
+      // Check for clients created by this vendor (clients table doesn't have deleted_at)
+      const clientsResult = await pool.query(`
+        SELECT COUNT(*) as count 
+        FROM clients 
+        WHERE created_by_vendor_id = $1 AND status != 'inactive'
+      `, [vendorId]);
+
+      // Check for equipment instances owned by this vendor (equipment_instance has deleted_at)
+      const equipmentResult = await pool.query(`
+        SELECT COUNT(*) as count 
+        FROM equipment_instance 
+        WHERE vendor_id = $1 AND deleted_at IS NULL
+      `, [vendorId]);
+
+      // Check for active equipment assignments involving this vendor (equipment_assignment doesn't have deleted_at)
+      const assignmentsResult = await pool.query(`
+        SELECT COUNT(*) as count 
+        FROM equipment_assignment ea
+        WHERE ea.vendor_id = $1 
+        AND ea.status IN ('active', 'pending')
+      `, [vendorId]);
+
+      // Check for active maintenance tickets involving this vendor (maintenance_ticket doesn't have deleted_at)
+      const ticketsResult = await pool.query(`
+        SELECT COUNT(*) as count 
+        FROM maintenance_ticket mt
+        WHERE mt.vendor_id = $1 
+        AND mt.ticket_status IN ('open', 'in_progress', 'pending')
+      `, [vendorId]);
+
+      const clientsCount = parseInt(clientsResult.rows[0].count);
+      const equipmentCount = parseInt(equipmentResult.rows[0].count);
+      const assignmentsCount = parseInt(assignmentsResult.rows[0].count);
+      const activeTicketsCount = parseInt(ticketsResult.rows[0].count);
+
+      const canDelete = clientsCount === 0 && equipmentCount === 0 && assignmentsCount === 0 && activeTicketsCount === 0;
+
+      DebugLogger.log('Vendor deletion constraints check completed', {
+        vendorId,
+        canDelete,
+        clientsCount,
+        equipmentCount,
+        assignmentsCount,
+        activeTicketsCount
+      });
+
+      return {
+        canDelete,
+        clientsCount,
+        equipmentCount,
+        assignmentsCount,
+        activeTicketsCount
+      };
+    } catch (error) {
+      DebugLogger.error('Error checking vendor deletion constraints', error);
       throw error;
     }
   }

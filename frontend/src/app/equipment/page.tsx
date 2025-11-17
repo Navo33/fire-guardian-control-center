@@ -377,31 +377,26 @@ const EquipmentManagementPage: React.FC = () => {
                       </td>
 
                       {/* Actions */}
-                      <td className="px-6 py-4 text-right">
-                        <div 
-                          className="flex items-center justify-end space-x-2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-2">
                           <button
-                            onClick={() => handleViewDetails(equipment.id)}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-                            title="View Details"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(equipment.id);
+                            }}
+                            className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
                           >
-                            <EyeIcon className="h-4 w-4" />
+                            View
                           </button>
+                          <span className="text-gray-300">|</span>
                           <button
-                            onClick={() => {/* handleEditEquipment(equipment.id) */}}
-                            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors"
-                            title="Edit Equipment"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // TODO: Handle edit - will be in-place editing
+                            }}
+                            className="text-gray-600 hover:text-gray-900 text-sm font-medium"
                           >
-                            <PencilIcon className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => {/* handleDeleteEquipment(equipment.id) */}}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                            title="Delete Equipment"
-                          >
-                            <TrashIcon className="h-4 w-4" />
+                            Edit
                           </button>
                         </div>
                       </td>
