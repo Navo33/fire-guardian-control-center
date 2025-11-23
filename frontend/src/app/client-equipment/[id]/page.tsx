@@ -462,18 +462,36 @@ const ClientEquipmentDetailPage: React.FC = () => {
                                 )}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(instance.compliance_status)}`}>
-                                  {getStatusLabel(instance.compliance_status)}
-                                </span>
+                                {/* Hide compliance status for pending assignments */}
+                                {instance.assignment_status === 'pending' ? (
+                                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 border-gray-200">
+                                    Assignment Pending
+                                  </span>
+                                ) : (
+                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(instance.compliance_status)}`}>
+                                    {getStatusLabel(instance.compliance_status)}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">{instance.next_maintenance_date || 'N/A'}</div>
-                                {instance.days_until_maintenance && (
-                                  <div className="text-xs text-gray-500">
-                                    {instance.days_until_maintenance > 0 ? 
-                                      `${instance.days_until_maintenance} days` : 
-                                      `${Math.abs(instance.days_until_maintenance)} days overdue`}
-                                  </div>
+                                {/* Hide maintenance info for pending assignments */}
+                                {instance.assignment_status === 'pending' ? (
+                                  <div className="text-sm text-gray-500">Not applicable</div>
+                                ) : (
+                                  <>
+                                    <div className="text-sm text-gray-900">{instance.next_maintenance_date || 'N/A'}</div>
+                                    {instance.days_until_maintenance && (
+                                      <div className="text-xs text-gray-500">
+                                        {/* Only show overdue if compliance status is actually overdue */}
+                                        {instance.compliance_status === 'overdue' && instance.days_until_maintenance < 0 ? 
+                                          `${Math.abs(instance.days_until_maintenance)} days overdue` :
+                                          instance.days_until_maintenance > 0 ?
+                                            `${instance.days_until_maintenance} days` :
+                                            'Due now'
+                                        }
+                                      </div>
+                                    )}
+                                  </>
                                 )}
                               </td>
                             </tr>
