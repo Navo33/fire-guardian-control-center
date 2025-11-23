@@ -918,13 +918,16 @@ export default function TicketDetailsPage() {
       )}
 
       {/* Resolve Ticket Modal */}
-      <ResolveTicketModal
-        isOpen={showResolveModal}
-        onClose={() => setShowResolveModal(false)}
-        onSuccess={handleResolveSuccess}
-        ticketNumber={ticket.ticket_number}
-        ticketId={ticket.ticket_number}
-      />
+      {ticket && (
+        <ResolveTicketModal
+          isOpen={showResolveModal}
+          onClose={() => setShowResolveModal(false)}
+          onSuccess={handleResolveSuccess}
+          ticketNumber={ticket.ticket_number}
+          ticketId={ticket.ticket_number}
+          ticket={ticket}
+        />
+      )}
     </DashboardLayout>
   );
 }

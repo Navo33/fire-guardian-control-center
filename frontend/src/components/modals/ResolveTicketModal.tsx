@@ -22,6 +22,24 @@ const resolveSchema = z.object({
     .min(0.1, 'Hours must be at least 0.1')
     .max(100, 'Hours cannot exceed 100')
     .optional(),
+  custom_maintenance_date: z.string()
+    .optional()
+    .refine((date) => {
+      if (!date) return true; // Optional field
+      const parsedDate = new Date(date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return parsedDate >= today;
+    }, 'Maintenance date cannot be in the past'),
+  custom_next_maintenance_date: z.string()
+    .optional()
+    .refine((date) => {
+      if (!date) return true; // Optional field
+      const parsedDate = new Date(date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return parsedDate >= today;
+    }, 'Next maintenance date cannot be in the past'),
 });
 
 type ResolveFormData = z.infer<typeof resolveSchema>;
@@ -32,6 +50,14 @@ interface ResolveTicketModalProps {
   onSuccess: () => void;
   ticketNumber: string;
   ticketId: string; // For API call (could be numeric ID or ticket number)
+  ticket?: {
+    support_type: 'maintenance' | 'system' | 'user';
+    equipment?: {
+      id: number;
+      serial_number: string;
+      equipment_name: string;
+    };
+  };
 }
 
 export default function ResolveTicketModal({ 
@@ -39,7 +65,8 @@ export default function ResolveTicketModal({
   onClose, 
   onSuccess, 
   ticketNumber,
-  ticketId
+  ticketId,
+  ticket
 }: ResolveTicketModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { showToast } = useToast();
@@ -64,6 +91,8 @@ export default function ResolveTicketModal({
       const requestBody = {
         resolution_description: data.resolution_description,
         ...(data.actual_hours && { actual_hours: data.actual_hours }),
+        ...(data.custom_maintenance_date && { custom_maintenance_date: data.custom_maintenance_date }),
+        ...(data.custom_next_maintenance_date && { custom_next_maintenance_date: data.custom_next_maintenance_date }),
       };
 
       const response = await fetch(`${API_ENDPOINTS.MAINTENANCE_TICKETS.BASE}/${ticketId}/resolve`, {
@@ -175,6 +204,59 @@ export default function ResolveTicketModal({
                   Enter the actual time spent resolving this ticket
                 </p>
               </div>
+
+              {/* Maintenance Date Fields - Only for maintenance tickets */}
+              {ticket?.support_type === 'maintenance' && ticket?.equipment && (
+                <div className="border-t border-gray-100 pt-6">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-medium text-gray-900 flex items-center space-x-2">
+                      <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                      <span>Equipment Maintenance Dates (Optional)</span>
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Override the automatic maintenance date calculation for {ticket.equipment.serial_number}
+                    </p>
+                  </div>
+
+                  {/* Last Maintenance Date Override */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Last Maintenance Date (Override)
+                    </label>
+                    <input
+                      type="date"
+                      {...register('custom_maintenance_date')}
+                      className="input-field"
+                      disabled={isLoading}
+                    />
+                    {errors.custom_maintenance_date && (
+                      <p className="mt-1 text-sm text-red-600">{errors.custom_maintenance_date.message}</p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">
+                      Leave blank to use today's date
+                    </p>
+                  </div>
+
+                  {/* Next Maintenance Date Override */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Next Maintenance Date (Override)
+                    </label>
+                    <input
+                      type="date"
+                      {...register('custom_next_maintenance_date')}
+                      className="input-field"
+                      disabled={isLoading}
+                    />
+                    {errors.custom_next_maintenance_date && (
+                      <p className="mt-1 text-sm text-red-600">{errors.custom_next_maintenance_date.message}</p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">
+                      Leave blank to calculate automatically based on maintenance interval
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Form Actions */}
               <div className="flex justify-end space-x-4 pt-6 border-t border-gray-100">
