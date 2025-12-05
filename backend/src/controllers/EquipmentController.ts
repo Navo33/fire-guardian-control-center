@@ -1044,4 +1044,116 @@ export class EquipmentController extends BaseController {
       return ApiResponseUtil.internalError(res);
     }
   });
+
+  /**
+   * GET /api/equipment/instances/:equipmentTypeId
+   * Get equipment instances with enhanced maintenance information for equipment details page
+   */
+  getEquipmentInstancesWithMaintenance = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const startTime = Date.now();
+    const { equipmentTypeId } = req.params;
+    const userId = req.user!.userId;
+
+    try {
+      // Validate equipment type ID
+      const equipmentTypeIdNum = parseInt(equipmentTypeId);
+      if (isNaN(equipmentTypeIdNum) || equipmentTypeIdNum <= 0) {
+        return ApiResponseUtil.badRequest(res, 'Invalid equipment type ID');
+      }
+
+      // Check user role and get vendor ID
+      const userType = req.user!.user_type;
+      if (userType !== 'vendor') {
+        DebugLogger.error('Non-vendor user attempted to access equipment instances', { userId, userType });
+        return ApiResponseUtil.forbidden(res, 'Access denied. Vendor access required.');
+      }
+
+      const vendorId = (await DashboardRepository.getVendorIdFromUserId(userId)) ?? undefined;
+      if (!vendorId) {
+        return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+      }
+
+      // Parse query parameters
+      const { page = '1', limit = '25', status, compliance_status, search } = req.query;
+
+      const pagination: PaginationQuery = {
+        page: parseInt(page as string),
+        limit: parseInt(limit as string)
+      };
+
+      const filters: EquipmentFilters = {
+        status: status as string,
+        compliance_status: compliance_status as string,
+        search: search as string
+      };
+
+      DebugLogger.log('Fetching equipment instances with maintenance info', { 
+        vendorId, 
+        equipmentTypeId: equipmentTypeIdNum, 
+        pagination, 
+        filters 
+      }, 'EQUIPMENT');
+
+      // Get equipment instances with enhanced maintenance information
+      const instances = await EquipmentRepository.getEquipmentInstancesWithMaintenanceInfo(
+        vendorId, 
+        equipmentTypeIdNum, 
+        pagination, 
+        filters
+      );
+
+      // Get total count for pagination
+      const totalCount = await EquipmentRepository.getEquipmentCount(vendorId, {
+        ...filters,
+        equipment_type_id: equipmentTypeIdNum
+      });
+
+      const totalPages = Math.ceil(totalCount / pagination.limit!);
+
+      DebugLogger.log('Equipment instances with maintenance info retrieved successfully', { 
+        vendorId, 
+        equipmentTypeId: equipmentTypeIdNum,
+        count: instances.length,
+        totalCount,
+        totalPages
+      }, 'EQUIPMENT');
+      
+      this.logAction('EQUIPMENT_INSTANCES_WITH_MAINTENANCE_ACCESSED', userId, { 
+        vendorId, 
+        equipmentTypeId: equipmentTypeIdNum, 
+        filters 
+      });
+
+      DebugLogger.performance('Equipment instances with maintenance fetch', startTime, { 
+        vendorId, 
+        equipmentTypeId: equipmentTypeIdNum,
+        count: instances.length 
+      });
+      
+      ApiResponseUtil.success(res, {
+        instances,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          totalCount,
+          totalPages,
+          hasNext: pagination.page! < totalPages,
+          hasPrev: pagination.page! > 1
+        }
+      }, 'Equipment instances with maintenance information retrieved successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error getting equipment instances with maintenance info', error, { 
+        userId: req.user?.userId, 
+        equipmentTypeId 
+      });
+      this.logAction('EQUIPMENT_INSTANCES_WITH_MAINTENANCE_ERROR', req.user?.userId, { 
+        equipmentTypeId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return ApiResponseUtil.internalError(res);
+    }
+  });
 }

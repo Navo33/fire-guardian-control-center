@@ -114,6 +114,19 @@ router.delete('/:id/remove-assignment', equipmentController.removeEquipmentAssig
 router.post('/', equipmentController.addEquipmentInstance);
 
 /**
+ * @route GET /api/equipment/instances/:equipmentTypeId
+ * @desc Get equipment instances with enhanced maintenance information
+ * @access Vendor
+ * @param equipmentTypeId - Equipment type ID
+ * @query page - Page number (default: 1)
+ * @query limit - Items per page (default: 25)
+ * @query status - Filter by status
+ * @query compliance_status - Filter by compliance status
+ * @query search - Search term
+ */
+router.get('/instances/:equipmentTypeId', equipmentController.getEquipmentInstancesWithMaintenance);
+
+/**
  * @route GET /api/equipment/:id
  * @desc Get equipment type details with comprehensive metrics
  * @access Vendor/Admin
