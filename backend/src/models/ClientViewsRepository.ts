@@ -766,17 +766,31 @@ export class ClientViewsRepository {
                 ei.maintenance_interval_days,
                 TO_CHAR(ei.assigned_at, 'Mon DD, YYYY') AS assigned_date,
 
-                -- Compliance Status (Real-time)
+                -- Compliance Status (Real-time) - Fixed Logic with Assignment Status
                 CASE 
+                    -- If equipment is expired, always expired regardless of assignment
                     WHEN ei.expiry_date < CURRENT_DATE THEN 'expired'
-                    WHEN ei.next_maintenance_date < CURRENT_DATE THEN 'overdue'
-                    WHEN ei.next_maintenance_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'due_soon'
-                    WHEN EXISTS (
+                    
+                    -- If assignment is pending or not started yet, equipment is not in use - so compliant
+                    WHEN ea.status IN ('pending', 'scheduled') AND ea.start_date > CURRENT_DATE THEN 'compliant'
+                    
+                    -- If assignment is inactive/completed, equipment not in active use - so compliant  
+                    WHEN ea.status IN ('completed', 'cancelled', 'inactive') THEN 'compliant'
+                    
+                    -- For active assignments, check maintenance dates
+                    WHEN ea.status = 'active' AND ei.next_maintenance_date IS NOT NULL AND ei.next_maintenance_date < CURRENT_DATE THEN 'overdue'
+                    WHEN ea.status = 'active' AND ei.next_maintenance_date IS NOT NULL AND ei.next_maintenance_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'due_soon'
+                    
+                    -- Check for overdue maintenance tickets (only for active assignments)
+                    WHEN ea.status = 'active' AND EXISTS (
                         SELECT 1 FROM public.maintenance_ticket mt 
                         WHERE mt.equipment_instance_id = ei.id 
                           AND mt.ticket_status IN ('open', 'in_progress')
+                          AND mt.scheduled_date IS NOT NULL
                           AND mt.scheduled_date < CURRENT_DATE
                     ) THEN 'overdue'
+                    
+                    -- Default: compliant
                     ELSE 'compliant'
                 END AS compliance_status,
 

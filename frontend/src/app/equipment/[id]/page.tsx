@@ -200,6 +200,7 @@ export default function EquipmentDetailsPage() {
   const equipmentId = params.id as string;
   
   const [equipmentType, setEquipmentType] = useState<EquipmentType | null>(null);
+  const [equipmentInstances, setEquipmentInstances] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -314,14 +315,23 @@ export default function EquipmentDetailsPage() {
         specifications: equipmentData.specifications || {}
       });
 
-      // Fetch equipment instances for this type
-      const instanceUrl = `${API_BASE_URL}/equipment?equipment_type_id=${equipmentId}`;
+      // Fetch equipment instances with enhanced maintenance information
+      const instanceUrl = `${API_BASE_URL}/equipment/instances/${equipmentId}`;
       logApiCall('GET', instanceUrl);
       const instanceResponse = await fetch(instanceUrl, { headers });
       const instanceResult = await instanceResponse.json();
 
       if (!instanceResponse.ok) {
         throw new Error(instanceResult.message || 'Failed to fetch equipment instances');
+      }
+
+      // Store the enhanced instance data
+      setEquipmentInstances(instanceResult.data.instances || []);
+      
+      // Update equipment type with instance count from actual data
+      if (equipmentData && instanceResult.data.instances) {
+        equipmentData.total_instances = instanceResult.data.instances.length;
+        equipmentData.instances = instanceResult.data.instances;
       }
     } catch (err) {
       console.error('Error fetching equipment details:', err);

@@ -236,11 +236,13 @@ export default function TicketDetailsPage() {
     setIsClosing(true);
 
     try {
-      const response = await fetch(`/api/vendor/tickets/${ticketId}/close`, {
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.MAINTENANCE_TICKETS.CLOSE(ticketId);
+
+      logApiCall('PUT', url);
+      const response = await fetch(url, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers
       });
 
       if (!response.ok) {
@@ -916,13 +918,16 @@ export default function TicketDetailsPage() {
       )}
 
       {/* Resolve Ticket Modal */}
-      <ResolveTicketModal
-        isOpen={showResolveModal}
-        onClose={() => setShowResolveModal(false)}
-        onSuccess={handleResolveSuccess}
-        ticketNumber={ticket.ticket_number}
-        ticketId={ticket.ticket_number}
-      />
+      {ticket && (
+        <ResolveTicketModal
+          isOpen={showResolveModal}
+          onClose={() => setShowResolveModal(false)}
+          onSuccess={handleResolveSuccess}
+          ticketNumber={ticket.ticket_number}
+          ticketId={ticket.ticket_number}
+          ticket={ticket}
+        />
+      )}
     </DashboardLayout>
   );
 }

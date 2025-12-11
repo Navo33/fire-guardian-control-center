@@ -1270,4 +1270,134 @@ export class EquipmentRepository {
       client.release();
     }
   }
+
+  /**
+   * Get equipment instances with enhanced maintenance information including open tickets
+   * This is specifically for equipment details page where we need comprehensive maintenance status
+   */
+  static async getEquipmentInstancesWithMaintenanceInfo(
+    vendorId: number, 
+    equipmentTypeId: number,
+    pagination: PaginationQuery,
+    filters: EquipmentFilters = {}
+  ): Promise<any[]> {
+    const startTime = Date.now();
+    try {
+      const offset = ((pagination.page || 1) - 1) * (pagination.limit || 25);
+      
+      let whereClause = `WHERE ei.vendor_id = $1 AND ei.equipment_id = $2 AND ei.deleted_at IS NULL`;
+      const queryParams: any[] = [vendorId, equipmentTypeId];
+      let paramCount = 2;
+
+      // Add additional filters if needed
+      if (filters.status) {
+        paramCount++;
+        whereClause += ` AND ei.status = $${paramCount}`;
+        queryParams.push(filters.status);
+      }
+
+      if (filters.compliance_status) {
+        paramCount++;
+        whereClause += ` AND ei.compliance_status = $${paramCount}`;
+        queryParams.push(filters.compliance_status);
+      }
+
+      if (filters.search) {
+        paramCount++;
+        whereClause += ` AND (ei.serial_number ILIKE $${paramCount} OR e.equipment_name ILIKE $${paramCount})`;
+        queryParams.push(`%${filters.search}%`);
+      }
+
+      const query = `
+        SELECT 
+          ei.id,
+          ei.serial_number,
+          ei.status,
+          ei.compliance_status,
+          ei.location,
+          ei.next_maintenance_date,
+          ei.last_maintenance_date,
+          ei.maintenance_interval_days,
+          ei.expiry_date,
+          ei.purchase_date,
+          ei.warranty_expiry,
+          ei.created_at,
+          ei.updated_at,
+          
+          -- Equipment details
+          e.equipment_name,
+          e.equipment_type,
+          e.manufacturer,
+          e.model,
+          
+          -- Client information
+          COALESCE(c.company_name, 'Unassigned') AS client_name,
+          c.id as client_id,
+          
+          -- Maintenance status calculation
+          CASE 
+            WHEN ei.next_maintenance_date IS NULL THEN 'no_schedule'
+            WHEN ei.next_maintenance_date < CURRENT_DATE THEN 'overdue'
+            WHEN ei.next_maintenance_date - CURRENT_DATE <= 30 THEN 'due_soon'
+            ELSE 'scheduled'
+          END as maintenance_status,
+          
+          -- Days to/past maintenance
+          CASE 
+            WHEN ei.next_maintenance_date IS NULL THEN NULL
+            WHEN ei.next_maintenance_date < CURRENT_DATE THEN (CURRENT_DATE - ei.next_maintenance_date)
+            ELSE (ei.next_maintenance_date - CURRENT_DATE)
+          END as days_to_maintenance,
+          
+          -- Open maintenance tickets information
+          mt.id as open_ticket_id,
+          mt.ticket_number as open_ticket_number,
+          mt.ticket_status as open_ticket_status,
+          mt.priority as open_ticket_priority,
+          mt.created_at as open_ticket_created,
+          mt.issue_description as open_ticket_description,
+          
+          -- Enhanced maintenance status considering tickets
+          CASE 
+            WHEN mt.id IS NOT NULL AND mt.ticket_status = 'open' THEN 'has_open_ticket'
+            WHEN mt.id IS NOT NULL AND mt.ticket_status = 'resolved' THEN 'ticket_resolved'
+            WHEN ei.next_maintenance_date IS NULL THEN 'no_schedule'
+            WHEN ei.next_maintenance_date < CURRENT_DATE THEN 'overdue_no_ticket'
+            WHEN ei.next_maintenance_date - CURRENT_DATE <= 30 THEN 'due_soon'
+            ELSE 'scheduled'
+          END as enhanced_maintenance_status
+          
+        FROM equipment_instance ei
+        JOIN equipment e ON ei.equipment_id = e.id
+        LEFT JOIN clients c ON ei.assigned_to = c.id
+        LEFT JOIN maintenance_ticket mt ON ei.id = mt.equipment_instance_id 
+          AND mt.ticket_status IN ('open', 'resolved') 
+          AND mt.support_type = 'maintenance'
+        ${whereClause}
+        ORDER BY 
+          -- Priority order: open tickets first, then overdue, then due soon
+          CASE 
+            WHEN mt.ticket_status = 'open' THEN 1
+            WHEN ei.next_maintenance_date < CURRENT_DATE THEN 2
+            WHEN ei.next_maintenance_date - CURRENT_DATE <= 30 THEN 3
+            ELSE 4
+          END,
+          ei.next_maintenance_date ASC NULLS LAST,
+          ei.serial_number
+        LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
+      `;
+
+      queryParams.push(pagination.limit || 25, offset);
+
+      DebugLogger.database('Equipment Instances with Maintenance Info Query', query);
+      const result = await pool.query(query, queryParams);
+
+      DebugLogger.performance('Equipment instances with maintenance info fetch', startTime, { count: result.rows.length });
+      return result.rows;
+
+    } catch (error) {
+      DebugLogger.error('Error fetching equipment instances with maintenance info', error, { vendorId, equipmentTypeId, pagination, filters });
+      throw error;
+    }
+  }
 }

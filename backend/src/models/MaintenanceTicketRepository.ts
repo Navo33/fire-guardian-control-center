@@ -88,6 +88,8 @@ export interface ResolveTicketData {
   resolution_description: string;
   actual_hours?: number;
   cost?: number;
+  custom_maintenance_date?: string; // ISO date string for override
+  custom_next_maintenance_date?: string; // ISO date string for override
 }
 
 export interface TicketFilters {
@@ -496,42 +498,95 @@ export class MaintenanceTicketRepository {
   }
 
   /**
-   * Resolve ticket with resolution details (by ticket number)
+   * Resolve ticket with resolution details and automatic equipment maintenance date updates
    */
   async resolveTicket(ticketNumber: string, vendorId: number, resolveData: ResolveTicketData): Promise<{ticket_number: string, resolved_at: string}> {
-    const query = `
-      UPDATE maintenance_ticket
-      SET 
-        ticket_status = 'resolved',
-        resolution_description = $1,
-        resolved_at = CURRENT_TIMESTAMP,
-        actual_hours = $2,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE ticket_number = $3
-        AND vendor_id = $4
-        AND ticket_status = 'open'
-      RETURNING 
-        ticket_number,
-        TO_CHAR(resolved_at, 'Mon DD, YYYY HH12:MI AM') AS resolved_at
-    `;
+    const client = await pool.connect();
     
-    const params = [
-      resolveData.resolution_description,
-      resolveData.actual_hours || null,
-      ticketNumber,
-      vendorId
-    ];
-    
-    const result = await pool.query(query, params);
-    
-    if (result.rows.length === 0) {
-      throw new Error('Ticket not found, already resolved, or access denied');
+    try {
+      await client.query('BEGIN');
+      
+      // 1. First, resolve the ticket and get ticket details
+      const ticketQuery = `
+        UPDATE maintenance_ticket
+        SET 
+          ticket_status = 'resolved',
+          resolution_description = $1,
+          resolved_at = CURRENT_TIMESTAMP,
+          actual_hours = $2,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE ticket_number = $3
+          AND vendor_id = $4
+          AND ticket_status = 'open'
+        RETURNING 
+          ticket_number,
+          TO_CHAR(resolved_at, 'Mon DD, YYYY HH12:MI AM') AS resolved_at,
+          equipment_instance_id,
+          support_type
+      `;
+      
+      const ticketParams = [
+        resolveData.resolution_description,
+        resolveData.actual_hours || null,
+        ticketNumber,
+        vendorId
+      ];
+      
+      const ticketResult = await client.query(ticketQuery, ticketParams);
+      
+      if (ticketResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throw new Error('Ticket not found, already resolved, or access denied');
+      }
+      
+      const ticket = ticketResult.rows[0];
+      
+      // 2. Update equipment maintenance dates if it's a maintenance ticket with equipment
+      if (ticket.support_type === 'maintenance' && ticket.equipment_instance_id) {
+        // Use custom dates if provided, otherwise use automatic calculation
+        const lastMaintenanceDate = resolveData.custom_maintenance_date || 'CURRENT_DATE';
+        const nextMaintenanceDate = resolveData.custom_next_maintenance_date 
+          ? `'${resolveData.custom_next_maintenance_date}'::date`
+          : `${lastMaintenanceDate} + INTERVAL '1 day' * COALESCE(maintenance_interval_days, 365)`;
+        
+        const equipmentUpdateQuery = `
+          UPDATE equipment_instance 
+          SET 
+            last_maintenance_date = ${lastMaintenanceDate},
+            next_maintenance_date = ${nextMaintenanceDate},
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+          AND vendor_id = $2
+          RETURNING 
+            serial_number,
+            TO_CHAR(last_maintenance_date, 'Mon DD, YYYY') AS new_last_maintenance_date,
+            TO_CHAR(next_maintenance_date, 'Mon DD, YYYY') AS new_next_maintenance_date
+        `;
+        
+        const equipmentResult = await client.query(equipmentUpdateQuery, [ticket.equipment_instance_id, vendorId]);
+        
+        if (equipmentResult.rows.length > 0) {
+          const isCustomDates = resolveData.custom_maintenance_date || resolveData.custom_next_maintenance_date;
+          const dateType = isCustomDates ? 'Custom' : 'Automatic';
+          console.log(`${dateType} equipment maintenance dates updated for ${equipmentResult.rows[0].serial_number}. Last: ${equipmentResult.rows[0].new_last_maintenance_date}, Next: ${equipmentResult.rows[0].new_next_maintenance_date}`);
+        }
+      }
+      
+      await client.query('COMMIT');
+      
+      return {
+        ticket_number: ticket.ticket_number,
+        resolved_at: ticket.resolved_at
+      };
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error resolving ticket:', error);
+      throw error;
+    } finally {
+      client.release();
     }
-    
-    return result.rows[0];
-  }
-
-  /**
+  }  /**
    * Close ticket
    */
   async closeTicket(ticketId: number, vendorId: number): Promise<{id: number, ticket_number: string}> {
