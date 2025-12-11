@@ -32,6 +32,12 @@ import reportsRoutes from './routes/reports';
 import clientViewsRoutes from './routes/clientViews';
 import clientAnalyticsRoutes from './routes/clientAnalytics';
 import notificationRoutes from './routes/notifications';
+import emailRoutes from './routes/email';
+import pdfReportsRoutes from './routes/pdfReports';
+
+// Import email services
+import { verifyEmailConfig } from './config/email';
+import { emailScheduler } from './services/emailScheduler';
 
 // Load environment variables
 dotenv.config();
@@ -70,6 +76,17 @@ const initializeDatabase = async () => {
     }
   } else {
     console.log('ℹ️  Auto-migration disabled. Run "npm run db:init" if needed.');
+  }
+  
+  // Verify email configuration
+  console.log('📧 Verifying email configuration...');
+  const emailConfigured = await verifyEmailConfig();
+  if (emailConfigured) {
+    // Start email scheduler for automated reminders
+    emailScheduler.start();
+  } else {
+    console.warn('⚠️  Email service not configured. Email features will be disabled.');
+    console.log('ℹ️  To enable emails, set EMAIL_USER and EMAIL_PASSWORD in .env');
   }
   
   // Start periodic cleanup of expired sessions (every 1 hour)
@@ -206,6 +223,8 @@ app.use('/api/vendor/tickets', securityMiddleware, maintenanceTicketRoutes);
 app.use('/api/reports', securityMiddleware, reportsRoutes);
 app.use('/api/client-views', securityMiddleware, clientViewsRoutes);
 app.use('/api/notifications', securityMiddleware, notificationRoutes);
+app.use('/api/email', securityMiddleware, emailRoutes);
+app.use('/api/pdf-reports', securityMiddleware, pdfReportsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

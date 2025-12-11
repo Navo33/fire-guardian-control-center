@@ -139,6 +139,12 @@ export default function ClientAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exportingPDF, setExportingPDF] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [reportDateRange, setReportDateRange] = useState({
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0]
+  });
   
   // Get client ID from localStorage (set during login)
   const [clientId, setClientId] = useState<number | null>(null);
@@ -647,6 +653,67 @@ export default function ClientAnalyticsPage() {
     }
   };
 
+  // Generate Equipment Report
+  const generateEquipmentReport = async () => {
+    try {
+      setGeneratingReport(true);
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Authentication required. Please log in again.');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/pdf-reports/client`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          startDate: reportDateRange.startDate,
+          endDate: reportDateRange.endDate
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to generate report');
+      }
+
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'Fire_Equipment_Report.pdf';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Convert response to blob and download
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      // Close modal and show success
+      setShowReportModal(false);
+      alert(`✅ Fire Equipment Status & Maintenance Report generated successfully!\n\nFile: ${filename}\n\nThis professional report includes:\n• Client & service provider information\n• Equipment inventory with compliance status\n• Maintenance history\n• NFPA compliance summary\n\nSuitable for regulatory compliance and insurance documentation.`);
+
+    } catch (error) {
+      console.error('Error generating equipment report:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate report. Please try again.');
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
   // Format data for charts
   const formatComplianceTrendForChart = (data: ComplianceTrend[]) => {
     return data.map(item => ({
@@ -736,6 +803,13 @@ export default function ClientAnalyticsPage() {
             </div>
             <div className="flex space-x-3">
               <button
+                onClick={() => setShowReportModal(true)}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-150"
+              >
+                <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
+                Equipment Report
+              </button>
+              <button
                 onClick={exportToPDF}
                 disabled={exportingPDF}
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150"
@@ -748,7 +822,7 @@ export default function ClientAnalyticsPage() {
                 ) : (
                   <>
                     <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
-                    Export Report
+                    Export Analytics
                   </>
                 )}
               </button>
@@ -1180,6 +1254,111 @@ export default function ClientAnalyticsPage() {
             </div>
           )}
         </div>
+
+        {/* Equipment Report Generation Modal */}
+        {showReportModal && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 animate-fadeIn">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 flex items-center">
+                  <DocumentArrowDownIcon className="h-7 w-7 text-green-600 mr-3" />
+                  Generate Equipment Report
+                </h3>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  disabled={generatingReport}
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-gray-600 mb-4">
+                  Generate a comprehensive Fire Equipment Status & Maintenance Report with:
+                </p>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-start">
+                    <span className="text-green-600 mr-2">✓</span>
+                    <span>Complete equipment inventory with compliance status</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-green-600 mr-2">✓</span>
+                    <span>Maintenance history and service records</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-green-600 mr-2">✓</span>
+                    <span>NFPA compliance summary and recommendations</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-green-600 mr-2">✓</span>
+                    <span>Professional format suitable for insurance & regulatory compliance</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={reportDateRange.startDate}
+                    onChange={(e) => setReportDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
+                    disabled={generatingReport}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={reportDateRange.endDate}
+                    onChange={(e) => setReportDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
+                    disabled={generatingReport}
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all"
+                  disabled={generatingReport}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={generateEquipmentReport}
+                  disabled={generatingReport}
+                  className="flex-1 px-4 py-3 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {generatingReport ? (
+                    <>
+                      <div className="animate-spin inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <DocumentArrowDownIcon className="h-4 w-4 inline mr-2" />
+                      Generate Report
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <p className="mt-4 text-xs text-gray-500 text-center">
+                Report generation may take a few moments depending on the amount of data.
+              </p>
+            </div>
+          </div>
+        )}
       </DashboardLayout>
     </RequireRole>
   );
