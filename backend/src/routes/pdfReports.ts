@@ -31,4 +31,28 @@ router.get('/client/preview', reportsController.previewReportData);
  */
 router.get('/client/date-range', reportsController.getAvailableDateRange);
 
+/**
+ * @route POST /api/reports/vendor/client/:clientId
+ * @desc Generate and download report for a specific client (vendor access)
+ * @access Vendor only
+ * @param clientId - Client ID
+ * @body { startDate: string (YYYY-MM-DD), endDate: string (YYYY-MM-DD) }
+ */
+router.post('/vendor/client/:clientId', reportsController.generateVendorClientReport);
+
+/**
+ * @route GET /api/reports/vendor/clients
+ * @desc Get list of vendor's clients for report filtering
+ * @access Vendor only
+ */
+router.get('/vendor/clients', reportsController.getVendorClientsList);
+
+/**
+ * @route GET /api/reports/vendor/date-range
+ * @desc Get available date range for vendor reports
+ * @access Vendor only
+ * @query clientId (optional) - Filter by specific client
+ */
+router.get('/vendor/date-range', reportsController.getVendorDateRange);
+
 export default router;
