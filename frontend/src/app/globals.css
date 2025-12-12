@@ -135,9 +135,9 @@
   /* The Clean Control Palette */
   --primary-bg: #fffdfd;
   --primary-text: #333333;
-  --primary-accent: #E65100;
-  --primary-accent-hover: #D84315;
-  --primary-accent-light: #FF8A50;
+  --primary-accent: #E53935;
+  --primary-accent-hover: #C62828;
+  --primary-accent-light: #FFEBEE;
   
   --danger: #E53935;
   --danger-hover: #C62828;

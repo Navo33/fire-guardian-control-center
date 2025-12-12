@@ -20,6 +20,8 @@ export const API_ENDPOINTS = {
     LOGIN: `${API_BASE_URL}/auth/login`,
     LOGOUT: `${API_BASE_URL}/auth/logout`,
     VERIFY: `${API_BASE_URL}/auth/verify`,
+    REFRESH: `${API_BASE_URL}/auth/refresh`,
+    CHANGE_PASSWORD: `${API_BASE_URL}/auth/change-password`,
   },
   
   // Dashboard
@@ -199,6 +201,12 @@ export const API_ENDPOINTS = {
     MARK_READ: (id: string | number) => `${API_BASE_URL}/notifications/${id}/read`,
     MARK_ALL_READ: `${API_BASE_URL}/notifications/mark-all-read`,
     ARCHIVE: (id: string | number) => `${API_BASE_URL}/notifications/${id}/archive`,
+  },
+
+  // Emergency Warnings
+  EMERGENCY_WARNINGS: {
+    ALL: `${API_BASE_URL}/emergency-warnings`,
+    LATEST: `${API_BASE_URL}/emergency-warnings/latest`,
   },
 
   // Client Views (for client users)

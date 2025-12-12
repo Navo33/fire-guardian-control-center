@@ -4,6 +4,7 @@ import "./globals.css";
 import Footer from "../components/layout/Footer";
 import { ToastProvider } from "../components/providers/ToastProvider";
 import { ConfirmModalProvider } from "../components/providers/ConfirmModalProvider";
+import { TokenProvider } from "../contexts/TokenContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,10 +33,12 @@ export default function RootLayout({
       >
         <ToastProvider>
           <ConfirmModalProvider>
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {children}
-            </div>
-            <Footer />
+            <TokenProvider>
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {children}
+              </div>
+              <Footer />
+            </TokenProvider>
           </ConfirmModalProvider>
         </ToastProvider>
       </body>

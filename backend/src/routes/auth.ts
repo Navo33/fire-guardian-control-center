@@ -68,4 +68,11 @@ router.post('/refresh', authenticateToken, authController.refresh);
  */
 router.post('/logout', authenticateToken, authController.logout);
 
+/**
+ * @route   POST /api/auth/change-password
+ * @desc    Change user password
+ * @access  Private
+ */
+router.post('/change-password', authenticateToken, authController.changePassword);
+
 export default router;

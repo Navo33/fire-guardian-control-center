@@ -381,7 +381,7 @@ export class VendorAnalyticsRepository {
           c.company_name AS client,
           e.equipment_name,
           ei.compliance_status,
-          TO_CHAR(ei.next_maintenance_date, 'Mon DD, YYYY') AS next_maintenance,
+          TO_CHAR(ei.next_maintenance_date, 'DD/MM/YYYY') AS next_maintenance,
           (ei.next_maintenance_date - CURRENT_DATE)::text AS days_until_maintenance
       FROM public.equipment_instance ei
       JOIN public.clients c ON ei.assigned_to = c.id

@@ -10,6 +10,8 @@ import { DebugLogger } from '../utils/DebugLogger';
 import { AuthenticatedRequest } from '../types/api';
 import { CreateVendorRequest } from '../types';
 import { CreateUserRequest } from '../types';
+import { generateTemporaryPassword } from '../utils/passwordGenerator';
+import emailService from '../services/emailService';
 
 /**
  * Vendor Controller
@@ -176,14 +178,42 @@ export class VendorController extends BaseController {
         return ApiResponseUtil.conflict(res, 'User with this email already exists');
       }
 
+      // Generate temporary password
+      const temporaryPassword = generateTemporaryPassword();
+      DebugLogger.log('Generated temporary password for vendor', { email: vendorData.email });
+
+      // Add temporary password to vendor data
+      const vendorDataWithPassword: CreateVendorRequest = {
+        ...vendorData,
+        password: temporaryPassword,
+        isTemporaryPassword: true
+      };
+
       // Create detailed vendor
-      const newVendor = await VendorRepository.createVendor(vendorData);
+      const newVendor = await VendorRepository.createVendor(vendorDataWithPassword);
 
       DebugLogger.log('Detailed vendor created successfully', { 
         vendorId: newVendor.id,
         email: newVendor.email,
         companyName: newVendor.company?.company_name
       });
+
+      // Send temporary password email
+      try {
+        const userName = `${vendorData.firstName} ${vendorData.lastName}`;
+        await emailService.sendTemporaryPassword(
+          newVendor.email,
+          userName,
+          temporaryPassword,
+          'vendor'
+        );
+        DebugLogger.log('Temporary password email sent successfully', { 
+          email: newVendor.email 
+        });
+      } catch (emailError) {
+        DebugLogger.error('Failed to send temporary password email', emailError);
+        // Don't fail the vendor creation if email fails
+      }
 
       // Log the creation
       await AuditRepository.createLog(

@@ -38,6 +38,7 @@ interface UserDetail {
   last_name: string;
   display_name: string;
   email: string;
+  phone?: string;
   user_type: 'admin' | 'vendor' | 'client';
   is_locked: boolean;
   last_login: string | null;
@@ -132,7 +133,15 @@ function UserDetailContent() {
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: '',
-    email: ''
+    email: '',
+    phone: '',
+    primary_phone: '',
+    company_name: '',
+    business_type: '',
+    street_address: '',
+    city: '',
+    state: '',
+    zip_code: ''
   });
 
   // Fetch user details
@@ -180,7 +189,15 @@ function UserDetailContent() {
       setEditForm({
         first_name: result.data.first_name || '',
         last_name: result.data.last_name || '',
-        email: result.data.email || ''
+        email: result.data.email || '',
+        phone: result.data.phone || '',
+        primary_phone: result.data.vendor?.primary_phone || result.data.client?.primary_phone || '',
+        company_name: result.data.vendor?.company_name || result.data.client?.company_name || '',
+        business_type: result.data.vendor?.business_type || result.data.client?.business_type || '',
+        street_address: result.data.vendor?.street_address || result.data.client?.street_address || '',
+        city: result.data.vendor?.city || result.data.client?.city || '',
+        state: result.data.vendor?.state || result.data.client?.state || '',
+        zip_code: result.data.vendor?.zip_code || result.data.client?.zip_code || ''
       });
     } catch (err) {
       console.error('Error fetching user details:', err);
@@ -207,7 +224,15 @@ function UserDetailContent() {
         headers,
         body: JSON.stringify({
           first_name: editForm.first_name,
-          last_name: editForm.last_name
+          last_name: editForm.last_name,
+          phone: editForm.phone,
+          primary_phone: editForm.primary_phone,
+          company_name: editForm.company_name,
+          business_type: editForm.business_type,
+          street_address: editForm.street_address,
+          city: editForm.city,
+          state: editForm.state,
+          zip_code: editForm.zip_code
           // email is excluded from updates
         })
       });
@@ -504,8 +529,8 @@ function UserDetailContent() {
 
               <div className="bg-white rounded-2xl border border-gray-100 p-6">
                 <div className="flex items-center">
-                  <div className="p-3 bg-orange-50 rounded-xl">
-                    <CheckCircleIcon className="h-6 w-6 text-orange-600" />
+                  <div className="p-3 bg-red-50 rounded-xl">
+                    <CheckCircleIcon className="h-6 w-6 text-red-600" />
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Specializations</p>
@@ -544,8 +569,8 @@ function UserDetailContent() {
 
               <div className="bg-white rounded-2xl border border-gray-100 p-6">
                 <div className="flex items-center">
-                  <div className="p-3 bg-orange-50 rounded-xl">
-                    <ChartBarIcon className="h-6 w-6 text-orange-600" />
+                  <div className="p-3 bg-red-50 rounded-xl">
+                    <ChartBarIcon className="h-6 w-6 text-red-600" />
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Status</p>
@@ -621,21 +646,31 @@ function UserDetailContent() {
                           />
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Email
-                        </label>
-                        <p className="text-sm text-gray-900 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
-                          {user?.email} <span className="text-xs text-gray-500">(Cannot be modified)</span>
-                        </p>
-                      </div>
-                      <div className="flex space-x-3">
-                        <button onClick={handleUpdateUser} className="btn-primary">
-                          Save Changes
-                        </button>
-                        <button onClick={() => setIsEditing(false)} className="btn-secondary">
-                          Cancel
-                        </button>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Email
+                          </label>
+                          <input
+                            type="email"
+                            value={editForm.email}
+                            disabled
+                            className="input-field bg-gray-50 text-gray-500 cursor-not-allowed"
+                            title="Email cannot be changed to prevent conflicts"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Personal Phone
+                          </label>
+                          <input
+                            type="text"
+                            value={editForm.phone}
+                            onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                            className="input-field"
+                            placeholder="Personal phone number"
+                          />
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -650,6 +685,11 @@ function UserDetailContent() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Email</label>
                         <p className="text-sm text-gray-900">{user?.email}</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Personal Phone</label>
+                        <p className="text-sm text-gray-900">{user?.phone || 'Not provided'}</p>
                       </div>
                       
                       <div>
@@ -675,6 +715,13 @@ function UserDetailContent() {
                           {user?.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
                         </p>
                       </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Last Login IP</label>
+                        <p className="text-sm text-gray-900">
+                          {user?.last_login_ip || 'N/A'}
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -687,54 +734,171 @@ function UserDetailContent() {
                       <BuildingOfficeIcon className="h-5 w-5 text-red-600 mr-2" />
                       Company Information
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Company Name</label>
-                        <p className="text-sm text-gray-900">
-                          {user.vendor?.company_name || user.client?.company_name || 'Not provided'}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Business Type</label>
-                        <p className="text-sm text-gray-900">
-                          {user.vendor?.business_type || user.client?.business_type || 'Not specified'}
-                        </p>
-                      </div>
-                      {user.vendor?.license_number && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">License Number</label>
-                          <p className="text-sm text-gray-900">{user.vendor.license_number}</p>
+                    {isEditing ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Company Name
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.company_name}
+                              onChange={(e) => setEditForm({ ...editForm, company_name: e.target.value })}
+                              className="input-field"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Business Type
+                            </label>
+                            <select
+                              value={editForm.business_type}
+                              onChange={(e) => setEditForm({ ...editForm, business_type: e.target.value })}
+                              className="input-field"
+                            >
+                              <option value="">Select business type</option>
+                              <option value="Restaurant">Restaurant</option>
+                              <option value="Hotel">Hotel</option>
+                              <option value="Office Building">Office Building</option>
+                              <option value="Retail Store">Retail Store</option>
+                              <option value="Manufacturing">Manufacturing</option>
+                              <option value="Warehouse">Warehouse</option>
+                              <option value="Healthcare">Healthcare</option>
+                              <option value="Education">Education</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
                         </div>
-                      )}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Phone</label>
-                        <p className="text-sm text-gray-900">
-                          {user.vendor?.primary_phone || user.client?.primary_phone || 'Not provided'}
-                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Company Phone
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.primary_phone}
+                              onChange={(e) => setEditForm({ ...editForm, primary_phone: e.target.value })}
+                              className="input-field"
+                              placeholder="Company/primary phone number"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Street Address
+                          </label>
+                          <input
+                            type="text"
+                            value={editForm.street_address}
+                            onChange={(e) => setEditForm({ ...editForm, street_address: e.target.value })}
+                            className="input-field"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              City
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.city}
+                              onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                              className="input-field"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Province
+                            </label>
+                            <select
+                              value={editForm.state}
+                              onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                              className="input-field"
+                            >
+                              <option value="">Select province</option>
+                              <option value="Western Province">Western Province</option>
+                              <option value="Central Province">Central Province</option>
+                              <option value="Southern Province">Southern Province</option>
+                              <option value="Northern Province">Northern Province</option>
+                              <option value="Eastern Province">Eastern Province</option>
+                              <option value="North Western Province">North Western Province</option>
+                              <option value="North Central Province">North Central Province</option>
+                              <option value="Uva Province">Uva Province</option>
+                              <option value="Sabaragamuwa Province">Sabaragamuwa Province</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              ZIP Code
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.zip_code}
+                              onChange={(e) => setEditForm({ ...editForm, zip_code: e.target.value })}
+                              className="input-field"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex space-x-3 pt-4">
+                          <button onClick={handleUpdateUser} className="btn-primary">
+                            Save Changes
+                          </button>
+                          <button onClick={() => setIsEditing(false)} className="btn-secondary">
+                            Cancel
+                          </button>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Address</label>
-                        <p className="text-sm text-gray-900">
-                          {(() => {
-                            const address = user.vendor || user.client;
-                            if (!address?.street_address) return 'Not provided';
-                            const parts = [
-                              address.street_address,
-                              address.city,
-                              address.state,
-                              address.zip_code
-                            ].filter(Boolean);
-                            return parts.join(', ');
-                          })()}
-                        </p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Company Name</label>
+                          <p className="text-sm text-gray-900">
+                            {user.vendor?.company_name || user.client?.company_name || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Business Type</label>
+                          <p className="text-sm text-gray-900">
+                            {user.vendor?.business_type || user.client?.business_type || 'Not specified'}
+                          </p>
+                        </div>
+                        {user.vendor?.license_number && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">License Number</label>
+                            <p className="text-sm text-gray-900">{user.vendor.license_number}</p>
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Phone</label>
+                          <p className="text-sm text-gray-900">
+                            {user.vendor?.primary_phone || user.client?.primary_phone || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Address</label>
+                          <p className="text-sm text-gray-900">
+                            {(() => {
+                              const address = user.vendor || user.client;
+                              if (!address?.street_address) return 'Not provided';
+                              const parts = [
+                                address.street_address,
+                                address.city,
+                                address.state,
+                                address.zip_code
+                              ].filter(Boolean);
+                              return parts.join(', ');
+                            })()}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Status</label>
+                          <p className="text-sm text-gray-900 capitalize">
+                            {user.vendor?.status || user.client?.status || 'Unknown'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Status</label>
-                        <p className="text-sm text-gray-900 capitalize">
-                          {user.vendor?.status || user.client?.status || 'Unknown'}
-                        </p>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 )}
 

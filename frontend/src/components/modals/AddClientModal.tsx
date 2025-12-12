@@ -9,7 +9,6 @@ interface ClientFormData {
   first_name: string
   last_name: string
   email: string
-  password: string
   phone: string
   company_name: string
   business_type: string
@@ -38,7 +37,6 @@ export default function AddClientModal({ isOpen, onClose, onClientCreated }: Add
     first_name: '',
     last_name: '',
     email: '',
-    password: '',
     phone: '',
     company_name: '',
     business_type: '',
@@ -74,12 +72,6 @@ export default function AddClientModal({ isOpen, onClose, onClientCreated }: Add
       newErrors.email = 'Email is required'
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Invalid email format'
-    }
-
-    if (!formData.password.trim()) {
-      newErrors.password = 'Password is required'
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters'
     }
 
     if (!formData.phone.trim()) {
@@ -169,7 +161,6 @@ export default function AddClientModal({ isOpen, onClose, onClientCreated }: Add
       first_name: '',
       last_name: '',
       email: '',
-      password: '',
       phone: '',
       company_name: '',
       business_type: '',
@@ -281,21 +272,15 @@ export default function AddClientModal({ isOpen, onClose, onClientCreated }: Add
                     )}
                   </div>
 
-                  <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                      Password *
-                    </label>
-                    <input
-                      type="password"
-                      id="password"
-                      value={formData.password}
-                      onChange={(e) => handleInputChange('password', e.target.value)}
-                      className={`input-field ${errors.password ? 'border-red-500' : ''}`}
-                      placeholder="Enter password"
-                    />
-                    {errors.password && (
-                      <p className="mt-1 text-sm text-red-600">{errors.password}</p>
-                    )}
+                  {/* Password Info */}
+                  <div className="flex items-start space-x-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <svg className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="text-sm text-blue-800">
+                      <p className="font-medium mb-1">Temporary Password</p>
+                      <p>A secure temporary password will be automatically generated and sent to the client's email address. They will be required to change it on first login.</p>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -144,6 +144,13 @@ export default function VendorAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exportingPDF, setExportingPDF] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportDateRange, setReportDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
+  const [reportClientId, setReportClientId] = useState<number | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
   
   // Data state
   const [vendorOverview, setVendorOverview] = useState<VendorOverview | null>(null);
@@ -578,6 +585,80 @@ export default function VendorAnalyticsPage() {
     }));
   };
 
+  // Equipment Report Generation
+  const generateEquipmentReport = async () => {
+    if (!reportDateRange.startDate || !reportDateRange.endDate) {
+      alert('Please select both start and end dates');
+      return;
+    }
+
+    if (!reportClientId) {
+      alert('Please select a client');
+      return;
+    }
+
+    setGeneratingReport(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Authentication required');
+
+      const response = await fetch(
+        `${API_BASE_URL}/pdf-reports/vendor/client/${reportClientId}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            startDate: reportDateRange.startDate,
+            endDate: reportDateRange.endDate
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to generate report');
+      }
+
+      // Download the PDF
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Fire_Equipment_Report_${reportClientId}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      // Close modal
+      setShowReportModal(false);
+      alert('Equipment report generated successfully!');
+    } catch (error) {
+      console.error('Error generating report:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate equipment report');
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  // Initialize report date range when modal opens
+  useEffect(() => {
+    if (showReportModal) {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 90); // Default to last 90 days
+
+      setReportDateRange({
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0]
+      });
+    }
+  }, [showReportModal]);
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -614,6 +695,13 @@ export default function VendorAnalyticsPage() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setShowReportModal(true)}
+                className="btn-secondary flex items-center space-x-2"
+              >
+                <DocumentMagnifyingGlassIcon className="h-5 w-5" />
+                <span>Equipment Report</span>
+              </button>
               <button
                 onClick={exportToPDF}
                 disabled={exportingPDF}
@@ -1174,6 +1262,111 @@ export default function VendorAnalyticsPage() {
             </div>
           </div>
         </div>
+
+        {/* Equipment Report Modal */}
+        {showReportModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <DocumentMagnifyingGlassIcon className="h-6 w-6 text-indigo-600" />
+                  <h3 className="text-xl font-semibold text-gray-900">Generate Equipment Report</h3>
+                </div>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Client <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={reportClientId || ''}
+                    onChange={(e) => setReportClientId(e.target.value ? Number(e.target.value) : null)}
+                    className="input-field w-full"
+                    required
+                  >
+                    <option value="">Choose a client...</option>
+                    {clients.map(client => (
+                      <option key={client.id} value={client.id}>
+                        {client.company_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Start Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={reportDateRange.startDate}
+                    onChange={(e) => setReportDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="input-field w-full"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    End Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={reportDateRange.endDate}
+                    onChange={(e) => setReportDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="input-field w-full"
+                    required
+                  />
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Note:</strong> This will generate a comprehensive Fire Equipment Status & Maintenance Report in PDF format, including equipment inventory, maintenance history, and compliance summary for the selected client.
+                  </p>
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    onClick={() => setShowReportModal(false)}
+                    className="flex-1 btn-secondary"
+                    disabled={generatingReport}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={generateEquipmentReport}
+                    disabled={generatingReport || !reportClientId}
+                    className="flex-1 btn-primary flex items-center justify-center space-x-2"
+                  >
+                    {generatingReport ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <span>Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <DocumentArrowDownIcon className="h-5 w-5" />
+                        <span>Generate Report</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </DashboardLayout>
     </RequireRole>
   );

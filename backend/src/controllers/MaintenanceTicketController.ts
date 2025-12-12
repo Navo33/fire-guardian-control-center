@@ -10,6 +10,9 @@ import MaintenanceTicketRepository, {
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { AuthenticatedRequest } from '../types/api';
 import { DashboardRepository } from '../models/DashboardRepository';
+import { emailService } from '../services/emailService';
+import { emailRepository } from '../models/EmailRepository';
+import { pool } from '../config/database';
 
 export class MaintenanceTicketController extends BaseController {
 
@@ -94,6 +97,9 @@ export class MaintenanceTicketController extends BaseController {
 
       const ticketData = await MaintenanceTicketRepository.getTicketList(vendorId, filters);
       
+      // Parse total_tickets string to number for pagination
+      const totalTickets = parseInt(ticketData.total_tickets) || 0;
+      
       const response = {
         // Summary statistics
         total_tickets: ticketData.total_tickets,
@@ -103,10 +109,10 @@ export class MaintenanceTicketController extends BaseController {
         // Tickets array
         tickets: ticketData.tickets,
         pagination: {
-          total: ticketData.tickets.length,
+          total: totalTickets,
           limit: filters.limit || 25,
           offset: filters.offset || 0,
-          hasMore: ticketData.tickets.length >= (filters.limit || 25)
+          hasMore: (filters.offset || 0) + ticketData.tickets.length < totalTickets
         }
       };
       
@@ -233,6 +239,12 @@ export class MaintenanceTicketController extends BaseController {
       };
 
       const result = await MaintenanceTicketRepository.createTicket(vendorId, ticketData);
+      
+      // Send email notification to client
+      this.sendTicketCreatedEmail(result.id).catch(err => {
+        console.error('Failed to send ticket creation email:', err);
+        // Don't fail the request if email fails
+      });
       
       ApiResponseUtil.created(res, result, 'Ticket created successfully');
     } catch (error) {
@@ -363,14 +375,23 @@ export class MaintenanceTicketController extends BaseController {
         assigned_technician: req.body.assigned_technician ? parseInt(req.body.assigned_technician) : undefined
       };
 
-      // Remove undefined values
+      // Remove undefined values and empty strings
       Object.keys(updateData).forEach(key => {
-        if (updateData[key as keyof UpdateTicketData] === undefined) {
+        const value = updateData[key as keyof UpdateTicketData];
+        if (value === undefined || value === '' || value === null) {
           delete updateData[key as keyof UpdateTicketData];
         }
       });
 
       const result = await MaintenanceTicketRepository.updateTicket(ticketId, vendorId, updateData);
+      
+      // Send email notification to client for significant updates
+      if (updateData.ticket_status || updateData.scheduled_date) {
+        this.sendTicketUpdatedEmail(ticketId, req.body.update_reason).catch(err => {
+          console.error('Failed to send ticket update email:', err);
+          // Don't fail the request if email fails
+        });
+      }
       
       ApiResponseUtil.success(res, result, 'Ticket updated successfully');
     } catch (error) {
@@ -432,6 +453,14 @@ export class MaintenanceTicketController extends BaseController {
 
       const result = await MaintenanceTicketRepository.resolveTicket(ticketNumber, vendorId, resolveData);
       
+      // Get ticket details for email notification
+      const ticketDetails = await MTRepository.getTicketDetailsByNumber(ticketNumber, vendorId);
+      if (ticketDetails && ticketDetails.id) {
+        this.sendTicketCompletedEmail(ticketDetails.id).catch((err: Error) => {
+          console.error('Failed to send ticket completion email:', err);
+        });
+      }
+      
       ApiResponseUtil.success(res, result, 'Ticket resolved successfully');
     } catch (error) {
       console.error('Error resolving ticket:', error);
@@ -464,6 +493,11 @@ export class MaintenanceTicketController extends BaseController {
       }
 
       const result = await MaintenanceTicketRepository.closeTicket(ticketId, vendorId);
+      
+      // Send closure notification
+      this.sendTicketUpdatedEmail(ticketId, 'Ticket has been closed').catch(err => {
+        console.error('Failed to send ticket closure email:', err);
+      });
       
       ApiResponseUtil.success(res, result, 'Ticket closed successfully');
     } catch (error) {
@@ -514,6 +548,405 @@ export class MaintenanceTicketController extends BaseController {
    */
   async deleteTicket(req: Request, res: Response): Promise<void> {
     res.status(405).json({ error: 'Ticket deletion is not allowed for safety reasons' });
+  }
+
+  /**
+   * Send ticket created email to client
+   * Private helper method
+   */
+  private async sendTicketCreatedEmail(ticketId: number): Promise<void> {
+    try {
+      console.log('\n===== SENDING TICKET CREATED EMAILS =====');
+      console.log('[Ticket ID]:', ticketId);
+      console.log('[Timestamp]:', new Date().toISOString());
+      
+      // Get ticket details with both client and vendor info
+      const query = `
+        SELECT 
+          mt.id,
+          mt.ticket_number,
+          mt.issue_description,
+          mt.priority,
+          mt.ticket_status,
+          mt.scheduled_date,
+          eq.equipment_name,
+          ei.serial_number,
+          c.company_name as client_name,
+          cu.email as client_email,
+          v.company_name as vendor_name,
+          vu.email as vendor_email
+        FROM maintenance_ticket mt
+        LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
+        LEFT JOIN equipment eq ON ei.equipment_id = eq.id
+        JOIN clients c ON mt.client_id = c.id
+        JOIN "user" cu ON c.user_id = cu.id
+        JOIN vendors v ON mt.vendor_id = v.id
+        JOIN "user" vu ON v.user_id = vu.id
+        WHERE mt.id = $1;
+      `;
+
+      const result = await pool.query(query, [ticketId]);
+      
+      if (result.rows.length === 0) {
+        console.warn(`⚠️ Ticket ${ticketId} not found for email notification`);
+        return;
+      }
+
+      const ticket = result.rows[0];
+      console.log('[Ticket Details Retrieved]');
+      console.log('   - Ticket #:', ticket.ticket_number);
+      console.log('   - Equipment:', ticket.equipment_name);
+      console.log('   - Client:', ticket.client_name, '(' + ticket.client_email + ')');
+      console.log('   - Vendor:', ticket.vendor_name, '(' + ticket.vendor_email + ')');
+      console.log('   - Priority:', ticket.priority);
+      console.log('   - Status:', ticket.ticket_status);
+      
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+      console.log('\n[Sending email to CLIENT]');
+      // Send email to CLIENT
+      const clientEmailResult = await emailService.sendMaintenanceTicketCreated({
+        to: ticket.client_email,
+        clientName: ticket.client_name,
+        ticketId: ticketId,
+        equipmentName: ticket.equipment_name || 'General Maintenance',
+        serialNumber: ticket.serial_number || 'N/A',
+        scheduledDate: ticket.scheduled_date 
+          ? new Date(ticket.scheduled_date).toLocaleDateString() 
+          : 'To be scheduled',
+        priority: ticket.priority,
+        status: ticket.ticket_status,
+        description: ticket.issue_description,
+        dashboardUrl: `${frontendUrl}/client/tickets/${ticket.ticket_number}`,
+      });
+
+      // Log client email
+      await emailRepository.logEmail({
+        recipientEmail: ticket.client_email,
+        templateType: 'maintenanceTicketCreated',
+        subject: `New Maintenance Ticket Created - #${ticketId}`,
+        status: clientEmailResult.success ? 'sent' : 'failed',
+        messageId: clientEmailResult.messageId,
+        errorMessage: clientEmailResult.error,
+        metadata: { ticketId, ticketNumber: ticket.ticket_number, recipient: 'client' },
+      });
+      
+      if (clientEmailResult.success) {
+        console.log('[SUCCESS] Client email sent successfully');
+      } else {
+        console.log('[FAILED] Client email failed:', clientEmailResult.error);
+      }
+
+      console.log('\n[Sending email to VENDOR]');
+      // Send email to VENDOR
+      const vendorEmailResult = await emailService.sendMaintenanceTicketCreated({
+        to: ticket.vendor_email,
+        clientName: ticket.vendor_name,
+        ticketId: ticketId,
+        equipmentName: ticket.equipment_name || 'General Maintenance',
+        serialNumber: ticket.serial_number || 'N/A',
+        scheduledDate: ticket.scheduled_date 
+          ? new Date(ticket.scheduled_date).toLocaleDateString() 
+          : 'To be scheduled',
+        priority: ticket.priority,
+        status: ticket.ticket_status,
+        description: ticket.issue_description,
+        dashboardUrl: `${frontendUrl}/vendor/tickets/${ticket.ticket_number}`,
+      });
+
+      // Log vendor email
+      await emailRepository.logEmail({
+        recipientEmail: ticket.vendor_email,
+        templateType: 'maintenanceTicketCreated',
+        subject: `New Maintenance Ticket Created - #${ticketId}`,
+        status: vendorEmailResult.success ? 'sent' : 'failed',
+        messageId: vendorEmailResult.messageId,
+        errorMessage: vendorEmailResult.error,
+        metadata: { ticketId, ticketNumber: ticket.ticket_number, recipient: 'vendor' },
+      });
+      
+      if (vendorEmailResult.success) {
+        console.log('[SUCCESS] Vendor email sent successfully');
+      } else {
+        console.log('[FAILED] Vendor email failed:', vendorEmailResult.error);
+      }
+      
+      console.log('\n[TICKET CREATED EMAIL PROCESS COMPLETED]');
+      console.log('   - Client Email:', clientEmailResult.success ? '[SENT]' : '[FAILED]');
+      console.log('   - Vendor Email:', vendorEmailResult.success ? '[SENT]' : '[FAILED]');
+      console.log('===========================\n');
+    } catch (error) {
+      console.error('\n[ERROR IN TICKET CREATED EMAIL PROCESS]');
+      console.error('[Ticket ID]:', ticketId);
+      console.error('[Error]:', error);
+      console.error('===========================\n');
+      throw error;
+    }
+  }
+
+  /**
+   * Send ticket updated email to client
+   * Private helper method
+   */
+  private async sendTicketUpdatedEmail(ticketId: number, updateReason?: string): Promise<void> {
+    console.log('\n===== SENDING TICKET UPDATED EMAILS =====');
+    console.log('[Ticket ID]:', ticketId);
+    if (updateReason) console.log('[Update Reason]:', updateReason);
+    console.log('[Timestamp]:', new Date().toISOString());
+    try {
+      // Get ticket details with both client and vendor info
+      const query = `
+        SELECT 
+          mt.id,
+          mt.ticket_number,
+          mt.ticket_status,
+          mt.resolved_at as completed_at,
+          mt.resolution_description as technician_notes,
+          eq.equipment_name,
+          c.company_name as client_name,
+          cu.email as client_email,
+          v.company_name as vendor_name,
+          vu.email as vendor_email,
+          tech_user.first_name || ' ' || tech_user.last_name as technician_name
+        FROM maintenance_ticket mt
+        LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
+        LEFT JOIN equipment eq ON ei.equipment_id = eq.id
+        JOIN clients c ON mt.client_id = c.id
+        JOIN "user" cu ON c.user_id = cu.id
+        JOIN vendors v ON mt.vendor_id = v.id
+        JOIN "user" vu ON v.user_id = vu.id
+        LEFT JOIN "user" tech_user ON mt.assigned_technician = tech_user.id
+        WHERE mt.id = $1;
+      `;
+
+      const result = await pool.query(query, [ticketId]);
+      
+      if (result.rows.length === 0) {
+        console.warn(`Ticket ${ticketId} not found for email notification`);
+        return;
+      }
+
+      const ticket = result.rows[0];
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+      // Send emails to both CLIENT and VENDOR
+      const isCompleted = ticket.ticket_status === 'resolved' && ticket.completed_at;
+      
+      // Send to CLIENT
+      let clientEmailResult;
+      if (isCompleted) {
+        clientEmailResult = await emailService.sendMaintenanceCompleted({
+          to: ticket.client_email,
+          clientName: ticket.client_name,
+          ticketId: ticketId,
+          equipmentName: ticket.equipment_name || 'General Maintenance',
+          completedDate: new Date(ticket.completed_at).toLocaleDateString(),
+          technicianName: ticket.technician_name || 'Service Team',
+          technicianNotes: ticket.technician_notes,
+          complianceStatus: 'Compliant',
+          nextMaintenanceDate: 'To be determined',
+          dashboardUrl: `${frontendUrl}/client/tickets/${ticket.ticket_number}`,
+        });
+      } else {
+        clientEmailResult = await emailService.sendMaintenanceTicketUpdated({
+          to: ticket.client_email,
+          clientName: ticket.client_name,
+          ticketId: ticketId,
+          equipmentName: ticket.equipment_name || 'General Maintenance',
+          status: ticket.ticket_status,
+          completedDate: ticket.completed_at ? new Date(ticket.completed_at).toLocaleDateString() : undefined,
+          technicianName: ticket.technician_name,
+          technicianNotes: ticket.technician_notes,
+          updateReason: updateReason,
+          dashboardUrl: `${frontendUrl}/client/tickets/${ticket.ticket_number}`,
+        });
+      }
+
+      // Log client email
+      await emailRepository.logEmail({
+        recipientEmail: ticket.client_email,
+        templateType: isCompleted ? 'maintenanceCompleted' : 'maintenanceTicketUpdated',
+        subject: `Maintenance Ticket Updated - #${ticketId}`,
+        status: clientEmailResult.success ? 'sent' : 'failed',
+        messageId: clientEmailResult.messageId,
+        errorMessage: clientEmailResult.error,
+        metadata: { ticketId, ticketNumber: ticket.ticket_number, recipient: 'client' },
+      });
+
+      // Send to VENDOR
+      let vendorEmailResult;
+      if (isCompleted) {
+        vendorEmailResult = await emailService.sendMaintenanceCompleted({
+          to: ticket.vendor_email,
+          clientName: ticket.vendor_name,
+          ticketId: ticketId,
+          equipmentName: ticket.equipment_name || 'General Maintenance',
+          completedDate: new Date(ticket.completed_at).toLocaleDateString(),
+          technicianName: ticket.technician_name || 'Service Team',
+          technicianNotes: ticket.technician_notes,
+          complianceStatus: 'Compliant',
+          nextMaintenanceDate: 'To be determined',
+          dashboardUrl: `${frontendUrl}/vendor/tickets/${ticket.ticket_number}`,
+        });
+      } else {
+        vendorEmailResult = await emailService.sendMaintenanceTicketUpdated({
+          to: ticket.vendor_email,
+          clientName: ticket.vendor_name,
+          ticketId: ticketId,
+          equipmentName: ticket.equipment_name || 'General Maintenance',
+          status: ticket.ticket_status,
+          completedDate: ticket.completed_at ? new Date(ticket.completed_at).toLocaleDateString() : undefined,
+          technicianName: ticket.technician_name,
+          technicianNotes: ticket.technician_notes,
+          updateReason: updateReason,
+          dashboardUrl: `${frontendUrl}/vendor/tickets/${ticket.ticket_number}`,
+        });
+      }
+
+      // Log vendor email
+      await emailRepository.logEmail({
+        recipientEmail: ticket.vendor_email,
+        templateType: isCompleted ? 'maintenanceCompleted' : 'maintenanceTicketUpdated',
+        subject: `Maintenance Ticket Updated - #${ticketId}`,
+        status: vendorEmailResult.success ? 'sent' : 'failed',
+        messageId: vendorEmailResult.messageId,
+        errorMessage: vendorEmailResult.error,
+        metadata: { ticketId, ticketNumber: ticket.ticket_number, recipient: 'vendor' },
+      });
+    } catch (error) {
+      console.error('Error sending ticket updated email:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send ticket completion email to client and vendor
+   * Private helper method
+   */
+  private async sendTicketCompletedEmail(ticketId: number): Promise<void> {
+    try {
+      console.log('\n===== SENDING TICKET COMPLETED EMAILS =====');
+      console.log('[Ticket ID]:', ticketId);
+      console.log('[Timestamp]:', new Date().toISOString());
+      
+      // Get ticket details with completion info
+      const query = `
+        SELECT 
+          mt.id,
+          mt.ticket_number,
+          mt.ticket_status,
+          mt.resolved_at as completed_at,
+          mt.resolution_description as technician_notes,
+          eq.equipment_name,
+          c.company_name as client_name,
+          cu.email as client_email,
+          v.company_name as vendor_name,
+          vu.email as vendor_email,
+          tech_user.first_name || ' ' || tech_user.last_name as technician_name
+        FROM maintenance_ticket mt
+        LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
+        LEFT JOIN equipment eq ON ei.equipment_id = eq.id
+        JOIN clients c ON mt.client_id = c.id
+        JOIN "user" cu ON c.user_id = cu.id
+        JOIN vendors v ON mt.vendor_id = v.id
+        JOIN "user" vu ON v.user_id = vu.id
+        LEFT JOIN "user" tech_user ON mt.assigned_technician = tech_user.id
+        WHERE mt.id = $1;
+      `;
+
+      const result = await pool.query(query, [ticketId]);
+      
+      if (result.rows.length === 0) {
+        console.warn('[WARNING] Ticket', ticketId, 'not found for completion email');
+        return;
+      }
+
+      const ticket = result.rows[0];
+      console.log('[Ticket Completion Details]');
+      console.log('   - Ticket #:', ticket.ticket_number);
+      console.log('   - Equipment:', ticket.equipment_name);
+      console.log('   - Status:', ticket.ticket_status);
+      console.log('   - Technician:', ticket.technician_name);
+      
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+      console.log('\n[Sending completion email to CLIENT]');
+      // Send completion email to CLIENT
+      const clientEmailResult = await emailService.sendMaintenanceCompleted({
+        to: ticket.client_email,
+        clientName: ticket.client_name,
+        ticketId: ticketId,
+        equipmentName: ticket.equipment_name || 'Equipment',
+        completedDate: ticket.completed_at 
+          ? new Date(ticket.completed_at).toLocaleDateString() 
+          : new Date().toLocaleDateString(),
+        technicianName: ticket.technician_name || 'Service Team',
+        technicianNotes: ticket.technician_notes,
+        complianceStatus: 'Compliant',
+        nextMaintenanceDate: 'To be scheduled',
+        dashboardUrl: `${frontendUrl}/service-requests`,
+      });
+
+      await emailRepository.logEmail({
+        recipientEmail: ticket.client_email,
+        templateType: 'maintenanceCompleted',
+        subject: `Service Request Completed - #${ticketId}`,
+        status: clientEmailResult.success ? 'sent' : 'failed',
+        messageId: clientEmailResult.messageId,
+        errorMessage: clientEmailResult.error,
+        metadata: { ticketId, ticketNumber: ticket.ticket_number, recipient: 'client' },
+      });
+      
+      if (clientEmailResult.success) {
+        console.log('[SUCCESS] Client completion email sent');
+      } else {
+        console.log('[FAILED] Client completion email failed:', clientEmailResult.error);
+      }
+
+      console.log('\n[Sending completion email to VENDOR]');
+      // Send completion email to VENDOR
+      const vendorEmailResult = await emailService.sendMaintenanceCompleted({
+        to: ticket.vendor_email,
+        clientName: ticket.vendor_name,
+        ticketId: ticketId,
+        equipmentName: ticket.equipment_name || 'Equipment',
+        completedDate: ticket.completed_at 
+          ? new Date(ticket.completed_at).toLocaleDateString() 
+          : new Date().toLocaleDateString(),
+        technicianName: ticket.technician_name || 'Service Team',
+        technicianNotes: ticket.technician_notes,
+        complianceStatus: 'Compliant',
+        nextMaintenanceDate: 'To be scheduled',
+        dashboardUrl: `${frontendUrl}/vendors/tickets`,
+      });
+
+      await emailRepository.logEmail({
+        recipientEmail: ticket.vendor_email,
+        templateType: 'maintenanceCompleted',
+        subject: `Service Request Completed - #${ticketId}`,
+        status: vendorEmailResult.success ? 'sent' : 'failed',
+        messageId: vendorEmailResult.messageId,
+        errorMessage: vendorEmailResult.error,
+        metadata: { ticketId, ticketNumber: ticket.ticket_number, recipient: 'vendor' },
+      });
+      
+      if (vendorEmailResult.success) {
+        console.log('[SUCCESS] Vendor completion email sent');
+      } else {
+        console.log('[FAILED] Vendor completion email failed:', vendorEmailResult.error);
+      }
+      
+      console.log('\n[TICKET COMPLETED EMAIL PROCESS FINISHED]');
+      console.log('   - Client Email:', clientEmailResult.success ? '[SENT]' : '[FAILED]');
+      console.log('   - Vendor Email:', vendorEmailResult.success ? '[SENT]' : '[FAILED]');
+      console.log('===========================\n');
+    } catch (error) {
+      console.error('\n[ERROR IN TICKET COMPLETED EMAIL PROCESS]');
+      console.error('[Ticket ID]:', ticketId);
+      console.error('[Error]:', error);
+      console.error('===========================\n');
+      throw error;
+    }
   }
 }
 
