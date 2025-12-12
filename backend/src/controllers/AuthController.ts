@@ -219,17 +219,41 @@ export class AuthController extends BaseController {
         return ApiResponseUtil.internalError(res, 'Server configuration error');
       }
 
-      // Generate new token
+      // Get session timeout from database settings
+      const sessionTimeoutMinutes = await SystemSettingsRepository.getTypedValue<number>(
+        'session_timeout_minutes',
+        30
+      );
+
+      // Get vendor_id if user is a vendor (for token consistency)
+      let vendorId = req.user!.vendorId;
+      if (req.user!.user_type === 'vendor' && !vendorId) {
+        try {
+          const vendorQuery = 'SELECT id FROM vendors WHERE user_id = $1';
+          const vendorResult = await pool.query(vendorQuery, [req.user!.userId]);
+          if (vendorResult.rows.length > 0) {
+            vendorId = vendorResult.rows[0].id;
+          }
+        } catch (error) {
+          console.error('Error fetching vendor_id during refresh:', error);
+        }
+      }
+
+      // Generate new token with database-configured expiration
       const token = jwt.sign(
         { 
           userId: req.user!.userId, 
           email: req.user!.email, 
           user_type: req.user!.user_type,
-          role_id: req.user!.role_id
+          role_id: req.user!.role_id,
+          vendorId: vendorId
         },
         jwtSecret,
-        { expiresIn: '24h' }
+        { expiresIn: `${sessionTimeoutMinutes}m` }
       );
+
+      // Update last activity
+      await UserRepository.updateLastLogin(req.user!.userId, this.getClientIP(req));
 
       this.logAction('TOKEN_REFRESHED', req.user!.userId);
 

@@ -475,9 +475,9 @@ CREATE OR REPLACE FUNCTION update_compliance_status()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.compliance_status := CASE 
-        WHEN NEW.expiry_date < CURRENT_DATE THEN 'expired'
-        WHEN NEW.next_maintenance_date < CURRENT_DATE THEN 'overdue'
-        WHEN NEW.next_maintenance_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'due_soon'
+        WHEN NEW.expiry_date IS NOT NULL AND NEW.expiry_date < CURRENT_DATE THEN 'expired'
+        WHEN NEW.next_maintenance_date IS NOT NULL AND NEW.next_maintenance_date < CURRENT_DATE THEN 'overdue'
+        WHEN NEW.next_maintenance_date IS NOT NULL AND NEW.next_maintenance_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' THEN 'due_soon'
         ELSE 'compliant'
     END;
     RETURN NEW;

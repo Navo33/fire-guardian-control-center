@@ -4,8 +4,8 @@ import Handlebars from 'handlebars';
 export const brandColors = {
   primaryBg: '#F5F7FA',
   primaryText: '#333333',
-  fireOrange: '#E65100',
-  fireOrangeHover: '#D84315',
+  fireRed: '#E53935',
+  fireRedHover: '#C62828',
   danger: '#E53935',
   success: '#388E3C',
   gray200: '#E4E7EB',
@@ -46,7 +46,7 @@ const baseEmailLayout = `
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07), 0 10px 20px rgba(0, 0, 0, 0.06);
     }
     .email-header {
-      background: linear-gradient(135deg, ${brandColors.fireOrange} 0%, ${brandColors.fireOrangeHover} 100%);
+      background: linear-gradient(135deg, ${brandColors.fireRed} 0%, ${brandColors.fireRedHover} 100%);
       padding: 40px 30px;
       text-align: center;
       color: #ffffff;
@@ -78,7 +78,7 @@ const baseEmailLayout = `
       background-color: #ffffff;
     }
     .email-content h2 {
-      color: ${brandColors.fireOrange};
+      color: ${brandColors.fireRed};
       font-size: 24px;
       font-weight: 700;
       margin-top: 0;
@@ -100,7 +100,7 @@ const baseEmailLayout = `
     .info-box {
       background-color: #FAFBFC;
       border: 2px solid #E8EAED;
-      border-left: 4px solid ${brandColors.fireOrange};
+      border-left: 4px solid ${brandColors.fireRed};
       padding: 24px;
       margin: 28px 0;
       border-radius: 8px;
@@ -150,7 +150,7 @@ const baseEmailLayout = `
     .button {
       display: inline-block;
       padding: 14px 36px;
-      background-color: ${brandColors.fireOrange};
+      background-color: ${brandColors.fireRed};
       color: #ffffff !important;
       text-decoration: none;
       border-radius: 8px;
@@ -158,16 +158,16 @@ const baseEmailLayout = `
       font-size: 15px;
       letter-spacing: 0.3px;
       transition: all 0.2s ease;
-      box-shadow: 0 2px 4px rgba(230, 81, 0, 0.2);
+      box-shadow: 0 2px 4px rgba(229, 57, 53, 0.2);
     }
     .button:hover {
-      background-color: ${brandColors.fireOrangeHover};
-      box-shadow: 0 4px 8px rgba(230, 81, 0, 0.3);
+      background-color: ${brandColors.fireRedHover};
+      box-shadow: 0 4px 8px rgba(229, 57, 53, 0.3);
       transform: translateY(-1px);
     }
     .alert-box {
-      background-color: #FFF3E0;
-      border-left: 4px solid #FF6F00;
+      background-color: #ffe0e0ff;
+      border-left: 4px solid #E53935;
       padding: 20px;
       margin: 24px 0;
       border-radius: 6px;
@@ -176,7 +176,7 @@ const baseEmailLayout = `
       margin: 0 0 8px 0;
       font-size: 16px;
       font-weight: 700;
-      color: #E65100;
+      color: #E53935;
     }
     .alert-box p {
       margin: 0;
@@ -204,7 +204,7 @@ const baseEmailLayout = `
       color: ${brandColors.primaryText};
     }
     .signature strong {
-      color: ${brandColors.fireOrange};
+      color: ${brandColors.fireRed};
     }
     .email-footer {
       background: linear-gradient(to bottom, #FAFBFC, #F5F7FA);
@@ -262,7 +262,7 @@ const baseEmailLayout = `
   <div class="email-wrapper">
     <div class="email-container">
       <div class="email-header">
-        <h1>🔥 Fire Guardian</h1>
+        <h1>Fire Guardian</h1>
         <p>Fire Safety Equipment Management System</p>
       </div>
       <div class="email-body">
@@ -286,7 +286,7 @@ const baseEmailLayout = `
 
 // Maintenance Ticket Created Template
 export const maintenanceTicketCreatedTemplate = `
-<h2>🎫 New Maintenance Ticket Created</h2>
+<h2>New Maintenance Ticket Created</h2>
 <p class="greeting">Hello {{clientName}},</p>
 <p>A new maintenance ticket has been created for your equipment. Please review the details below:</p>
 
@@ -339,7 +339,7 @@ export const maintenanceTicketCreatedTemplate = `
 
 // Maintenance Ticket Updated Template
 export const maintenanceTicketUpdatedTemplate = `
-<h2>🔄 Maintenance Ticket Updated</h2>
+<h2>Maintenance Ticket Updated</h2>
 <p class="greeting">Hello {{clientName}},</p>
 <p>Your maintenance ticket has been updated. Please see the latest information below:</p>
 
@@ -397,7 +397,7 @@ export const maintenanceTicketUpdatedTemplate = `
 
 // Maintenance Due Reminder Template (30 days)
 export const maintenanceDueReminderTemplate = `
-<h2>⏰ Upcoming Maintenance Due</h2>
+<h2>Upcoming Maintenance Due</h2>
 <p class="greeting">Hello {{clientName}},</p>
 <p>This is a friendly reminder that maintenance is due for your fire safety equipment in <strong>{{daysUntilDue}} days</strong>.</p>
 
@@ -442,9 +442,9 @@ export const maintenanceDueReminderTemplate = `
 
 // Equipment Expiration Alert Template
 export const equipmentExpirationAlertTemplate = `
-<h2>⚠️ Equipment Certification Expiring Soon</h2>
+<h2>Equipment Certification Expiring Soon</h2>
 <p class="greeting">Hello {{clientName}},</p>
-<p><strong style="color: #E65100;">Important Notice:</strong> Your fire safety equipment certification will expire in <strong style="color: #E53935;">{{daysUntilExpiration}} days</strong>.</p>
+<p><strong style="color: #E53935;">Important Notice:</strong> Your fire safety equipment certification will expire in <strong style="color: #E53935;">{{daysUntilExpiration}} days</strong>.</p>
 
 <div class="info-box info-box-warning">
   <div class="info-row">
@@ -470,7 +470,7 @@ export const equipmentExpirationAlertTemplate = `
 </div>
 
 <div class="alert-box">
-  <h3>🚨 Action Required</h3>
+  <h3>Action Required</h3>
   <p>To maintain compliance and ensure continued operation, please contact your service provider to schedule an inspection and recertification before the expiration date.</p>
 </div>
 
@@ -497,7 +497,7 @@ export const equipmentExpirationAlertTemplate = `
 
 // Maintenance Completed Template
 export const maintenanceCompletedTemplate = `
-<h2>✅ Maintenance Completed Successfully</h2>
+<h2>Maintenance Completed Successfully</h2>
 <p class="greeting">Hello {{clientName}},</p>
 <p>Great news! The scheduled maintenance for your equipment has been completed successfully.</p>
 
@@ -526,7 +526,7 @@ export const maintenanceCompletedTemplate = `
 
 {{#if technicianNotes}}
 <div class="alert-box">
-  <h3>📋 Service Report</h3>
+  <h3>Service Report</h3>
   <p>{{technicianNotes}}</p>
 </div>
 {{/if}}
@@ -544,7 +544,7 @@ export const maintenanceCompletedTemplate = `
 
 <p>Your equipment is now compliant and ready for operation. A detailed service report is available in your dashboard.</p>
 
-<p><strong>Thank you for prioritizing fire safety! 🔥</strong></p>
+<p><strong>Thank you for prioritizing fire safety! </strong></p>
 
 <div class="signature">
   <p>Best regards,<br><strong>Fire Guardian Team</strong></p>

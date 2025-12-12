@@ -159,6 +159,18 @@ export class MaintenanceTicketRepository {
       params.push(`%${filters.search}%`);
     }
 
+    // Add LIMIT and OFFSET parameters
+    const limit = filters.limit || 25;
+    const offset = filters.offset || 0;
+    
+    paramCount++;
+    const limitParam = paramCount;
+    params.push(limit);
+    
+    paramCount++;
+    const offsetParam = paramCount;
+    params.push(offset);
+
     const query = `
       SELECT
         -- Summary Cards
@@ -169,29 +181,36 @@ export class MaintenanceTicketRepository {
 
         -- Tickets List (array)
         COALESCE((
-            SELECT jsonb_agg(jsonb_build_object(
-                'id', mt.id,
-                'ticket_number', mt.ticket_number,
-                'issue', COALESCE(mt.issue_description, 'No description'),
-                'client_name', c.company_name,
-                'equipment', CASE 
-                    WHEN mt.equipment_instance_id IS NOT NULL 
-                    THEN ei.serial_number 
-                    ELSE 'N/A' 
-                END,
-                'priority', mt.priority,
-                'type', mt.support_type,
-                'status', mt.ticket_status,
-                'scheduled_date', TO_CHAR(mt.scheduled_date, 'Mon DD, YYYY'),
-                'created_at', mt.created_at,
-                'actions', jsonb_build_array('View', 'Edit')
-            ) ORDER BY mt.created_at DESC)
-            FROM maintenance_ticket mt
-            LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
-            LEFT JOIN clients c ON mt.client_id = c.id
-            WHERE mt.vendor_id = $1
-              AND c.created_by_vendor_id = $1  -- Only your clients
-              ${additionalFilters}
+            SELECT jsonb_agg(ticket_data ORDER BY created_at DESC)
+            FROM (
+              SELECT 
+                jsonb_build_object(
+                  'id', mt.id,
+                  'ticket_number', mt.ticket_number,
+                  'issue', COALESCE(mt.issue_description, 'No description'),
+                  'client_name', c.company_name,
+                  'equipment', CASE 
+                      WHEN mt.equipment_instance_id IS NOT NULL 
+                      THEN ei.serial_number 
+                      ELSE 'N/A' 
+                  END,
+                  'priority', mt.priority,
+                  'type', mt.support_type,
+                  'status', mt.ticket_status,
+                  'scheduled_date', TO_CHAR(mt.scheduled_date, 'DD/MM/YYYY'),
+                  'created_at', mt.created_at,
+                  'actions', jsonb_build_array('View', 'Edit')
+                ) as ticket_data,
+                mt.created_at
+              FROM maintenance_ticket mt
+              LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
+              LEFT JOIN clients c ON mt.client_id = c.id
+              WHERE mt.vendor_id = $1
+                AND c.created_by_vendor_id = $1
+                ${additionalFilters}
+              ORDER BY mt.created_at DESC
+              LIMIT $${limitParam} OFFSET $${offsetParam}
+            ) subquery
         ), '[]'::jsonb) AS tickets
 
       FROM maintenance_ticket mt
@@ -442,25 +461,25 @@ export class MaintenanceTicketRepository {
 
     if (updateData.priority !== undefined) {
       paramCount++;
-      setClauses.push(`priority = $${paramCount}`);
+      setClauses.push(`priority = $${paramCount}::text`);
       params.push(updateData.priority);
     }
 
     if (updateData.issue_description !== undefined) {
       paramCount++;
-      setClauses.push(`issue_description = $${paramCount}`);
+      setClauses.push(`issue_description = $${paramCount}::text`);
       params.push(updateData.issue_description);
     }
 
     if (updateData.scheduled_date !== undefined) {
       paramCount++;
-      setClauses.push(`scheduled_date = $${paramCount}`);
-      params.push(updateData.scheduled_date);
+      setClauses.push(`scheduled_date = $${paramCount}::date`);
+      params.push(updateData.scheduled_date || null);
     }
 
     if (updateData.assigned_technician !== undefined) {
       paramCount++;
-      setClauses.push(`assigned_technician = $${paramCount}`);
+      setClauses.push(`assigned_technician = $${paramCount}::integer`);
       params.push(updateData.assigned_technician);
     }
 
@@ -468,8 +487,7 @@ export class MaintenanceTicketRepository {
       throw new Error('No update data provided');
     }
 
-    // Always update the updated_at timestamp
-    paramCount++;
+    // Always update the updated_at timestamp (no parameter needed)
     setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
 
     // Add WHERE clause parameters
@@ -483,8 +501,8 @@ export class MaintenanceTicketRepository {
     const query = `
       UPDATE maintenance_ticket
       SET ${setClauses.join(', ')}
-      WHERE id = $${ticketIdParam}
-      AND vendor_id = $${vendorIdParam}
+      WHERE id = $${ticketIdParam}::integer
+      AND vendor_id = $${vendorIdParam}::integer
       RETURNING id, ticket_number
     `;
     

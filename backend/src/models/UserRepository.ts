@@ -139,6 +139,27 @@ export class UserRepository {
   }
 
   /**
+   * Update user password and clear temporary password flag
+   */
+  static async updatePassword(userId: number, hashedPassword: string): Promise<void> {
+    const query = `
+      UPDATE "user" 
+      SET 
+        password = $2,
+        is_temporary_password = false,
+        last_password_change = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `;
+    
+    try {
+      await pool.query(query, [userId, hashedPassword]);
+    } catch (error) {
+      console.error('Error updating password:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if account is locked
    */
   static async isAccountLocked(userId: number): Promise<boolean> {
@@ -230,24 +251,6 @@ export class UserRepository {
       await pool.query(query, [userId]);
     } catch (error) {
       console.error('Error soft deleting user:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Update user password
-   */
-  static async updatePassword(userId: number, hashedPassword: string): Promise<void> {
-    const query = `
-      UPDATE "user" 
-      SET password = $2
-      WHERE id = $1
-    `;
-    
-    try {
-      await pool.query(query, [userId, hashedPassword]);
-    } catch (error) {
-      console.error('Error updating password:', error);
       throw error;
     }
   }

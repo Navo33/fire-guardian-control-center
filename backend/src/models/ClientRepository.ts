@@ -97,6 +97,7 @@ export interface CreateClientData {
   email: string;
   password: string;
   phone: string;
+  is_temporary_password?: boolean;
   
   // Client fields
   company_name: string;
@@ -549,9 +550,9 @@ export class ClientRepository {
       const userQuery = `
         INSERT INTO "user" (
           first_name, last_name, display_name, email, password, user_type, 
-          role_id, phone, created_at, updated_at, last_password_change
+          role_id, phone, is_temporary_password, created_at, updated_at, last_password_change
         ) VALUES (
-          $1, $2, $3, $4, $5, 'client', 3, $6, 
+          $1, $2, $3, $4, $5, 'client', 3, $6, $7, 
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         ) RETURNING id
       `;
@@ -563,7 +564,8 @@ export class ClientRepository {
         displayName,
         clientData.email,
         clientData.password,
-        clientData.phone
+        clientData.phone,
+        clientData.is_temporary_password || false
       ]);
 
       const userId = userResult.rows[0].id;

@@ -4,6 +4,7 @@ import {
   generatePlainText, 
   EmailTemplateType 
 } from '../utils/emailTemplates';
+import { formatDate } from '../utils/dateFormatter';
 
 export interface EmailOptions {
   to: string | string[];
@@ -52,21 +53,35 @@ class EmailService {
         bcc: options.bcc ? (Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc) : undefined,
       };
 
+      // Log email details before sending
+      console.log('\n===== SENDING EMAIL =====');
+      console.log('[To]:', mailOptions.to);
+      console.log('[Subject]:', options.subject);
+      console.log('[Template]:', options.templateType);
+      if (options.cc) console.log('[CC]:', mailOptions.cc);
+      if (options.bcc) console.log('[BCC]:', mailOptions.bcc);
+      console.log('[From]:', mailOptions.from);
+      console.log('[Timestamp]:', new Date().toISOString());
+
       // Send email
       const info = await transporter.sendMail(mailOptions);
       
-      console.log('✅ Email sent successfully:', {
-        messageId: info.messageId,
-        to: mailOptions.to,
-        subject: options.subject,
-      });
+      console.log('[EMAIL SENT SUCCESSFULLY]');
+      console.log('[Message ID]:', info.messageId);
+      console.log('[Response]:', info.response);
+      console.log('===========================\n');
 
       return {
         success: true,
         messageId: info.messageId,
       };
     } catch (error) {
-      console.error('❌ Failed to send email:', error);
+      console.error('\n===== EMAIL SEND FAILED =====');
+      console.error('[To]:', options.to);
+      console.error('[Subject]:', options.subject);
+      console.error('[Template]:', options.templateType);
+      console.error('[Error]:', error);
+      console.error('===========================\n');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -201,7 +216,7 @@ class EmailService {
         ticketId: 12345,
         equipmentName: 'Test Fire Extinguisher',
         serialNumber: 'TEST-001',
-        scheduledDate: new Date().toLocaleDateString(),
+        scheduledDate: formatDate(new Date()),
         priority: 'Medium',
         status: 'Scheduled',
         description: 'This is a test email to verify email configuration.',

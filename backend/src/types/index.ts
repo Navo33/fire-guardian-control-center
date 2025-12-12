@@ -15,6 +15,7 @@ export interface User {
   failed_login_attempts: number;
   last_login?: Date;
   last_login_ip?: string;
+  is_temporary_password?: boolean;
   created_at: Date;
   deleted_at?: Date;
 }
@@ -249,6 +250,7 @@ export interface CreateVendorRequest {
   lastName: string;
   email: string;
   password: string;
+  isTemporaryPassword?: boolean;
   
   // Company Information (for vendor_company table)
   companyName: string;

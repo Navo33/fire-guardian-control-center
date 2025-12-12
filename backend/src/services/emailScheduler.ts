@@ -2,6 +2,7 @@ import cron, { ScheduledTask } from 'node-cron';
 import { pool } from '../config/database';
 import { emailService } from '../services/emailService';
 import { emailRepository } from '../models/EmailRepository';
+import { formatDate } from '../utils/dateFormatter';
 
 class EmailScheduler {
   private maintenanceReminderJob: ScheduledTask | null = null;
@@ -98,7 +99,7 @@ class EmailScheduler {
             equipmentName: equipment.equipment_name,
             serialNumber: equipment.serial_number,
             location: equipment.location || 'Not specified',
-            maintenanceDueDate: new Date(equipment.next_maintenance_date).toLocaleDateString(),
+            maintenanceDueDate: formatDate(equipment.next_maintenance_date),
             maintenanceType: equipment.maintenance_interval_days ? `Every ${equipment.maintenance_interval_days} days` : 'Regular Maintenance',
             daysUntilDue: equipment.days_until_due,
             dashboardUrl: `${frontendUrl}/client/equipment/${equipment.equipment_id}`,
@@ -127,7 +128,7 @@ class EmailScheduler {
             equipmentName: equipment.equipment_name,
             serialNumber: equipment.serial_number,
             location: equipment.location || 'Not specified',
-            maintenanceDueDate: new Date(equipment.next_maintenance_date).toLocaleDateString(),
+            maintenanceDueDate: formatDate(equipment.next_maintenance_date),
             maintenanceType: equipment.maintenance_interval_days ? `Every ${equipment.maintenance_interval_days} days` : 'Regular Maintenance',
             daysUntilDue: equipment.days_until_due,
             dashboardUrl: `${frontendUrl}/vendor/equipment/${equipment.equipment_id}`,
@@ -210,7 +211,7 @@ class EmailScheduler {
             equipmentName: equipment.equipment_name,
             serialNumber: equipment.serial_number,
             location: equipment.location || 'Not specified',
-            expirationDate: new Date(equipment.expiration_date).toLocaleDateString(),
+            expirationDate: formatDate(equipment.expiration_date),
             status: equipment.status,
             daysUntilExpiration: equipment.days_until_expiration,
             dashboardUrl: `${frontendUrl}/client/equipment/${equipment.equipment_id}`,
@@ -239,7 +240,7 @@ class EmailScheduler {
             equipmentName: equipment.equipment_name,
             serialNumber: equipment.serial_number,
             location: equipment.location || 'Not specified',
-            expirationDate: new Date(equipment.expiration_date).toLocaleDateString(),
+            expirationDate: formatDate(equipment.expiration_date),
             status: equipment.status,
             daysUntilExpiration: equipment.days_until_expiration,
             dashboardUrl: `${frontendUrl}/vendor/equipment/${equipment.equipment_id}`,
