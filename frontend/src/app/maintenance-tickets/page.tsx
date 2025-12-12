@@ -106,7 +106,7 @@ export default function MaintenanceTicketsPage() {
   
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('open');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   
@@ -125,15 +125,16 @@ export default function MaintenanceTicketsPage() {
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalTickets, setTotalTickets] = useState(0);
-  const ticketsPerPage = 25;
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [itemsPerPage] = useState(10);
 
   // API fetch functions
   const fetchTickets = useCallback(async () => {
     try {
       const params = new URLSearchParams({
-        limit: ticketsPerPage.toString(),
-        offset: ((currentPage - 1) * ticketsPerPage).toString()
+        limit: itemsPerPage.toString(),
+        offset: ((currentPage - 1) * itemsPerPage).toString()
       });
 
       if (searchTerm) params.append('search', searchTerm);
@@ -151,7 +152,8 @@ export default function MaintenanceTicketsPage() {
 
       const data = await response.json();
       setTickets(data.data.tickets || []);
-      setTotalTickets(data.data.pagination?.total || 0);
+      setTotalCount(data.data.pagination?.total || 0);
+      setTotalPages(Math.ceil((data.data.pagination?.total || 0) / itemsPerPage));
       
       // Update KPIs from the main response if available
       if (data.data.total_tickets !== undefined) {
@@ -598,6 +600,33 @@ export default function MaintenanceTicketsPage() {
             </tbody>
           </table>
         </div>
+
+          {/* Pagination */}
+          {!isLoading && totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white px-6 py-4 border-t border-gray-100">
+              <div className="text-sm text-gray-700">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
+                {Math.min(currentPage * itemsPerPage, totalCount)} of{' '}
+                {totalCount} results
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -97,7 +97,7 @@ export default function TicketDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   
   // Modal states
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
   
   // Tab state
@@ -186,27 +186,45 @@ export default function TicketDetailsPage() {
   }, [ticketId]);
 
   // Update ticket handler
-  const handleUpdateTicket = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUpdateTicket = async () => {
     setIsUpdating(true);
 
     try {
-      const response = await fetch(`/api/vendor/tickets/${ticketId}`, {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.MAINTENANCE_TICKETS.UPDATE(ticketId);
+
+      // Clean the data - only send defined values
+      const updatePayload: any = {};
+      if (editFormData.priority !== undefined) {
+        updatePayload.priority = editFormData.priority;
+      }
+      if (editFormData.issue_description !== undefined) {
+        updatePayload.issue_description = editFormData.issue_description;
+      }
+      if (editFormData.scheduled_date !== undefined && editFormData.scheduled_date !== '') {
+        updatePayload.scheduled_date = editFormData.scheduled_date;
+      }
+
+      logApiCall('PUT', url);
+      const response = await fetch(url, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(editFormData)
+        headers,
+        body: JSON.stringify(updatePayload)
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update ticket');
+        throw new Error(result.message || 'Failed to update ticket');
       }
 
       showToast('success', 'Ticket updated successfully');
-      setShowEditModal(false);
+      setIsEditMode(false);
       await fetchTicketDetails();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Failed to update ticket');
@@ -362,19 +380,49 @@ export default function TicketDetailsPage() {
             {ticket.ticket_status === 'open' && (
               <>
                 <button
-                  onClick={() => setShowEditModal(true)}
-                  className="btn-secondary flex items-center space-x-2"
+                  onClick={() => setIsEditMode(!isEditMode)}
+                  className={isEditMode ? "btn-secondary flex items-center space-x-2" : "btn-secondary flex items-center space-x-2"}
                 >
-                  <PencilIcon className="h-4 w-4" />
-                  <span>Edit</span>
+                  {isEditMode ? (
+                    <>
+                      <XMarkIcon className="h-4 w-4" />
+                      <span>Cancel Edit</span>
+                    </>
+                  ) : (
+                    <>
+                      <PencilIcon className="h-4 w-4" />
+                      <span>Edit</span>
+                    </>
+                  )}
                 </button>
-                <button
-                  onClick={() => setShowResolveModal(true)}
-                  className="btn-primary flex items-center space-x-2"
-                >
-                  <CheckIcon className="h-4 w-4" />
-                  <span>Resolve</span>
-                </button>
+                {isEditMode && (
+                  <button
+                    onClick={handleUpdateTicket}
+                    disabled={isUpdating}
+                    className="btn-primary flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdating ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckIcon className="h-4 w-4" />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                {!isEditMode && (
+                  <button
+                    onClick={() => setShowResolveModal(true)}
+                    className="btn-primary flex items-center space-x-2"
+                  >
+                    <CheckIcon className="h-4 w-4" />
+                    <span>Resolve</span>
+                  </button>
+                )}
               </>
             )}
             {ticket.ticket_status === 'resolved' && (
@@ -494,72 +542,119 @@ export default function TicketDetailsPage() {
                     Ticket Information
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Status</label>
-                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getStatusBadgeColor(ticket.ticket_status)}`}>
-                        {ticket.ticket_status}
-                      </span>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Priority</label>
-                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getPriorityBadgeColor(ticket.priority)}`}>
-                        {ticket.priority}
-                      </span>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Support Type</label>
-                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getTypeBadgeColor(ticket.support_type)}`}>
-                        {ticket.support_type}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Created At</label>
-                      <p className="text-sm text-gray-900">{formatDate(ticket.created_at)}</p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Calculated Hours</label>
-                      <p className="text-sm text-gray-900">{ticket.calculated_hours ? Number(ticket.calculated_hours).toFixed(1) : '0.0'} hours</p>
-                    </div>
-                    
-                    {ticket.scheduled_date && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Scheduled Date</label>
-                        <p className="text-sm text-gray-900">{formatDateOnly(ticket.scheduled_date)}</p>
+                  {isEditMode ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Priority
+                          </label>
+                          <select
+                            value={editFormData.priority}
+                            onChange={(e) => setEditFormData({ ...editFormData, priority: e.target.value as 'low' | 'normal' | 'high' })}
+                            className="input-field"
+                          >
+                            <option value="low">Low</option>
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Scheduled Date
+                          </label>
+                          <input
+                            type="date"
+                            value={editFormData.scheduled_date ? new Date(editFormData.scheduled_date).toISOString().split('T')[0] : ''}
+                            onChange={(e) => setEditFormData({ ...editFormData, scheduled_date: e.target.value || undefined })}
+                            className="input-field"
+                          />
+                        </div>
                       </div>
-                    )}
-                    
-                    {ticket.resolved_at && (
+                      
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Resolved At</label>
-                        <p className="text-sm text-gray-900">{formatDate(ticket.resolved_at)}</p>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Issue Description
+                        </label>
+                        <textarea
+                          value={editFormData.issue_description}
+                          onChange={(e) => setEditFormData({ ...editFormData, issue_description: e.target.value })}
+                          className="input-field min-h-[120px]"
+                          rows={5}
+                        />
                       </div>
-                    )}
-                    
-                    {ticket.cost && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Cost</label>
-                        <p className="text-sm text-gray-900">${ticket.cost.toFixed(2)}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-6">
-                    <label className="block text-sm font-medium text-gray-700">Issue Description</label>
-                    <p className="text-sm text-gray-900 mt-1">{ticket.issue_description}</p>
-                  </div>
-
-                  {ticket.resolution_description && (
-                    <div className="mt-6">
-                      <label className="block text-sm font-medium text-gray-700">Resolution Description</label>
-                      <p className="text-sm text-gray-900 mt-1">{ticket.resolution_description}</p>
                     </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Status</label>
+                          <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getStatusBadgeColor(ticket.ticket_status)}`}>
+                            {ticket.ticket_status}
+                          </span>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Priority</label>
+                          <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getPriorityBadgeColor(ticket.priority)}`}>
+                            {ticket.priority}
+                          </span>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Support Type</label>
+                          <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full border mt-1 ${getTypeBadgeColor(ticket.support_type)}`}>
+                            {ticket.support_type}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Created At</label>
+                          <p className="text-sm text-gray-900">{formatDate(ticket.created_at)}</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Calculated Hours</label>
+                          <p className="text-sm text-gray-900">{ticket.calculated_hours ? Number(ticket.calculated_hours).toFixed(1) : '0.0'} hours</p>
+                        </div>
+                        
+                        {ticket.scheduled_date && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Scheduled Date</label>
+                            <p className="text-sm text-gray-900">{formatDateOnly(ticket.scheduled_date)}</p>
+                          </div>
+                        )}
+                        
+                        {ticket.resolved_at && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Resolved At</label>
+                            <p className="text-sm text-gray-900">{formatDate(ticket.resolved_at)}</p>
+                          </div>
+                        )}
+                        
+                        {ticket.cost && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Cost</label>
+                            <p className="text-sm text-gray-900">${ticket.cost.toFixed(2)}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-6">
+                        <label className="block text-sm font-medium text-gray-700">Issue Description</label>
+                        <p className="text-sm text-gray-900 mt-1">{ticket.issue_description}</p>
+                      </div>
+
+                      {ticket.resolution_description && (
+                        <div className="mt-6">
+                          <label className="block text-sm font-medium text-gray-700">Resolution Description</label>
+                          <p className="text-sm text-gray-900 mt-1">{ticket.resolution_description}</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -795,127 +890,7 @@ export default function TicketDetailsPage() {
         </div>
       </div>
 
-      {/* Edit Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Edit Ticket</h3>
-              
-              <form onSubmit={handleUpdateTicket} className="space-y-4">
-                {/* Status */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={editFormData.ticket_status || ''}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      ticket_status: e.target.value as 'open' | 'resolved' | 'closed'
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="open">Open</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                </div>
 
-                {/* Priority */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Priority
-                  </label>
-                  <select
-                    value={editFormData.priority || ''}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      priority: e.target.value as 'low' | 'normal' | 'high'
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="low">Low</option>
-                    <option value="normal">Normal</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-
-                {/* Issue Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Issue Description
-                  </label>
-                  <textarea
-                    value={editFormData.issue_description || ''}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      issue_description: e.target.value
-                    })}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Describe the issue in detail..."
-                    minLength={10}
-                    maxLength={1000}
-                  />
-                </div>
-
-                {/* Scheduled Date */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Scheduled Date
-                  </label>
-                  <input
-                    type="date"
-                    value={editFormData.scheduled_date || ''}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      scheduled_date: e.target.value || undefined
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-
-
-                {/* Modal Actions */}
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditModal(false);
-                      // Reset form to original values
-                      setEditFormData({
-                        ticket_status: ticket.ticket_status,
-                        priority: ticket.priority,
-                        issue_description: ticket.issue_description,
-                        scheduled_date: ticket.scheduled_date
-                      });
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-2 focus:ring-blue-500"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isUpdating}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                  >
-                    {isUpdating ? (
-                      <>
-                        <LoadingSpinner size="sm" />
-                        <span className="ml-2">Updating...</span>
-                      </>
-                    ) : (
-                      'Update Ticket'
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Resolve Ticket Modal */}
       {ticket && (

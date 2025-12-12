@@ -18,10 +18,12 @@ const resolveSchema = z.object({
   resolution_description: z.string()
     .min(10, 'Resolution notes must be at least 10 characters')
     .max(1000, 'Resolution notes cannot exceed 1000 characters'),
-  actual_hours: z.coerce.number()
+  actual_hours: z.coerce.number({
+    required_error: 'Actual hours is required',
+    invalid_type_error: 'Actual hours must be a number',
+  })
     .min(0.1, 'Hours must be at least 0.1')
-    .max(100, 'Hours cannot exceed 100')
-    .optional(),
+    .max(100, 'Hours cannot exceed 100'),
   custom_maintenance_date: z.string()
     .optional()
     .refine((date) => {
@@ -74,23 +76,32 @@ export default function ResolveTicketModal({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
     reset,
-  } = useForm({
+  } = useForm<ResolveFormData>({
     resolver: zodResolver(resolveSchema),
+    mode: 'onChange',
     defaultValues: {
       resolution_description: '',
-      actual_hours: undefined,
+      actual_hours: 0,
+      custom_maintenance_date: '',
+      custom_next_maintenance_date: '',
     },
   });
 
-  const onFormSubmit = async (data: any) => {
+  const onFormSubmit = async (data: ResolveFormData) => {
+    // Prevent submission if there are validation errors
+    if (Object.keys(errors).length > 0) {
+      showToast('error', 'Please fix all validation errors before submitting');
+      return;
+    }
+
     setIsLoading(true);
     
     try {
       const requestBody = {
         resolution_description: data.resolution_description,
-        ...(data.actual_hours && { actual_hours: data.actual_hours }),
+        actual_hours: data.actual_hours,
         ...(data.custom_maintenance_date && { custom_maintenance_date: data.custom_maintenance_date }),
         ...(data.custom_next_maintenance_date && { custom_next_maintenance_date: data.custom_next_maintenance_date }),
       };
@@ -109,9 +120,15 @@ export default function ResolveTicketModal({
       const result = await response.json();
       
       showToast('success', `Ticket ${ticketNumber} resolved successfully`);
+      
+      // Reset form and close modal
       reset();
-      onSuccess();
       onClose();
+      
+      // Call onSuccess after modal closes
+      setTimeout(() => {
+        onSuccess();
+      }, 100);
       
     } catch (error) {
       console.error('Error resolving ticket:', error);
@@ -184,24 +201,25 @@ export default function ResolveTicketModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <div className="flex items-center space-x-2">
                     <ClockIcon className="h-4 w-4 text-gray-400" />
-                    <span>Actual Hours (Optional)</span>
+                    <span>Actual Hours *</span>
                   </div>
                 </label>
                 <input
                   type="number"
                   step="0.1"
-                  min="0"
+                  min="0.1"
                   max="100"
                   {...register('actual_hours')}
                   className="input-field"
                   placeholder="e.g., 2.5"
                   disabled={isLoading}
+                  required
                 />
                 {errors.actual_hours && (
                   <p className="mt-1 text-sm text-red-600">{errors.actual_hours.message}</p>
                 )}
                 <p className="mt-1 text-xs text-gray-500">
-                  Enter the actual time spent resolving this ticket
+                  Enter the actual time spent resolving this ticket (required)
                 </p>
               </div>
 
@@ -270,7 +288,7 @@ export default function ResolveTicketModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || Object.keys(errors).length > 0}
                   className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (

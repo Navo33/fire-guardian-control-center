@@ -20,6 +20,7 @@ export const API_ENDPOINTS = {
     LOGIN: `${API_BASE_URL}/auth/login`,
     LOGOUT: `${API_BASE_URL}/auth/logout`,
     VERIFY: `${API_BASE_URL}/auth/verify`,
+    REFRESH: `${API_BASE_URL}/auth/refresh`,
   },
   
   // Dashboard
