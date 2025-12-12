@@ -127,7 +127,8 @@ export class AuthController extends BaseController {
           display_name: user.display_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
           user_type: user.user_type,
           role_id: user.role_id
-        }
+        },
+        requirePasswordChange: user.is_temporary_password || false
       }, 'Login successful');
 
     } catch (error) {
@@ -296,6 +297,66 @@ export class AuthController extends BaseController {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       console.error('Error during logout:', error);
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * POST /api/auth/change-password
+   * Change user password (especially for temporary passwords on first login)
+   */
+  changePassword = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const { currentPassword, newPassword } = req.body;
+
+    // Validate inputs
+    if (!currentPassword || !newPassword) {
+      return ApiResponseUtil.error(res, 'Current password and new password are required', 400);
+    }
+
+    if (newPassword.length < 8) {
+      return ApiResponseUtil.error(res, 'New password must be at least 8 characters long', 400);
+    }
+
+    try {
+      const userId = req.user!.userId;
+
+      // Get user
+      const user = await UserRepository.findById(userId);
+      if (!user) {
+        return ApiResponseUtil.notFound(res, 'User not found');
+      }
+
+      // Verify current password
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isPasswordValid) {
+        return ApiResponseUtil.unauthorized(res, 'Current password is incorrect');
+      }
+
+      // Hash new password
+      const saltRounds = parseInt(process.env.BCRYPT_ROUNDS || '12');
+      const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+      // Update password and clear temporary flag
+      await UserRepository.updatePassword(userId, hashedPassword);
+
+      // Log the password change
+      const clientIP = this.getClientIP(req);
+      await AuditRepository.createLog(
+        'user',
+        { user_id: userId },
+        'UPDATE',
+        { action: 'password_changed' },
+        { ip_address: clientIP }
+      );
+
+      this.logAction('PASSWORD_CHANGED', userId, { clientIP });
+
+      ApiResponseUtil.success(res, null, 'Password changed successfully');
+
+    } catch (error) {
+      console.error('Error changing password:', error);
       return ApiResponseUtil.internalError(res);
     }
   });

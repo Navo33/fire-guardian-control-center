@@ -224,6 +224,31 @@ class EmailService {
       },
     });
   }
+
+  /**
+   * Send temporary password email to new user
+   */
+  async sendTemporaryPassword(
+    to: string,
+    userName: string,
+    temporaryPassword: string,
+    accountType: 'vendor' | 'client'
+  ): Promise<EmailResult> {
+    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    
+    return this.sendEmail({
+      to,
+      subject: 'Welcome to Fire Guardian - Your Account Credentials',
+      templateType: 'temporaryPassword',
+      data: {
+        userName,
+        email: to,
+        temporaryPassword,
+        accountType: accountType === 'vendor' ? 'Vendor Account' : 'Client Account',
+        loginUrl,
+      },
+    });
+  }
 }
 
 // Export singleton instance

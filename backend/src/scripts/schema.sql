@@ -55,6 +55,7 @@ CREATE TABLE public.user (
     updated_at timestamptz DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamptz,
     last_password_change timestamptz DEFAULT CURRENT_TIMESTAMP,
+    is_temporary_password bool DEFAULT false,
     phone varchar(50),
     avatar_url varchar(500),
     bio text,
@@ -68,6 +69,7 @@ CREATE INDEX idx_user_deleted_at ON public.user USING btree (deleted_at);
 CREATE INDEX idx_user_is_locked ON public.user USING btree (is_locked);
 CREATE INDEX idx_user_last_login ON public.user USING btree (last_login);
 CREATE INDEX idx_user_created_at ON public.user USING btree (created_at);
+CREATE INDEX idx_user_is_temporary_password ON public.user USING btree (is_temporary_password);
 CREATE INDEX idx_user_last_password_change ON public.user USING btree (last_password_change);
 
 -- Sequence and Table: system_settings

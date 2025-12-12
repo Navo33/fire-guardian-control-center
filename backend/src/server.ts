@@ -34,6 +34,7 @@ import clientAnalyticsRoutes from './routes/clientAnalytics';
 import notificationRoutes from './routes/notifications';
 import emailRoutes from './routes/email';
 import pdfReportsRoutes from './routes/pdfReports';
+import emergencyWarningsRoutes from './routes/emergencyWarnings';
 
 // Import email services
 import { verifyEmailConfig } from './config/email';
@@ -225,6 +226,7 @@ app.use('/api/client-views', securityMiddleware, clientViewsRoutes);
 app.use('/api/notifications', securityMiddleware, notificationRoutes);
 app.use('/api/email', securityMiddleware, emailRoutes);
 app.use('/api/pdf-reports', securityMiddleware, pdfReportsRoutes);
+app.use('/api/emergency-warnings', securityMiddleware, emergencyWarningsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

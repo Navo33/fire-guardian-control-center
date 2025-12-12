@@ -27,9 +27,6 @@ const vendorSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters'),
   lastName: z.string().min(2, 'Last name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters')
-    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, 
-    'Password must contain uppercase, lowercase, number and special character'),
   
   // Company Information
   companyName: z.string().min(2, 'Company name must be at least 2 characters'),
@@ -180,18 +177,6 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
     return '';
   };
 
-  const validatePassword = (password: string) => {
-    if (!password) return 'Password is required';
-    if (password.length < 8) return 'Password must be at least 8 characters long';
-    if (!/(?=.*[a-z])/.test(password)) return 'Password must contain at least one lowercase letter';
-    if (!/(?=.*[A-Z])/.test(password)) return 'Password must contain at least one uppercase letter';
-    if (!/(?=.*\d)/.test(password)) return 'Password must contain at least one number';
-    if (!/(?=.*[@$!%*?&])/.test(password)) return 'Password must contain at least one special character (@$!%*?&)';
-    return '';
-  };
-
-
-
   // Real-time email validation
   React.useEffect(() => {
     if (watchEmail) {
@@ -220,7 +205,6 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
   const watchLicenseNumber = watch('licenseNumber');
   const watchStreetAddress = watch('streetAddress');
   const watchCity = watch('city');
-  const watchPassword = watch('password');
 
   // Real-time phone validation
   React.useEffect(() => {
@@ -276,14 +260,6 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
       setFieldErrors(prev => ({ ...prev, city: error }));
     }
   }, [watchCity]);
-
-  // Real-time password validation
-  React.useEffect(() => {
-    if (watchPassword) {
-      const error = validatePassword(watchPassword);
-      setFieldErrors(prev => ({ ...prev, password: error }));
-    }
-  }, [watchPassword]);
 
   // Fetch specializations when modal opens
   useEffect(() => {
@@ -609,28 +585,19 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                       <p className="mt-1 text-sm text-green-600">✓ Email is available</p>
                     )}
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Password *
-                    </label>
-                    <input
-                      type="password"
-                      className={`input-field ${
-                        errors.password || fieldErrors.password 
-                          ? 'border-red-500' 
-                          : fieldErrors.password === '' && watchPassword 
-                            ? 'border-green-500' 
-                            : ''
-                      }`}
-                      placeholder="Enter password (min 8 chars, include uppercase, lowercase, number, special char)"
-                      {...register('password')}
-                    />
-                    {(errors.password || fieldErrors.password) && (
-                      <p className="mt-1 text-sm text-red-600">
-                        {errors.password?.message || fieldErrors.password}
+                {/* Password Info Message */}
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <ShieldCheckIcon className="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-medium text-blue-900">Secure Password Generation</h4>
+                      <p className="text-sm text-blue-700 mt-1">
+                        A secure temporary password will be automatically generated and sent to the vendor's email address. 
+                        The vendor will be required to change this password upon first login.
                       </p>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>

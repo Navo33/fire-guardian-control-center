@@ -330,8 +330,8 @@ export class VendorRepository {
 
       // Step 1: Create the base user record
       const userQuery = `
-        INSERT INTO "user" (first_name, last_name, email, password, user_type, role_id)
-        VALUES ($1, $2, $3, $4, $5, (SELECT id FROM role WHERE role_name = 'vendor'))
+        INSERT INTO "user" (first_name, last_name, email, password, user_type, role_id, is_temporary_password)
+        VALUES ($1, $2, $3, $4, $5, (SELECT id FROM role WHERE role_name = 'vendor'), $6)
         RETURNING id, first_name, last_name, display_name, email, user_type, is_locked, created_at
       `;
       
@@ -344,7 +344,8 @@ export class VendorRepository {
         vendorData.lastName,
         vendorData.email,
         hashedPassword,
-        'vendor'
+        'vendor',
+        vendorData.isTemporaryPassword || false
       ];
 
       DebugLogger.database('CREATE_VENDOR_USER', userQuery, userValues);

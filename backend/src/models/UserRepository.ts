@@ -12,7 +12,7 @@ export class UserRepository {
       SELECT 
         id, first_name, last_name, display_name, email, password, 
         user_type, role_id, is_locked, locked_until, failed_login_attempts,
-        last_login, last_login_ip, created_at, deleted_at
+        last_login, last_login_ip, created_at, deleted_at, is_temporary_password
       FROM "user" 
       WHERE email = $1 AND deleted_at IS NULL
     `;
@@ -34,7 +34,7 @@ export class UserRepository {
       SELECT 
         id, first_name, last_name, display_name, email, password, 
         user_type, role_id, is_locked, locked_until, failed_login_attempts,
-        last_login, last_login_ip, created_at, deleted_at
+        last_login, last_login_ip, created_at, deleted_at, is_temporary_password
       FROM "user" 
       WHERE id = $1 AND deleted_at IS NULL
     `;

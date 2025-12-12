@@ -551,6 +551,60 @@ export const maintenanceCompletedTemplate = `
 </div>
 `;
 
+// Temporary Password Template
+export const temporaryPasswordTemplate = `
+<h2>Welcome to Fire Guardian Control Center</h2>
+<p class="greeting">Hello {{userName}},</p>
+<p>Your account has been created successfully. Below are your login credentials:</p>
+
+<div class="info-box">
+  <div class="info-row">
+    <span class="info-label">Email</span>
+    <span class="info-value">{{email}}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Temporary Password</span>
+    <span class="info-value" style="font-family: monospace; font-size: 18px; font-weight: bold; color: #E53935;">{{temporaryPassword}}</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Account Type</span>
+    <span class="info-value">{{accountType}}</span>
+  </div>
+</div>
+
+<div class="alert-box">
+  <h3>⚠️ Important Security Notice</h3>
+  <p><strong>You must change your password on first login.</strong> This temporary password is only valid for your first login session.</p>
+  <p>Please follow these steps:</p>
+  <ol>
+    <li>Click the login button below or go to the Fire Guardian portal</li>
+    <li>Enter your email and temporary password</li>
+    <li>You will be prompted to create a new password</li>
+    <li>Choose a strong password (min 8 characters, with uppercase, lowercase, numbers, and special characters)</li>
+  </ol>
+</div>
+
+<div class="button-container">
+  <a href="{{loginUrl}}" class="button">Login to Your Account</a>
+</div>
+
+<div class="alert-box">
+  <h3>Security Tips</h3>
+  <ul>
+    <li>Do not share your password with anyone</li>
+    <li>Use a unique password not used on other sites</li>
+    <li>Store your password securely (password manager recommended)</li>
+    <li>Never send your password via email or text message</li>
+  </ul>
+</div>
+
+<p>If you did not request this account or have any questions, please contact your administrator immediately.</p>
+
+<div class="signature">
+  <p>Welcome aboard!<br><strong>Fire Guardian Team</strong></p>
+</div>
+`;
+
 // Compile templates
 export const compiledTemplates = {
   base: Handlebars.compile(baseEmailLayout),
@@ -559,6 +613,7 @@ export const compiledTemplates = {
   maintenanceDueReminder: Handlebars.compile(maintenanceDueReminderTemplate),
   equipmentExpirationAlert: Handlebars.compile(equipmentExpirationAlertTemplate),
   maintenanceCompleted: Handlebars.compile(maintenanceCompletedTemplate),
+  temporaryPassword: Handlebars.compile(temporaryPasswordTemplate),
 };
 
 // Email template types
@@ -567,7 +622,8 @@ export type EmailTemplateType =
   | 'maintenanceTicketUpdated'
   | 'maintenanceDueReminder'
   | 'equipmentExpirationAlert'
-  | 'maintenanceCompleted';
+  | 'maintenanceCompleted'
+  | 'temporaryPassword';
 
 // Generate full email HTML
 export const generateEmailHTML = (

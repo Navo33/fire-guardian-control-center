@@ -10,6 +10,7 @@ import CreateClientTicketModal from '../../components/modals/CreateClientTicketM
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import ErrorDisplay from '../../components/ui/ErrorDisplay';
 import DebugLogger from '../../utils/DebugLogger';
+import EmergencyWarningCard from '../../components/dashboard/EmergencyWarningCard';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../config/api';
 import { useToast } from '../../components/providers/ToastProvider';
 import { 
@@ -349,64 +350,15 @@ function AdminDashboard({ user }: { user: User }) {
           </div>
         </div>
 
-        {/* Quick Actions & Alerts Row */}
+        {/* Emergency Alerts & Critical Alerts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Quick Actions */}
+          {/* Emergency Alerts */}
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-            <div className="space-y-3">
-              <button 
-                onClick={() => setIsAddModalOpen(true)}
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
-              >
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <PlusIcon className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Add New Vendor</p>
-                  <p className="text-xs text-gray-500">Register a new vendor</p>
-                </div>
-              </button>
-              
-              <Link 
-                href="/analytics"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="p-2 bg-purple-50 rounded-lg">
-                  <ChartBarIcon className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">View Analytics</p>
-                  <p className="text-xs text-gray-500">System performance insights</p>
-                </div>
-              </Link>
-              
-              <Link 
-                href="/users"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <UserGroupIcon className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Manage Users</p>
-                  <p className="text-xs text-gray-500">User accounts & permissions</p>
-                </div>
-              </Link>
-              
-              <Link 
-                href="/settings"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="p-2 bg-gray-50 rounded-lg">
-                  <CogIcon className="h-5 w-5 text-gray-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">System Settings</p>
-                  <p className="text-xs text-gray-500">Configure security & policies</p>
-                </div>
-              </Link>
+            <div className="flex items-center space-x-2 mb-4">
+              <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Emergency Alerts</h3>
             </div>
+            <EmergencyWarningCard />
           </div>
 
           {/* Critical Alerts */}
@@ -545,6 +497,56 @@ function AdminDashboard({ user }: { user: User }) {
         </div>
           </>
         )}
+      </div>
+
+      {/* Quick Actions Bar */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-6">
+        <h3 className="text-sm font-medium text-gray-500 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <div className="p-3 bg-blue-50 rounded-lg mb-2">
+              <PlusIcon className="h-6 w-6 text-blue-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-900">Add Vendor</p>
+            <p className="text-xs text-gray-500 text-center mt-1">Register new vendor</p>
+          </button>
+          
+          <Link 
+            href="/analytics"
+            className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <div className="p-3 bg-purple-50 rounded-lg mb-2">
+              <ChartBarIcon className="h-6 w-6 text-purple-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-900">Analytics</p>
+            <p className="text-xs text-gray-500 text-center mt-1">System insights</p>
+          </Link>
+          
+          <Link 
+            href="/users"
+            className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <div className="p-3 bg-green-50 rounded-lg mb-2">
+              <UserGroupIcon className="h-6 w-6 text-green-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-900">Manage Users</p>
+            <p className="text-xs text-gray-500 text-center mt-1">User accounts</p>
+          </Link>
+          
+          <Link 
+            href="/settings"
+            className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <div className="p-3 bg-gray-50 rounded-lg mb-2">
+              <CogIcon className="h-6 w-6 text-gray-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-900">Settings</p>
+            <p className="text-xs text-gray-500 text-center mt-1">Configure system</p>
+          </Link>
+        </div>
       </div>
 
       {/* Add Vendor Modal */}
@@ -872,49 +874,52 @@ function VendorDashboardComponent({ user }: { user: User }) {
                 </div>
               </div>
 
-              {/* Quick Actions */}
+              {/* Emergency Alerts */}
               <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-                <div className="space-y-3">
-                  <Link 
-                    href="/equipment"
-                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
-                  >
-                    <div className="p-2 bg-blue-50 rounded-lg">
-                      <PlusIcon className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Add Equipment</p>
-                      <p className="text-xs text-gray-500">Register new equipment</p>
-                    </div>
-                  </Link>
-                  
-                  <Link 
-                    href="/maintenance-tickets"
-                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="p-2 bg-orange-50 rounded-lg">
-                      <WrenchScrewdriverIcon className="h-5 w-5 text-orange-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Create Ticket</p>
-                      <p className="text-xs text-gray-500">New maintenance ticket</p>
-                    </div>
-                  </Link>
-                  
-                  <Link 
-                    href="/clients"
-                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="p-2 bg-green-50 rounded-lg">
-                      <UserGroupIcon className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">View Clients</p>
-                      <p className="text-xs text-gray-500">Manage client accounts</p>
-                    </div>
-                  </Link>
+                <div className="flex items-center space-x-2 mb-4">
+                  <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Emergency Alerts</h3>
                 </div>
+                <EmergencyWarningCard />
+              </div>
+            </div>
+
+            {/* Quick Actions Bar */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <h3 className="text-sm font-medium text-gray-500 mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <Link 
+                  href="/equipment"
+                  className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <div className="p-3 bg-blue-50 rounded-lg mb-2">
+                    <PlusIcon className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">Add Equipment</p>
+                  <p className="text-xs text-gray-500 text-center mt-1">Register equipment</p>
+                </Link>
+                
+                <Link 
+                  href="/maintenance-tickets"
+                  className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <div className="p-3 bg-orange-50 rounded-lg mb-2">
+                    <WrenchScrewdriverIcon className="h-6 w-6 text-orange-600" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">Create Ticket</p>
+                  <p className="text-xs text-gray-500 text-center mt-1">New maintenance</p>
+                </Link>
+                
+                <Link 
+                  href="/clients"
+                  className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <div className="p-3 bg-green-50 rounded-lg mb-2">
+                    <UserGroupIcon className="h-6 w-6 text-green-600" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">View Clients</p>
+                  <p className="text-xs text-gray-500 text-center mt-1">Manage clients</p>
+                </Link>
               </div>
             </div>
           </>
@@ -1329,75 +1334,13 @@ function ClientDashboardComponent({ user }: { user: User }) {
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* Emergency Alerts */}
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-            <div className="space-y-3">
-              <button 
-                onClick={() => setIsCreateTicketModalOpen(true)}
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
-              >
-                <div className="p-2 bg-red-50 rounded-lg">
-                  <PlusIcon className="h-5 w-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Create Service Request</p>
-                  <p className="text-xs text-gray-500">Request equipment maintenance</p>
-                </div>
-              </button>
-              
-              <Link 
-                href="/client-equipment"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
-              >
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <FireIcon className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">View Equipment</p>
-                  <p className="text-xs text-gray-500">See all your equipment</p>
-                </div>
-              </Link>
-              
-              <Link 
-                href="/service-requests"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="p-2 bg-orange-50 rounded-lg">
-                  <ClipboardDocumentListIcon className="h-5 w-5 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">View Service Requests</p>
-                  <p className="text-xs text-gray-500">Track your requests</p>
-                </div>
-              </Link>
-              
-              <Link 
-                href="/clients/analytics"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="p-2 bg-purple-50 rounded-lg">
-                  <ChartBarIcon className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Analytics & Compliance</p>
-                  <p className="text-xs text-gray-500">Track performance & compliance</p>
-                </div>
-              </Link>
-              
-              <Link 
-                href="/reports"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <ShieldCheckIcon className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Safety Reports</p>
-                  <p className="text-xs text-gray-500">Compliance reports</p>
-                </div>
-              </Link>
+            <div className="flex items-center space-x-2 mb-4">
+              <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Emergency Alerts</h3>
             </div>
+            <EmergencyWarningCard />
           </div>
         </div>
 
@@ -1437,6 +1380,67 @@ function ClientDashboardComponent({ user }: { user: User }) {
             </div>
           </div>
         )}
+
+        {/* Quick Actions Bar */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <h3 className="text-sm font-medium text-gray-500 mb-4">Quick Actions</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <button 
+              onClick={() => setIsCreateTicketModalOpen(true)}
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-red-50 rounded-lg mb-2">
+                <PlusIcon className="h-6 w-6 text-red-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Create Request</p>
+              <p className="text-xs text-gray-500 text-center mt-1">Service request</p>
+            </button>
+            
+            <Link 
+              href="/client-equipment"
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-blue-50 rounded-lg mb-2">
+                <FireIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Equipment</p>
+              <p className="text-xs text-gray-500 text-center mt-1">View all</p>
+            </Link>
+            
+            <Link 
+              href="/service-requests"
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-orange-50 rounded-lg mb-2">
+                <ClipboardDocumentListIcon className="h-6 w-6 text-orange-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Requests</p>
+              <p className="text-xs text-gray-500 text-center mt-1">Track status</p>
+            </Link>
+            
+            <Link 
+              href="/clients/analytics"
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-purple-50 rounded-lg mb-2">
+                <ChartBarIcon className="h-6 w-6 text-purple-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Analytics</p>
+              <p className="text-xs text-gray-500 text-center mt-1">View stats</p>
+            </Link>
+            
+            <Link 
+              href="/reports"
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-green-50 rounded-lg mb-2">
+                <ShieldCheckIcon className="h-6 w-6 text-green-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Reports</p>
+              <p className="text-xs text-gray-500 text-center mt-1">Safety reports</p>
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* Create Service Request Modal */}
