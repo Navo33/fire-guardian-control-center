@@ -17,7 +17,7 @@ async function testEnhancedMaintenanceResolution() {
   try {
     // 1. First, let's find an open maintenance ticket
     console.log('\n1. Finding open maintenance tickets...');
-    const tickets = await repo.getAllTickets({ status: 'open', support_type: 'maintenance' }, 1); // Vendor ID 1
+    const tickets = await repo.getTicketList(1, { status: 'open', support_type: 'maintenance' }); // Vendor ID 1
     
     if (!tickets.tickets || tickets.tickets.length === 0) {
       console.log('❌ No open maintenance tickets found for testing');

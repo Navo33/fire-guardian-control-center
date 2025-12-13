@@ -119,7 +119,7 @@ This ticket was automatically created by the system for overdue maintenance.`;
           };
           errors.push(errorInfo);
           DebugLogger.error(`Failed to create maintenance ticket for equipment ${equipment.serial_number}`, 
-            error, errorInfo, 'MAINTENANCE_SCHEDULER');
+            error, errorInfo);
         }
       }
       
@@ -134,7 +134,7 @@ This ticket was automatically created by the system for overdue maintenance.`;
       return { created: createdCount, errors };
       
     } catch (error) {
-      DebugLogger.error('Error in overdue maintenance ticket creation', error, {}, 'MAINTENANCE_SCHEDULER');
+      DebugLogger.error('Error in overdue maintenance ticket creation', error, {});
       throw error;
     }
   }
@@ -244,7 +244,7 @@ This ticket was automatically created by the system for proactive maintenance sc
           };
           errors.push(errorInfo);
           DebugLogger.error(`Failed to create proactive maintenance ticket for equipment ${equipment.serial_number}`, 
-            error, errorInfo, 'MAINTENANCE_SCHEDULER');
+            error, errorInfo);
         }
       }
       
@@ -259,7 +259,7 @@ This ticket was automatically created by the system for proactive maintenance sc
       return { created: createdCount, errors };
       
     } catch (error) {
-      DebugLogger.error('Error in proactive maintenance ticket creation', error, {}, 'MAINTENANCE_SCHEDULER');
+      DebugLogger.error('Error in proactive maintenance ticket creation', error, {});
       throw error;
     }
   }
