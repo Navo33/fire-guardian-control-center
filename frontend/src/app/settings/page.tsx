@@ -5,6 +5,7 @@ import RequireRole from '@/components/auth/RequireRole';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import SmsSettingsTab from '@/components/settings/SmsSettingsTab';
 import { useToast } from '@/components/providers/ToastProvider';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import {
@@ -250,7 +251,8 @@ export default function SystemSettingsPage() {
                 {[
                   { id: 'session', name: 'Session Management', icon: ClockIcon },
                   { id: 'password', name: 'Password Policy', icon: LockClosedIcon },
-                  { id: 'security', name: 'Account Security', icon: ShieldCheckIcon }
+                  { id: 'security', name: 'Account Security', icon: ShieldCheckIcon },
+                  { id: 'sms', name: 'SMS Notifications', icon: ExclamationTriangleIcon }
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -530,6 +532,11 @@ export default function SystemSettingsPage() {
                         </button>
                       </div>
                     </div>
+                  )}
+
+                  {/* SMS Notifications Tab */}
+                  {activeTab === 'sms' && (
+                    <SmsSettingsTab />
                   )}
                 </>
               )}
