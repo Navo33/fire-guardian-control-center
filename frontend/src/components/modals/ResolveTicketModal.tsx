@@ -18,10 +18,7 @@ const resolveSchema = z.object({
   resolution_description: z.string()
     .min(10, 'Resolution notes must be at least 10 characters')
     .max(1000, 'Resolution notes cannot exceed 1000 characters'),
-  actual_hours: z.coerce.number({
-    required_error: 'Actual hours is required',
-    invalid_type_error: 'Actual hours must be a number',
-  })
+  actual_hours: z.number()
     .min(0.1, 'Hours must be at least 0.1')
     .max(100, 'Hours cannot exceed 100'),
   custom_maintenance_date: z.string()
@@ -209,7 +206,7 @@ export default function ResolveTicketModal({
                   step="0.1"
                   min="0.1"
                   max="100"
-                  {...register('actual_hours')}
+                  {...register('actual_hours', { valueAsNumber: true })}
                   className="input-field"
                   placeholder="e.g., 2.5"
                   disabled={isLoading}

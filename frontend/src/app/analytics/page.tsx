@@ -427,7 +427,7 @@ export default function AdminAnalyticsPage() {
         
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
-        reportData.equipment_categories.slice(0, 8).forEach(item => {
+        reportData.equipment_categories.slice(0, 8).forEach((item: any) => {
           doc.text(`• ${item.category_name}: ${safeNumber(item.total_count)} units (${safeNumber(item.compliance_rate)}% compliant)`, 25, y);
           y += 6;
         });
@@ -443,7 +443,7 @@ export default function AdminAnalyticsPage() {
         
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
-        reportData.vendor_performance.slice(0, 5).forEach((vendor, index) => {
+        reportData.vendor_performance.slice(0, 5).forEach((vendor: any, index: number) => {
           doc.text(`${index + 1}. ${vendor.vendor_name}`, 25, y);
           y += 5;
           doc.text(`   • Score: ${safeNumber(vendor.performance_score)} | Clients: ${safeNumber(vendor.client_count)} | Equipment: ${safeNumber(vendor.equipment_count)}`, 30, y);
@@ -583,7 +583,7 @@ export default function AdminAnalyticsPage() {
       
       // Performance-based recommendations
       if (reportData?.vendor_performance && reportData.vendor_performance.length > 0) {
-        const lowPerformingVendors = reportData.vendor_performance.filter(v => safeNumber(v.performance_score) < 70);
+        const lowPerformingVendors = reportData.vendor_performance.filter((v: any) => safeNumber(v.performance_score) < 70);
         if (lowPerformingVendors.length > 0) {
           recommendations.push(`🏢 MEDIUM: ${lowPerformingVendors.length} vendor(s) with low performance scores - conduct performance reviews`);
         }
@@ -622,7 +622,7 @@ export default function AdminAnalyticsPage() {
       doc.text(`recommendations for system optimization and risk mitigation.`, 25, y);
       
       // Footer with report metadata
-      const pageCount = doc.internal.getNumberOfPages();
+      const pageCount = (doc as any).internal.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
@@ -1007,7 +1007,7 @@ export default function AdminAnalyticsPage() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }: any) => `${name}: ${(percent * 100).toFixed(0)}%`}
                       outerRadius={120}
                       fill="#8884d8"
                       dataKey="value"

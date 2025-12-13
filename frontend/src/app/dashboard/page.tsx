@@ -129,6 +129,7 @@ export default function DashboardPage() {
 // ADMIN DASHBOARD - Full implementation with API integration
 // ============================================================================
 function AdminDashboard({ user }: { user: User }) {
+  const router = useRouter();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     activeVendors: 0,

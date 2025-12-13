@@ -62,7 +62,7 @@ interface EquipmentType {
 
   // Arrays from SQL
   instances: EquipmentInstanceData[];
-  assignments: AssignmentData[];
+  assignments: any[]; // Assignment data from API
 }
 
 interface EquipmentInstanceData {
@@ -390,9 +390,9 @@ export default function EquipmentDetailsPage() {
         manufacturer: equipmentType.manufacturer || '',
         model: equipmentType.model || '',
         default_lifespan_years: equipmentType.default_lifespan_years || 0,
-        warranty_years: equipmentType.warranty_years || 0,
-        weight_kg: equipmentType.weight_kg || 0,
-        dimensions: equipmentType.dimensions || '',
+        warranty_years: Math.round((equipmentType.warranty_period_months || 0) / 12),
+        weight_kg: (equipmentType as any).weight_kg || 0,
+        dimensions: (equipmentType as any).dimensions || '',
         specifications: equipmentType.specifications || {}
       });
     }
@@ -735,17 +735,17 @@ export default function EquipmentDetailsPage() {
                         
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Warranty Period</label>
-                          <p className="text-sm text-gray-900">{equipmentType.warranty_years || 0} years</p>
+                          <p className="text-sm text-gray-900">{Math.round((equipmentType.warranty_period_months || 0) / 12)} years</p>
                         </div>
                         
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Weight</label>
-                          <p className="text-sm text-gray-900">{equipmentType.weight_kg || 0} kg</p>
+                          <p className="text-sm text-gray-900">{(equipmentType as any).weight_kg || 0} kg</p>
                         </div>
                         
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Dimensions</label>
-                          <p className="text-sm text-gray-900">{equipmentType.dimensions || 'Not specified'}</p>
+                          <p className="text-sm text-gray-900">{(equipmentType as any).dimensions || 'Not specified'}</p>
                         </div>
                         
                         {equipmentType.description && (
@@ -884,15 +884,15 @@ export default function EquipmentDetailsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Weight</label>
-                        <p className="text-sm text-gray-900">{equipmentType.weight_kg || 'Not specified'} kg</p>
+                        <p className="text-sm text-gray-900">{(equipmentType as any).weight_kg || 'Not specified'} kg</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Dimensions</label>
-                        <p className="text-sm text-gray-900">{equipmentType.dimensions || 'Not specified'}</p>
+                        <p className="text-sm text-gray-900">{(equipmentType as any).dimensions || 'Not specified'}</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Warranty Period</label>
-                        <p className="text-sm text-gray-900">{equipmentType.warranty_years || 0} years</p>
+                        <p className="text-sm text-gray-900">{Math.round((equipmentType.warranty_period_months || 0) / 12)} years</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Maintenance Interval</label>

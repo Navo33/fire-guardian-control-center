@@ -20,12 +20,8 @@ import {
 
 // Ticket form validation schema
 const ticketSchema = z.object({
-  support_type: z.enum(['maintenance', 'system', 'user'], {
-    required_error: 'Support type is required'
-  }),
-  priority: z.enum(['low', 'normal', 'high'], {
-    required_error: 'Priority is required'
-  }),
+  support_type: z.enum(['maintenance', 'system', 'user']),
+  priority: z.enum(['low', 'normal', 'high']),
   client_id: z.number().min(1, 'Client is required'),
   equipment_instance_id: z.number().optional(),
   issue_description: z.string()

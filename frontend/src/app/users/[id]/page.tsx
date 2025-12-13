@@ -438,11 +438,11 @@ function UserDetailContent() {
               <h1 className="text-2xl font-bold text-gray-900">
                 {user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Unknown User'}
               </h1>
-              {user?.user_type === 'vendor' && user?.vendor?.company_name && (
-                <p className="text-lg text-gray-600 mt-1">{user.vendor.company_name}</p>
+              {user?.user_type === 'vendor' && user?.company?.company_name && (
+                <p className="text-lg text-gray-600 mt-1">{user.company.company_name}</p>
               )}
-              {user?.user_type === 'client' && user?.client?.company_name && (
-                <p className="text-lg text-gray-600 mt-1">{user.client.company_name}</p>
+              {user?.user_type === 'client' && user?.vendor?.vendor_company && (
+                <p className="text-lg text-gray-600 mt-1">{user.vendor.vendor_company}</p>
               )}
               <div className="flex items-center space-x-4 mt-2">
                 <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(user?.is_locked ? 'Inactive' : 'Active')}`}>
@@ -728,7 +728,7 @@ function UserDetailContent() {
 
 
                 {/* Company Information */}
-                {(user?.vendor || user?.client) && (
+                {(user?.company || user?.vendor) && (
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                       <BuildingOfficeIcon className="h-5 w-5 text-red-600 mr-2" />
@@ -854,32 +854,32 @@ function UserDetailContent() {
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Company Name</label>
                           <p className="text-sm text-gray-900">
-                            {user.vendor?.company_name || user.client?.company_name || 'Not provided'}
+                            {user.company?.company_name || user.vendor?.vendor_company || 'Not provided'}
                           </p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Business Type</label>
                           <p className="text-sm text-gray-900">
-                            {user.vendor?.business_type || user.client?.business_type || 'Not specified'}
+                            {user.company?.business_type || 'Not specified'}
                           </p>
                         </div>
-                        {user.vendor?.license_number && (
+                        {user.company?.license_number && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700">License Number</label>
-                            <p className="text-sm text-gray-900">{user.vendor.license_number}</p>
+                            <p className="text-sm text-gray-900">{user.company.license_number}</p>
                           </div>
                         )}
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Phone</label>
                           <p className="text-sm text-gray-900">
-                            {user.vendor?.primary_phone || user.client?.primary_phone || 'Not provided'}
+                            {user.contact?.primary_phone || 'Not provided'}
                           </p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Address</label>
                           <p className="text-sm text-gray-900">
                             {(() => {
-                              const address = user.vendor || user.client;
+                              const address = user.addresses?.[0];
                               if (!address?.street_address) return 'Not provided';
                               const parts = [
                                 address.street_address,
@@ -894,7 +894,7 @@ function UserDetailContent() {
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Status</label>
                           <p className="text-sm text-gray-900 capitalize">
-                            {user.vendor?.status || user.client?.status || 'Unknown'}
+                            {user.is_locked ? 'Inactive' : 'Active'}
                           </p>
                         </div>
                       </div>
