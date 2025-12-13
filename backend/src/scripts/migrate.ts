@@ -142,6 +142,246 @@ export const runMigrations = async (): Promise<void> => {
       up: async () => {
         await applyInitialSchema();
       }
+    },
+    {
+      name: '002_add_ticket_number_trigger',
+      description: 'Add automatic ticket number generation trigger (legacy - now in schema.sql)',
+      up: async () => {
+        // Check if the trigger already exists (it should be in schema.sql now)
+        const triggerCheck = await pool.query(`
+          SELECT 1 FROM information_schema.triggers 
+          WHERE trigger_name = 'auto_generate_ticket_number' 
+          AND event_object_table = 'maintenance_ticket'
+        `);
+        
+        if (triggerCheck.rows.length > 0) {
+          console.log('✅ Ticket number trigger already exists (from schema.sql)');
+        } else {
+          console.log('📝 Creating ticket number generation function...');
+          
+          // Create the function to generate ticket numbers
+          await pool.query(`
+            CREATE OR REPLACE FUNCTION generate_ticket_number()
+            RETURNS TRIGGER AS $$
+            DECLARE
+                date_str TEXT;
+                daily_count INTEGER;
+                ticket_num TEXT;
+            BEGIN
+                -- Get current date in YYYYMMDD format
+                date_str := TO_CHAR(CURRENT_DATE, 'YYYYMMDD');
+                
+                -- Get the count of tickets created today + 1
+                SELECT COALESCE(MAX(
+                    CASE 
+                        WHEN ticket_number LIKE 'TKT-' || date_str || '-%' 
+                        THEN CAST(SPLIT_PART(ticket_number, '-', 3) AS INTEGER)
+                        ELSE 0
+                    END
+                ), 0) + 1
+                INTO daily_count
+                FROM maintenance_ticket
+                WHERE DATE(created_at) = CURRENT_DATE;
+                
+                -- Generate ticket number
+                ticket_num := 'TKT-' || date_str || '-' || LPAD(daily_count::TEXT, 3, '0');
+                
+                -- Ensure uniqueness (in case of race condition)
+                WHILE EXISTS (SELECT 1 FROM maintenance_ticket WHERE ticket_number = ticket_num) LOOP
+                    daily_count := daily_count + 1;
+                    ticket_num := 'TKT-' || date_str || '-' || LPAD(daily_count::TEXT, 3, '0');
+                END LOOP;
+                
+                -- Set the ticket number
+                NEW.ticket_number := ticket_num;
+                
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+          `);
+          
+          console.log('📝 Creating ticket number trigger...');
+          
+          // Create the trigger
+          await pool.query(`
+            CREATE TRIGGER auto_generate_ticket_number
+                BEFORE INSERT ON maintenance_ticket
+                FOR EACH ROW
+                WHEN (NEW.ticket_number IS NULL OR NEW.ticket_number = '')
+                EXECUTE FUNCTION generate_ticket_number();
+          `);
+        }
+        
+        console.log('📝 Updating existing records with proper ticket numbers...');
+        
+        // Update existing records that might have empty ticket numbers
+        await pool.query(`
+          UPDATE maintenance_ticket 
+          SET ticket_number = 'TKT-' || TO_CHAR(created_at, 'YYYYMMDD') || '-' || LPAD(id::TEXT, 3, '0')
+          WHERE ticket_number IS NULL OR ticket_number = ''
+        `);
+        
+        console.log('📝 Ensuring sequence synchronization...');
+        
+        // Reset the sequence to be in sync with the current max ID
+        await pool.query(`
+          SELECT setval(
+            'maintenance_ticket_id_seq', 
+            COALESCE((SELECT MAX(id) FROM maintenance_ticket), 0) + 1, 
+            false
+          )
+        `);
+        
+        console.log('✅ Ticket number trigger system ready');
+      }
+    },
+    {
+      name: '003_fix_sequence_sync',
+      description: 'Fix maintenance_ticket_id_seq synchronization with existing data',
+      up: async () => {
+        console.log('📝 Synchronizing maintenance_ticket_id_seq with existing data...');
+        
+        // Reset the sequence to be in sync with the current max ID
+        const result = await pool.query(`
+          SELECT setval(
+            'maintenance_ticket_id_seq', 
+            COALESCE((SELECT MAX(id) FROM maintenance_ticket), 0) + 1, 
+            false
+          )
+        `);
+        
+        const newSeqValue = result.rows[0].setval;
+        console.log(`✅ Sequence reset to: ${newSeqValue}`);
+      }
+    },
+    {
+      name: '004_enhanced_maintenance_system',
+      description: 'Enhanced maintenance system with automatic ticket creation and equipment date updates',
+      up: async () => {
+        console.log('🔧 Implementing enhanced maintenance system...');
+        
+        // Drop existing trigger and function
+        console.log('📝 Dropping existing compliance trigger...');
+        await pool.query('DROP TRIGGER IF EXISTS trigger_notify_compliance ON public.equipment_instance');
+        await pool.query('DROP FUNCTION IF EXISTS create_notification()');
+        
+        // Enhanced function that creates notifications and maintenance tickets
+        console.log('📝 Creating enhanced compliance function...');
+        await pool.query(`
+          CREATE OR REPLACE FUNCTION create_maintenance_notification_and_ticket()
+          RETURNS TRIGGER AS $$
+          BEGIN
+              -- Create notification (existing logic)
+              IF NEW.compliance_status IN ('expired', 'overdue', 'due_soon') THEN
+                  INSERT INTO public.notification (user_id, title, message, type, priority, category, created_at)
+                  SELECT 
+                      v.user_id,
+                      CASE NEW.compliance_status
+                          WHEN 'expired' THEN 'Equipment Expired'
+                          WHEN 'overdue' THEN 'Maintenance Overdue'
+                          ELSE 'Maintenance Due Soon'
+                      END,
+                      'Equipment ' || NEW.serial_number || ' is ' || NEW.compliance_status || '. Action required by ' || COALESCE(NEW.next_maintenance_date::text, NEW.expiry_date::text),
+                      'alert',
+                      CASE NEW.compliance_status WHEN 'expired' THEN 'high' ELSE 'normal' END,
+                      'equipment',
+                      CURRENT_TIMESTAMP
+                  FROM public.vendors v
+                  WHERE v.id = NEW.vendor_id;
+                  
+                  -- Auto-create maintenance ticket for overdue equipment (NEW LOGIC)
+                  IF NEW.compliance_status = 'overdue' AND NOT EXISTS (
+                      SELECT 1 FROM maintenance_ticket 
+                      WHERE equipment_instance_id = NEW.id 
+                        AND ticket_status IN ('open', 'resolved')
+                        AND support_type = 'maintenance'
+                  ) THEN
+                      -- Get equipment details for ticket description
+                      INSERT INTO maintenance_ticket (
+                          equipment_instance_id, 
+                          client_id, 
+                          vendor_id,
+                          ticket_status, 
+                          support_type, 
+                          priority,
+                          issue_description, 
+                          category
+                      )
+                      SELECT 
+                          NEW.id,
+                          NEW.assigned_to,
+                          NEW.vendor_id,
+                          'open',
+                          'maintenance',
+                          'normal',
+                          'Automated maintenance ticket for overdue equipment.' || E'\\n' ||
+                          'Equipment: ' || e.equipment_name || ' (' || e.equipment_type || ')' || E'\\n' ||
+                          'Serial Number: ' || NEW.serial_number || E'\\n' ||
+                          'Last Maintenance Due: ' || COALESCE(NEW.next_maintenance_date::text, 'Not scheduled') || E'\\n' ||
+                          'Client: ' || COALESCE(c.company_name, 'Unassigned') || E'\\n' || E'\\n' ||
+                          'This ticket was automatically created by the system when equipment became overdue for maintenance.',
+                          'Scheduled Maintenance'
+                      FROM public.equipment e
+                      LEFT JOIN public.clients c ON NEW.assigned_to = c.id
+                      WHERE e.id = NEW.equipment_id;
+                  END IF;
+              END IF;
+              RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql;
+        `);
+        
+        // Create the enhanced trigger
+        console.log('📝 Creating enhanced compliance trigger...');
+        await pool.query(`
+          CREATE TRIGGER trigger_notify_compliance_and_create_tickets
+              AFTER INSERT OR UPDATE OF compliance_status ON public.equipment_instance
+              FOR EACH ROW
+              EXECUTE FUNCTION create_maintenance_notification_and_ticket();
+        `);
+        
+        // Data validation and fixes
+        console.log('📝 Validating equipment maintenance intervals...');
+        await pool.query(`
+          UPDATE equipment_instance 
+          SET maintenance_interval_days = 365 
+          WHERE maintenance_interval_days IS NULL
+        `);
+        
+        console.log('📝 Setting next maintenance dates for equipment without them...');
+        await pool.query(`
+          UPDATE equipment_instance 
+          SET next_maintenance_date = COALESCE(
+              last_maintenance_date + INTERVAL '1 day' * maintenance_interval_days,
+              created_at::date + INTERVAL '1 day' * maintenance_interval_days
+          )
+          WHERE next_maintenance_date IS NULL
+        `);
+        
+        // Verify implementation
+        console.log('📋 Verifying enhanced maintenance system...');
+        const verificationResult = await pool.query(`
+          SELECT 
+              (SELECT COUNT(*) FROM equipment_instance WHERE maintenance_interval_days IS NULL) as null_intervals,
+              (SELECT COUNT(*) FROM equipment_instance WHERE next_maintenance_date IS NULL) as null_dates,
+              (SELECT COUNT(*) FROM equipment_instance WHERE compliance_status = 'overdue') as overdue_count,
+              (SELECT EXISTS (
+                  SELECT 1 FROM pg_trigger 
+                  WHERE tgname = 'trigger_notify_compliance_and_create_tickets'
+              )) as trigger_exists
+        `);
+        
+        const stats = verificationResult.rows[0];
+        console.log(`✅ Enhanced maintenance system implemented successfully:`);
+        console.log(`   - Trigger exists: ${stats.trigger_exists}`);
+        console.log(`   - Equipment without intervals: ${stats.null_intervals}`);
+        console.log(`   - Equipment without next maintenance dates: ${stats.null_dates}`);
+        console.log(`   - Overdue equipment (will get auto-tickets): ${stats.overdue_count}`);
+        
+        if (stats.overdue_count > 0) {
+          console.log(`🎫 Note: ${stats.overdue_count} overdue equipment items will get automatic maintenance tickets when compliance status updates.`);
+        }
+      }
     }
   ];
 

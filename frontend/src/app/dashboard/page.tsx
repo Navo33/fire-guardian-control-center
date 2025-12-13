@@ -6,9 +6,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import AddVendorModal from '../../components/modals/AddVendorModal';
+import CreateClientTicketModal from '../../components/modals/CreateClientTicketModal';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import ErrorDisplay from '../../components/ui/ErrorDisplay';
 import DebugLogger from '../../utils/DebugLogger';
+import EmergencyWarningCard from '../../components/dashboard/EmergencyWarningCard';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../config/api';
 import { useToast } from '../../components/providers/ToastProvider';
 import { 
@@ -127,6 +129,7 @@ export default function DashboardPage() {
 // ADMIN DASHBOARD - Full implementation with API integration
 // ============================================================================
 function AdminDashboard({ user }: { user: User }) {
+  const router = useRouter();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     activeVendors: 0,
@@ -348,64 +351,15 @@ function AdminDashboard({ user }: { user: User }) {
           </div>
         </div>
 
-        {/* Quick Actions & Alerts Row */}
+        {/* Emergency Alerts & Critical Alerts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Quick Actions */}
+          {/* Emergency Alerts */}
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-            <div className="space-y-3">
-              <button 
-                onClick={() => setIsAddModalOpen(true)}
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
-              >
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <PlusIcon className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Add New Vendor</p>
-                  <p className="text-xs text-gray-500">Register a new vendor</p>
-                </div>
-              </button>
-              
-              <Link 
-                href="/analytics"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="p-2 bg-purple-50 rounded-lg">
-                  <ChartBarIcon className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">View Analytics</p>
-                  <p className="text-xs text-gray-500">System performance insights</p>
-                </div>
-              </Link>
-              
-              <Link 
-                href="/users"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <UserGroupIcon className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Manage Users</p>
-                  <p className="text-xs text-gray-500">User accounts & permissions</p>
-                </div>
-              </Link>
-              
-              <Link 
-                href="/settings"
-                className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                <div className="p-2 bg-gray-50 rounded-lg">
-                  <CogIcon className="h-5 w-5 text-gray-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">System Settings</p>
-                  <p className="text-xs text-gray-500">Configure security & policies</p>
-                </div>
-              </Link>
+            <div className="flex items-center space-x-2 mb-4">
+              <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Emergency Alerts</h3>
             </div>
+            <EmergencyWarningCard />
           </div>
 
           {/* Critical Alerts */}
@@ -484,14 +438,15 @@ function AdminDashboard({ user }: { user: User }) {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    Actions
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white">
                 {recentVendors.map((vendor, index) => (
-                  <tr key={vendor.id} className={`hover:bg-gray-50 transition-colors ${index !== recentVendors.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                  <tr 
+                    key={vendor.id} 
+                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${index !== recentVendors.length - 1 ? 'border-b border-gray-100' : ''}`}
+                    onClick={() => router.push(`/vendors/${vendor.id}`)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
@@ -535,20 +490,6 @@ function AdminDashboard({ user }: { user: User }) {
                       </span>
                       <div className="text-xs text-gray-500 mt-1">{vendor.lastActivity}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                      <Link 
-                        href={`/vendors/${vendor.id}`}
-                        className="text-red-600 hover:text-red-800 transition-colors" 
-                      >
-                        View
-                      </Link>
-                      <Link 
-                        href={`/vendors/${vendor.id}/edit`}
-                        className="text-gray-600 hover:text-gray-800 transition-colors"
-                      >
-                        Edit
-                      </Link>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -557,6 +498,56 @@ function AdminDashboard({ user }: { user: User }) {
         </div>
           </>
         )}
+      </div>
+
+      {/* Quick Actions Bar */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-6">
+        <h3 className="text-sm font-medium text-gray-500 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <div className="p-3 bg-blue-50 rounded-lg mb-2">
+              <PlusIcon className="h-6 w-6 text-blue-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-900">Add Vendor</p>
+            <p className="text-xs text-gray-500 text-center mt-1">Register new vendor</p>
+          </button>
+          
+          <Link 
+            href="/analytics"
+            className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <div className="p-3 bg-purple-50 rounded-lg mb-2">
+              <ChartBarIcon className="h-6 w-6 text-purple-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-900">Analytics</p>
+            <p className="text-xs text-gray-500 text-center mt-1">System insights</p>
+          </Link>
+          
+          <Link 
+            href="/users"
+            className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <div className="p-3 bg-green-50 rounded-lg mb-2">
+              <UserGroupIcon className="h-6 w-6 text-green-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-900">Manage Users</p>
+            <p className="text-xs text-gray-500 text-center mt-1">User accounts</p>
+          </Link>
+          
+          <Link 
+            href="/settings"
+            className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            <div className="p-3 bg-gray-50 rounded-lg mb-2">
+              <CogIcon className="h-6 w-6 text-gray-600" />
+            </div>
+            <p className="text-sm font-medium text-gray-900">Settings</p>
+            <p className="text-xs text-gray-500 text-center mt-1">Configure system</p>
+          </Link>
+        </div>
       </div>
 
       {/* Add Vendor Modal */}
@@ -884,49 +875,52 @@ function VendorDashboardComponent({ user }: { user: User }) {
                 </div>
               </div>
 
-              {/* Quick Actions */}
+              {/* Emergency Alerts */}
               <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-                <div className="space-y-3">
-                  <Link 
-                    href="/equipment"
-                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
-                  >
-                    <div className="p-2 bg-blue-50 rounded-lg">
-                      <PlusIcon className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Add Equipment</p>
-                      <p className="text-xs text-gray-500">Register new equipment</p>
-                    </div>
-                  </Link>
-                  
-                  <Link 
-                    href="/maintenance-tickets"
-                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="p-2 bg-orange-50 rounded-lg">
-                      <WrenchScrewdriverIcon className="h-5 w-5 text-orange-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Create Ticket</p>
-                      <p className="text-xs text-gray-500">New maintenance ticket</p>
-                    </div>
-                  </Link>
-                  
-                  <Link 
-                    href="/clients"
-                    className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="p-2 bg-green-50 rounded-lg">
-                      <UserGroupIcon className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">View Clients</p>
-                      <p className="text-xs text-gray-500">Manage client accounts</p>
-                    </div>
-                  </Link>
+                <div className="flex items-center space-x-2 mb-4">
+                  <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">Emergency Alerts</h3>
                 </div>
+                <EmergencyWarningCard />
+              </div>
+            </div>
+
+            {/* Quick Actions Bar */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <h3 className="text-sm font-medium text-gray-500 mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <Link 
+                  href="/equipment"
+                  className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <div className="p-3 bg-blue-50 rounded-lg mb-2">
+                    <PlusIcon className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">Add Equipment</p>
+                  <p className="text-xs text-gray-500 text-center mt-1">Register equipment</p>
+                </Link>
+                
+                <Link 
+                  href="/maintenance-tickets"
+                  className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <div className="p-3 bg-orange-50 rounded-lg mb-2">
+                    <WrenchScrewdriverIcon className="h-6 w-6 text-orange-600" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">Create Ticket</p>
+                  <p className="text-xs text-gray-500 text-center mt-1">New maintenance</p>
+                </Link>
+                
+                <Link 
+                  href="/clients"
+                  className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <div className="p-3 bg-green-50 rounded-lg mb-2">
+                    <UserGroupIcon className="h-6 w-6 text-green-600" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">View Clients</p>
+                  <p className="text-xs text-gray-500 text-center mt-1">Manage clients</p>
+                </Link>
               </div>
             </div>
           </>
@@ -937,16 +931,76 @@ function VendorDashboardComponent({ user }: { user: User }) {
 }
 
 // ============================================================================
-// CLIENT DASHBOARD - Full implementation with API integration
+// CLIENT DASHBOARD - Enhanced implementation with comprehensive data
 // ============================================================================
+interface ClientDashboardData {
+  client_info: {
+    client_id?: number;
+    display_name?: string;
+    email?: string;
+    company_name?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    phone?: string;
+    vendor_id?: number;
+    vendor_company_name?: string;
+  };
+  equipment_stats: {
+    total_equipment: number;
+    compliant_equipment: number;
+    expired_equipment: number;
+    overdue_equipment: number;
+    due_soon_equipment: number;
+    maintenance_overdue: number;
+    maintenance_due_soon: number;
+    compliance_rate: number;
+  };
+  ticket_stats: {
+    total_tickets: number;
+    open_tickets: number;
+    closed_tickets: number;
+    critical_tickets: number;
+    recent_tickets: number;
+    avg_resolution_days: number;
+  };
+  upcoming_events: Array<{
+    event_type: string;
+    serial_number: string;
+    equipment_name: string;
+    event_date: string;
+    description: string;
+    urgency: 'overdue' | 'urgent' | 'upcoming' | 'scheduled';
+  }>;
+}
+
 function ClientDashboardComponent({ user }: { user: User }) {
-  const [kpis, setKpis] = useState({
-    total_equipment: 0,
-    compliant_equipment: 0,
-    open_tickets: 0
+  const [dashboardData, setDashboardData] = useState<ClientDashboardData>({
+    client_info: {},
+    equipment_stats: {
+      total_equipment: 0,
+      compliant_equipment: 0,
+      expired_equipment: 0,
+      overdue_equipment: 0,
+      due_soon_equipment: 0,
+      maintenance_overdue: 0,
+      maintenance_due_soon: 0,
+      compliance_rate: 0
+    },
+    ticket_stats: {
+      total_tickets: 0,
+      open_tickets: 0,
+      closed_tickets: 0,
+      critical_tickets: 0,
+      recent_tickets: 0,
+      avg_resolution_days: 0
+    },
+    upcoming_events: []
   });
   const [activity, setActivity] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isCreateTicketModalOpen, setIsCreateTicketModalOpen] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -954,26 +1008,52 @@ function ClientDashboardComponent({ user }: { user: User }) {
   }, []);
 
   const fetchClientDashboard = async () => {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.ui('ClientDashboard', 'fetchClientDashboard started');
+    
     try {
       setIsLoading(true);
+      setError(null);
       const headers = getAuthHeaders();
 
-      // Fetch KPIs
+      // Fetch comprehensive dashboard data
+      logApiCall('GET', API_ENDPOINTS.CLIENT.DASHBOARD.KPIS);
       const kpisResponse = await fetch(API_ENDPOINTS.CLIENT.DASHBOARD.KPIS, { headers });
-      if (kpisResponse.ok) {
-        const kpisData = await kpisResponse.json();
-        setKpis(kpisData.data);
+      
+      if (!kpisResponse.ok) {
+        throw new Error(`Failed to fetch dashboard data: ${kpisResponse.status} ${kpisResponse.statusText}`);
       }
+      const kpisData = await kpisResponse.json();
+      DebugLogger.api('GET', '/api/client-views/dashboard-kpis', undefined, kpisData, kpisResponse.status);
 
       // Fetch recent activity
+      logApiCall('GET', API_ENDPOINTS.CLIENT.DASHBOARD.ACTIVITY);
       const activityResponse = await fetch(API_ENDPOINTS.CLIENT.DASHBOARD.ACTIVITY, { headers });
-      if (activityResponse.ok) {
-        const activityData = await activityResponse.json();
-        setActivity(activityData.data || []);
+      
+      if (!activityResponse.ok) {
+        throw new Error(`Failed to fetch activity: ${activityResponse.status} ${activityResponse.statusText}`);
       }
-    } catch (error) {
-      console.error('Error fetching client dashboard:', error);
-      toast.error('Failed to load dashboard data');
+      const activityData = await activityResponse.json();
+      DebugLogger.api('GET', '/api/client-views/activity', undefined, activityData, activityResponse.status);
+
+      if (kpisData.success) {
+        DebugLogger.log('Client dashboard data fetched successfully', {
+          equipmentTotal: kpisData.data?.equipment_stats?.total_equipment || 0,
+          upcomingEvents: kpisData.data?.upcoming_events?.length || 0
+        }, 'CLIENT_DASHBOARD');
+        
+        setDashboardData(kpisData.data);
+        setActivity(activityData.success ? activityData.data : []);
+      } else {
+        throw new Error(kpisData.message || 'Failed to load dashboard data');
+      }
+
+      DebugLogger.performance('Client dashboard data fetch', startTime);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
+      DebugLogger.error('Client dashboard data fetch failed', err, { errorMessage });
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -982,119 +1062,286 @@ function ClientDashboardComponent({ user }: { user: User }) {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <LoadingSpinner text="Loading dashboard..." />
+        <LoadingSpinner text="Loading client dashboard..." />
       </DashboardLayout>
     );
   }
 
-  const complianceRate = kpis.total_equipment > 0 
-    ? Math.round((kpis.compliant_equipment / kpis.total_equipment) * 100) 
-    : 0;
+  if (error) {
+    return (
+      <DashboardLayout>
+        <ErrorDisplay 
+          message={error}
+          action={{
+            label: 'Try Again',
+            onClick: fetchClientDashboard
+          }}
+        />
+      </DashboardLayout>
+    );
+  }
+
+  const { client_info, equipment_stats, ticket_stats, upcoming_events } = dashboardData;
+
+  const getUrgencyColor = (urgency: string) => {
+    switch (urgency) {
+      case 'overdue': return 'bg-red-100 text-red-800';
+      case 'urgent': return 'bg-orange-100 text-orange-800';
+      case 'upcoming': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-blue-100 text-blue-800';
+    }
+  };
+
+  const getUrgencyIcon = (urgency: string) => {
+    switch (urgency) {
+      case 'overdue': return <ExclamationTriangleIcon className="h-4 w-4" />;
+      case 'urgent': return <ClockIcon className="h-4 w-4" />;
+      default: return <ClockIcon className="h-4 w-4" />;
+    }
+  };
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Client Dashboard</h1>
-            <p className="text-gray-600 mt-1">Welcome back, {user.display_name}</p>
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <ChartBarIcon className="h-8 w-8 text-gray-900" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {client_info.company_name || 'Client Dashboard'}
+              </h1>
+              <p className="text-gray-600 mt-1">
+                Welcome back, {client_info.display_name || user.display_name}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="text-right">
+              <p className="text-sm text-gray-500">
+                {client_info.vendor_company_name && `Managed by ${client_info.vendor_company_name}`}
+              </p>
+            </div>
+            <button 
+              onClick={() => setIsCreateTicketModalOpen(true)}
+              className="btn-primary flex items-center space-x-2"
+            >
+              <ClipboardDocumentListIcon className="h-5 w-5" />
+              <span>Create Service Request</span>
+            </button>
           </div>
         </div>
 
-        {/* KPI Stats Grid */}
+        {/* Equipment Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-purple-50 rounded-xl">
-                <FireIcon className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm font-medium text-gray-600">Total Equipment</p>
-                <p className="text-2xl font-bold text-gray-900">{kpis.total_equipment}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{equipment_stats.total_equipment}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-blue-600 font-medium">All devices</span>
+                </div>
               </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-green-50 rounded-xl">
-                <ShieldCheckIcon className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Compliant</p>
-                <p className="text-2xl font-bold text-gray-900">{kpis.compliant_equipment}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
               <div className="p-3 bg-blue-50 rounded-xl">
-                <ChartBarIcon className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Compliance Rate</p>
-                <p className="text-2xl font-bold text-gray-900">{complianceRate}%</p>
+                <FireIcon className="h-8 w-8 text-blue-600" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-orange-50 rounded-xl">
-                <ClipboardDocumentListIcon className="h-6 w-6 text-orange-600" />
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Compliant Equipment</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{equipment_stats.compliant_equipment}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-green-600 font-medium">✓ Up to standard</span>
+                </div>
               </div>
-              <div className="ml-4">
+              <div className="p-3 bg-green-50 rounded-xl">
+                <CheckCircleIcon className="h-8 w-8 text-green-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Compliance Rate</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{equipment_stats.compliance_rate}%</p>
+                <div className="flex items-center mt-2">
+                  <span className={`text-xs font-medium ${
+                    equipment_stats.compliance_rate >= 90 ? 'text-green-600' :
+                    equipment_stats.compliance_rate >= 70 ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {equipment_stats.compliance_rate >= 90 ? '✓ Excellent' :
+                     equipment_stats.compliance_rate >= 70 ? '⚠ Good' : '⚠ Needs attention'}
+                  </span>
+                </div>
+              </div>
+              <div className="p-3 bg-purple-50 rounded-xl">
+                <ShieldCheckIcon className="h-8 w-8 text-purple-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm font-medium text-gray-600">Open Tickets</p>
-                <p className="text-2xl font-bold text-gray-900">{kpis.open_tickets}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{ticket_stats.open_tickets}</p>
+                <div className="flex items-center mt-2">
+                  <span className={`text-xs font-medium ${
+                    ticket_stats.critical_tickets > 0 ? 'text-red-600' : 'text-gray-600'
+                  }`}>
+                    {ticket_stats.critical_tickets > 0 ? `${ticket_stats.critical_tickets} critical` : 'No critical'}
+                  </span>
+                </div>
+              </div>
+              <div className="p-3 bg-orange-50 rounded-xl">
+                <ClipboardDocumentListIcon className="h-8 w-8 text-orange-600" />
+              </div>
+            </div>
+          </div>
+
+          {/* Additional Equipment Stats */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Expired Equipment</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{equipment_stats.expired_equipment}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-red-600 font-medium">Needs renewal</span>
+                </div>
+              </div>
+              <div className="p-3 bg-red-50 rounded-xl">
+                <ExclamationTriangleIcon className="h-8 w-8 text-red-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Due Soon</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{equipment_stats.due_soon_equipment}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-amber-600 font-medium">Upcoming renewals</span>
+                </div>
+              </div>
+              <div className="p-3 bg-amber-50 rounded-xl">
+                <ClockIcon className="h-8 w-8 text-amber-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Maintenance Overdue</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{equipment_stats.maintenance_overdue}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-red-600 font-medium">Past due</span>
+                </div>
+              </div>
+              <div className="p-3 bg-red-50 rounded-xl">
+                <WrenchIcon className="h-8 w-8 text-red-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Avg Resolution</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{ticket_stats.avg_resolution_days}</p>
+                <div className="flex items-center mt-2">
+                  <span className="text-xs text-gray-600 font-medium">Days average</span>
+                </div>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <ClockIcon className="h-8 w-8 text-gray-600" />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Quick Links */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Links</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Link 
-              href="/client/equipment"
-              className="flex items-center space-x-3 p-4 rounded-xl border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all"
-            >
-              <div className="p-2 bg-purple-50 rounded-lg">
-                <FireIcon className="h-6 w-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">View Equipment</p>
-                <p className="text-xs text-gray-500">See all your equipment</p>
-              </div>
-            </Link>
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Upcoming Events Table */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">Upcoming Maintenance Events</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Equipment
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Due Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {upcoming_events.length > 0 ? (
+                    upcoming_events.map((event, index) => (
+                      <tr key={index} className={`hover:bg-gray-50 transition-colors ${index !== upcoming_events.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{event.equipment_name}</div>
+                            <div className="text-sm text-gray-500">{event.serial_number}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className={`flex-shrink-0 p-2 rounded-lg ${getUrgencyColor(event.urgency).replace('text-', 'text-').replace('bg-', 'bg-').slice(0, -3)}50`}>
+                              {getUrgencyIcon(event.urgency)}
+                            </div>
+                            <div className="ml-3">
+                              <span className="text-sm text-gray-900">{event.description}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {new Date(event.event_date).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getUrgencyColor(event.urgency)}`}>
+                            {event.urgency.charAt(0).toUpperCase() + event.urgency.slice(1)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                        No upcoming maintenance events
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-            <Link 
-              href="/client/tickets"
-              className="flex items-center space-x-3 p-4 rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50 transition-all"
-            >
-              <div className="p-2 bg-orange-50 rounded-lg">
-                <ClipboardDocumentListIcon className="h-6 w-6 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">View Tickets</p>
-                <p className="text-xs text-gray-500">Track maintenance requests</p>
-              </div>
-            </Link>
-
-            <Link 
-              href="/client/reports"
-              className="flex items-center space-x-3 p-4 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all"
-            >
-              <div className="p-2 bg-blue-50 rounded-lg">
-                <ChartBarIcon className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">View Reports</p>
-                <p className="text-xs text-gray-500">Compliance reports</p>
-              </div>
-            </Link>
+          {/* Emergency Alerts */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="flex items-center space-x-2 mb-4">
+              <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Emergency Alerts</h3>
+            </div>
+            <EmergencyWarningCard />
           </div>
         </div>
 
@@ -1134,7 +1381,78 @@ function ClientDashboardComponent({ user }: { user: User }) {
             </div>
           </div>
         )}
+
+        {/* Quick Actions Bar */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <h3 className="text-sm font-medium text-gray-500 mb-4">Quick Actions</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <button 
+              onClick={() => setIsCreateTicketModalOpen(true)}
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-red-50 rounded-lg mb-2">
+                <PlusIcon className="h-6 w-6 text-red-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Create Request</p>
+              <p className="text-xs text-gray-500 text-center mt-1">Service request</p>
+            </button>
+            
+            <Link 
+              href="/client-equipment"
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-blue-50 rounded-lg mb-2">
+                <FireIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Equipment</p>
+              <p className="text-xs text-gray-500 text-center mt-1">View all</p>
+            </Link>
+            
+            <Link 
+              href="/service-requests"
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-orange-50 rounded-lg mb-2">
+                <ClipboardDocumentListIcon className="h-6 w-6 text-orange-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Requests</p>
+              <p className="text-xs text-gray-500 text-center mt-1">Track status</p>
+            </Link>
+            
+            <Link 
+              href="/clients/analytics"
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-purple-50 rounded-lg mb-2">
+                <ChartBarIcon className="h-6 w-6 text-purple-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Analytics</p>
+              <p className="text-xs text-gray-500 text-center mt-1">View stats</p>
+            </Link>
+            
+            <Link 
+              href="/reports"
+              className="flex flex-col items-center justify-center p-4 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <div className="p-3 bg-green-50 rounded-lg mb-2">
+                <ShieldCheckIcon className="h-6 w-6 text-green-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-900">Reports</p>
+              <p className="text-xs text-gray-500 text-center mt-1">Safety reports</p>
+            </Link>
+          </div>
+        </div>
       </div>
+
+      {/* Create Service Request Modal */}
+      <CreateClientTicketModal
+        isOpen={isCreateTicketModalOpen}
+        onClose={() => setIsCreateTicketModalOpen(false)}
+        onSuccess={() => {
+          fetchClientDashboard(); // Refresh dashboard data
+          toast.success('Service request created successfully!');
+        }}
+      />
     </DashboardLayout>
   );
 }

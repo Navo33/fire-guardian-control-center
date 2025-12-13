@@ -3,6 +3,33 @@
 --  Compatible with schema.sql (2025-10-25)
 -- ==============================================================
 
+-- Clear ALL existing data to ensure clean seed
+-- This prevents duplicate key errors when re-seeding
+DELETE FROM audit_log;
+DELETE FROM notification;
+DELETE FROM maintenance_ticket;
+DELETE FROM equipment_assignment;
+DELETE FROM equipment_instance;
+DELETE FROM equipment;
+DELETE FROM vendor_specialization;
+DELETE FROM clients;
+DELETE FROM vendors;
+DELETE FROM user_sessions;
+DELETE FROM password_reset;
+DELETE FROM "user" WHERE user_type != 'system';
+
+-- Reset all sequences to start from 1
+ALTER SEQUENCE user_id_seq RESTART WITH 1;
+ALTER SEQUENCE vendor_id_seq RESTART WITH 1;
+ALTER SEQUENCE client_id_seq RESTART WITH 1;
+ALTER SEQUENCE equipment_id_seq RESTART WITH 1;
+ALTER SEQUENCE equipment_instance_id_seq RESTART WITH 1;
+ALTER SEQUENCE equipment_assignment_id_seq RESTART WITH 1;
+ALTER SEQUENCE maintenance_ticket_id_seq RESTART WITH 1;
+ALTER SEQUENCE notification_id_seq RESTART WITH 1;
+ALTER SEQUENCE audit_log_id_seq RESTART WITH 1;
+ALTER SEQUENCE user_sessions_id_seq RESTART WITH 1;
+
 -- --------------------------------------------------------------
 -- 1. schema_migrations
 -- --------------------------------------------------------------
@@ -118,7 +145,8 @@ INSERT INTO public.system_settings (
   (7, 'maintenance_reminder_days',   '30',  'number',  'Days before maintenance to send reminders',    '2025-10-25 11:25:00+05:30', 1),
   (8, 'expiry_reminder_days',        '60',  'number',  'Days before expiry to send reminders',         '2025-10-25 11:25:00+05:30', 1),
   (9, 'vendor_equipment_limit',      '1000','number',  'Maximum equipment instances per vendor',       '2025-10-25 11:25:00+05:30', 1),
-  (10,'compliance_alert_threshold',  '90',  'number',  'Compliance alert threshold % for admin reports','2025-10-25 11:25:00+05:30', 1)
+  (10,'compliance_alert_threshold',  '90',  'number',  'Compliance alert threshold % for admin reports','2025-10-25 11:25:00+05:30', 1),
+  (11,'token_refresh_threshold_minutes','5','number',  'Refresh token automatically if expiring within this many minutes','2025-10-25 11:25:00+05:30', 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- --------------------------------------------------------------
@@ -194,7 +222,8 @@ INSERT INTO public.vendors (
   (2, 3, 'ProGuard Fire Systems',   'Fire Protection Equipment','FS-2018-045', '+94 11 345 6789', '78 Duplication Road',    'Colombo',   'Western Province', '00400', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
   (3, 4, 'FireShield Technologies','Fire Safety Technology',   'FS-2020-089', '+94 81 456 7890', '12 Station Road',        'Kandy',     'Central Province','20000', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
   (4, 9, 'SafeHomes Solutions',     'Home Safety Services',     'FS-2021-123', '+94 71 234 5678', '22 Lake Road',           'Kurunegala','North Western',   '60000', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (5,12, 'SafeHomes Pro',           'Home Safety Consulting',   'FS-2022-456', '+94 71 456 7890', '55 River Road',          'Matara',    'Southern',        '81000', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30');
+  (5,12, 'SafeHomes Pro',           'Home Safety Consulting',   'FS-2022-456', '+94 71 456 7890', '55 River Road',          'Matara',    'Southern',        '81000', 'Sri Lanka', 'active', '2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30')
+ON CONFLICT (id) DO NOTHING;
 
 -- --------------------------------------------------------------
 -- 9. clients
@@ -225,15 +254,15 @@ INSERT INTO public.vendor_specialization (vendor_id, specialization_id, certific
 -- 11. equipment (catalog)
 -- --------------------------------------------------------------
 INSERT INTO public.equipment (
-  id, equipment_code, equipment_name, description, equipment_type,
+  id, vendor_id, equipment_code, equipment_name, description, equipment_type,
   manufacturer, model, specifications, weight_kg, dimensions,
   warranty_years, default_lifespan_years, created_at, updated_at
 ) VALUES
-  (1,'EXT-ABC-10','Fire Extinguisher ABC 10kg','CO2 + Dry Powder','extinguisher','SafeFire','ABC-10','{"pressure":"150 psi"}',10.5,'30x20x60 cm',2,7,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (2,'LGT-EM-01','Emergency Light Standard','Battery backup 3h','lighting','ProGuard','EM-01','{"lumens":300}',2.1,'15x10x8 cm',1,5,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (3,'ALM-FAS-01','Fire Alarm System','Smoke + Heat','alarm','FireShield','FAS-01','{"zones":8}',4.8,'40x30x12 cm',3,10,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (4,'DR-FD-A','Fire Door Type A','2-hour rated','door','SafeHomes','FD-A','{"material":"steel"}',85.0,'210x90 cm',5,20,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
-  (5,'KIT-TRN-B','Training Kit Basic','Manual + Dummy Extinguisher','training','SafeHomes','TRN-B','{}',12.0,'50x40x30 cm',0,5,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30');
+  (1,1,'EXT-ABC-10','Fire Extinguisher ABC 10kg','CO2 + Dry Powder','extinguisher','SafeFire','ABC-10','{"pressure":"150 psi"}',10.5,'30x20x60 cm',2,7,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
+  (2,2,'LGT-EM-01','Emergency Light Standard','Battery backup 3h','lighting','ProGuard','EM-01','{"lumens":300}',2.1,'15x10x8 cm',1,5,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
+  (3,3,'ALM-FAS-01','Fire Alarm System','Smoke + Heat','alarm','FireShield','FAS-01','{"zones":8}',4.8,'40x30x12 cm',3,10,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
+  (4,4,'DR-FD-A','Fire Door Type A','2-hour rated','door','SafeHomes','FD-A','{"material":"steel"}',85.0,'210x90 cm',5,20,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30'),
+  (5,5,'KIT-TRN-B','Training Kit Basic','Manual + Dummy Extinguisher','training','SafeHomes','TRN-B','{}',12.0,'50x40x30 cm',0,5,'2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30');
 
 -- --------------------------------------------------------------
 -- 12. equipment_instance (24 rows – past, present, future)
@@ -310,7 +339,8 @@ INSERT INTO public.maintenance_ticket (
   (6,'TKT-20251025-006',11,4,4,9,'open','maintenance','Fire door inspection',NULL,'normal','equipment',1.0,NULL,'2025-10-31 09:00:00+05:30','2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30',NULL,NULL),
   (7,'TKT-20251025-007',12,4,4,9,'open','maintenance','Training kit missing items',NULL,'normal','equipment',0.5,NULL,'2025-11-01 09:00:00+05:30','2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30',NULL,NULL),
   (8,'TKT-20251025-008',13,5,5,12,'open','maintenance','Fire door inspection type B',NULL,'normal','equipment',1.0,NULL,'2025-10-31 09:00:00+05:30','2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30',NULL,NULL),
-  (9,'TKT-20251025-009',14,5,5,12,'open','maintenance','Training kit pro missing items',NULL,'normal','equipment',0.5,NULL,'2025-11-01 09:00:00+05:30','2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30',NULL,NULL);
+  (9,'TKT-20251025-009',14,5,5,12,'open','maintenance','Training kit pro missing items',NULL,'normal','equipment',0.5,NULL,'2025-11-01 09:00:00+05:30','2025-10-25 11:25:00+05:30','2025-10-25 11:25:00+05:30',NULL,NULL)
+ON CONFLICT (id) DO NOTHING;
 
 -- --------------------------------------------------------------
 -- 15. notification (automatically generated by triggers when equipment with compliance issues is inserted)
@@ -337,6 +367,25 @@ INSERT INTO public.password_reset (id, user_id, reset_token, ip_address, user_ag
 
 INSERT INTO public.user_sessions (id, user_id, session_token, ip_address, user_agent, last_activity, expires_at, created_at, is_active) VALUES
   (1,1,'sess-001','::1','Mozilla/5.0','2025-10-25 11:25:00+05:30','2025-10-26 11:25:00+05:30','2025-10-25 11:25:00+05:30',true);
+
+-- ==============================================================
+--  SEQUENCE RESETS - Fix auto-increment after explicit inserts
+-- ==============================================================
+
+-- Reset all sequences to proper values after explicit ID inserts
+SELECT setval('user_id_seq', (SELECT MAX(id) FROM public.user));
+SELECT setval('system_settings_id_seq', (SELECT MAX(id) FROM public.system_settings));
+SELECT setval('role_id_seq', (SELECT MAX(id) FROM public.role));
+SELECT setval('vendor_id_seq', (SELECT MAX(id) FROM public.vendors));
+SELECT setval('client_id_seq', (SELECT MAX(id) FROM public.clients));
+SELECT setval('specialization_id_seq', (SELECT MAX(id) FROM public.specialization));
+SELECT setval('equipment_id_seq', (SELECT MAX(id) FROM public.equipment));
+SELECT setval('equipment_instance_id_seq', (SELECT MAX(id) FROM public.equipment_instance));
+SELECT setval('equipment_assignment_id_seq', (SELECT MAX(id) FROM public.equipment_assignment));
+SELECT setval('maintenance_ticket_id_seq', (SELECT MAX(id) FROM public.maintenance_ticket));
+SELECT setval('notification_id_seq', (SELECT MAX(id) FROM public.notification));
+SELECT setval('audit_log_id_seq', (SELECT MAX(id) FROM public.audit_log));
+SELECT setval('user_sessions_id_seq', (SELECT MAX(id) FROM public.user_sessions));
 
 -- ==============================================================
 --  END OF SEED FILE

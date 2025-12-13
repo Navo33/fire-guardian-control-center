@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import CreateTicketModal from '@/components/modals/CreateTicketModal';
 import { useToast } from '@/components/providers/ToastProvider';
 import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
 import Link from 'next/link';
@@ -28,12 +29,12 @@ import {
 interface MaintenanceTicket {
   id: number;
   ticket_number: string;
-  equipment_serial?: string;
-  client?: string;
-  ticket_status: 'open' | 'resolved' | 'closed';
-  support_type: 'maintenance' | 'system' | 'user';
+  equipment?: string;
+  client_name?: string;
+  status: 'open' | 'resolved' | 'closed';
+  type: 'maintenance' | 'system' | 'user';
   priority: 'low' | 'normal' | 'high';
-  issue_description: string;
+  issue: string;
   scheduled_date?: string;
   created_at?: string;
   updated_at?: string;
@@ -74,8 +75,8 @@ interface DropdownOption {
 interface CreateTicketData {
   equipment_instance_id?: number;
   client_id?: number;
-  support_type: 'maintenance' | 'system' | 'user';
-  issue_description: string;
+  type: 'maintenance' | 'system' | 'user';
+  issue: string;
   priority: 'low' | 'normal' | 'high';
   scheduled_date?: string;
   assigned_technician?: number;
@@ -105,15 +106,15 @@ export default function MaintenanceTicketsPage() {
   
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('open');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   
   // Modal and form states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createFormData, setCreateFormData] = useState<CreateTicketData>({
-    support_type: 'maintenance',
-    issue_description: '',
+    type: 'maintenance',
+    issue: '',
     priority: 'normal'
   });
   
@@ -124,20 +125,21 @@ export default function MaintenanceTicketsPage() {
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalTickets, setTotalTickets] = useState(0);
-  const ticketsPerPage = 25;
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [itemsPerPage] = useState(10);
 
   // API fetch functions
   const fetchTickets = useCallback(async () => {
     try {
       const params = new URLSearchParams({
-        limit: ticketsPerPage.toString(),
-        offset: ((currentPage - 1) * ticketsPerPage).toString()
+        limit: itemsPerPage.toString(),
+        offset: ((currentPage - 1) * itemsPerPage).toString()
       });
 
       if (searchTerm) params.append('search', searchTerm);
       if (statusFilter !== 'all') params.append('status', statusFilter);
-      if (typeFilter !== 'all') params.append('support_type', typeFilter);
+      if (typeFilter !== 'all') params.append('type', typeFilter);
       if (priorityFilter !== 'all') params.append('priority', priorityFilter);
 
       const response = await fetch(`${API_ENDPOINTS.MAINTENANCE_TICKETS.LIST}?${params}`, {
@@ -149,8 +151,22 @@ export default function MaintenanceTicketsPage() {
       if (!response.ok) throw new Error('Failed to fetch tickets');
 
       const data = await response.json();
-      setTickets(data.data.tickets);
-      setTotalTickets(data.data.pagination.total);
+      setTickets(data.data.tickets || []);
+      setTotalCount(data.data.pagination?.total || 0);
+      setTotalPages(Math.ceil((data.data.pagination?.total || 0) / itemsPerPage));
+      
+      // Update KPIs from the main response if available
+      if (data.data.total_tickets !== undefined) {
+        setKPIs({
+          total_tickets: data.data.total_tickets || 0,
+          open_tickets: data.data.open_tickets || 0,
+          resolved_tickets: data.data.resolved_tickets || 0,
+          closed_tickets: 0, // Not provided in new response
+          high_priority_tickets: data.data.high_priority || 0,
+          overdue_tickets: 0, // Not provided in new response
+          avg_resolution_time_hours: undefined
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch tickets');
     }
@@ -268,8 +284,8 @@ export default function MaintenanceTicketsPage() {
       showSuccess('Ticket created successfully');
       setShowCreateModal(false);
       setCreateFormData({
-        support_type: 'maintenance',
-        issue_description: '',
+        type: 'maintenance',
+        issue: '',
         priority: 'normal'
       });
       
@@ -369,13 +385,13 @@ export default function MaintenanceTicketsPage() {
               </p>
             </div>
           </div>
-          <Link
-            href="/maintenance-tickets/create" 
+          <button
+            onClick={() => setShowCreateModal(true)}
             className="btn-primary flex items-center space-x-2"
           >
             <PlusIcon className="h-5 w-5" />
             <span>Create Ticket</span>
-          </Link>
+          </button>
         </div>
 
         {/* Stats Cards */}
@@ -492,7 +508,6 @@ export default function MaintenanceTicketsPage() {
             </div>
           </div>
         </div>
-        </div>
 
         {/* Tickets Table */}
         <div className="bg-white rounded-2xl border border-gray-100">
@@ -538,23 +553,23 @@ export default function MaintenanceTicketsPage() {
                       </div>
                       <div className="ml-3">
                         <div className="text-sm font-medium text-gray-900">#{ticket.ticket_number}</div>
-                        <div className="text-sm text-gray-500">{ticket.issue_description ? truncateText(ticket.issue_description, 50) : 'No description'}</div>
+                        <div className="text-sm text-gray-500">{ticket.issue ? truncateText(ticket.issue, 50) : 'No description'}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">{ticket.client || 'Unassigned'}</div>
-                    <div className="text-sm text-gray-500">{ticket.equipment_serial ? `Equipment: ${ticket.equipment_serial}` : 'No equipment'}</div>
+                    <div className="text-sm text-gray-900">{ticket.client_name || 'Unassigned'}</div>
+                    <div className="text-sm text-gray-500">{ticket.equipment ? `Equipment: ${ticket.equipment}` : 'No equipment'}</div>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadgeColor(ticket.priority)}`}>
                       {ticket.priority}
                     </span>
-                    <div className="text-sm text-gray-500 mt-1">{ticket.support_type}</div>
+                    <div className="text-sm text-gray-500 mt-1">{ticket.type}</div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(ticket.ticket_status)}`}>
-                      {ticket.ticket_status}
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(ticket.status)}`}>
+                      {ticket.status}
                     </span>
                     <div className="text-sm text-gray-500 mt-1">
                       {ticket.scheduled_date ? formatDate(ticket.scheduled_date) : 'Not scheduled'}
@@ -585,7 +600,48 @@ export default function MaintenanceTicketsPage() {
             </tbody>
           </table>
         </div>
+
+          {/* Pagination */}
+          {!isLoading && totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white px-6 py-4 border-t border-gray-100">
+              <div className="text-sm text-gray-700">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
+                {Math.min(currentPage * itemsPerPage, totalCount)} of{' '}
+                {totalCount} results
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Create Ticket Modal */}
+      <CreateTicketModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={() => {
+          setShowCreateModal(false);
+          showSuccess('Maintenance ticket created successfully');
+          // Refresh the tickets list
+          fetchTickets();
+        }}
+        userType="vendor"
+      />
     </DashboardLayout>
   );
 }

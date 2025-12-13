@@ -148,6 +148,47 @@ export class DashboardController extends BaseController {
       return ApiResponseUtil.internalError(res);
     }
   });
+
+  /**
+   * GET /api/dashboard/critical-alerts
+   * Get critical alerts (admin only)
+   */
+  getCriticalAlerts = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.api('GET', '/api/dashboard/critical-alerts', req.query);
+
+    try {
+      const userId = req.user!.userId;
+      const userType = req.user!.user_type;
+
+      // Only allow admin access
+      if (userType !== 'admin') {
+        DebugLogger.log('Non-admin user attempted to access critical alerts', { userId, userType }, 'DASHBOARD');
+        return ApiResponseUtil.forbidden(res, 'Admin access required');
+      }
+
+      const limit = parseInt(req.query.limit as string) || 10;
+      DebugLogger.log('Fetching critical alerts for admin', { userId, limit }, 'DASHBOARD');
+
+      const criticalAlerts = await DashboardRepository.getCriticalAlerts(limit);
+
+      DebugLogger.log('Critical alerts retrieved successfully', { count: criticalAlerts.length }, 'DASHBOARD');
+      this.logAction('DASHBOARD_CRITICAL_ALERTS_ACCESSED', userId, { userType, limit });
+
+      DebugLogger.performance('Critical alerts fetch', startTime, { count: criticalAlerts.length });
+      ApiResponseUtil.success(res, criticalAlerts, 'Critical alerts retrieved successfully');
+
+    } catch (error) {
+      DebugLogger.error('Error getting critical alerts', error, { userId: req.user?.userId });
+      this.logAction('DASHBOARD_CRITICAL_ALERTS_ERROR', req.user?.userId, { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
   getInsights = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     if (!this.requireAuth(req, res)) return;
 
@@ -162,7 +203,12 @@ export class DashboardController extends BaseController {
           insights = await DashboardRepository.getAdminInsights();
           break;
         case 'vendor':
-          insights = await DashboardRepository.getVendorInsights(userId);
+          // Get vendor ID from user ID
+          const vendorIdForInsights = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorIdForInsights) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
+          insights = await DashboardRepository.getVendorInsights(vendorIdForInsights);
           break;
         case 'client':
           insights = await DashboardRepository.getClientInsights(userId);
@@ -207,9 +253,14 @@ export class DashboardController extends BaseController {
           ]);
           break;
         case 'vendor':
+          // Get vendor ID from user ID
+          const vendorIdForActivity = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorIdForActivity) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
           [activities, total] = await Promise.all([
-            DashboardRepository.getVendorRecentActivity(userId, pagination),
-            DashboardRepository.getVendorActivityCount(userId)
+            DashboardRepository.getVendorRecentActivity(vendorIdForActivity, pagination),
+            DashboardRepository.getVendorActivityCount(vendorIdForActivity)
           ]);
           break;
         case 'client':
@@ -279,8 +330,13 @@ export class DashboardController extends BaseController {
           );
           break;
         case 'vendor':
+          // Get vendor ID from user ID
+          const vendorIdForChart = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorIdForChart) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
           chartData = await DashboardRepository.getVendorChartData(
-            userId,
+            vendorIdForChart,
             chartType,
             period as string,
             groupBy as string
@@ -340,7 +396,12 @@ export class DashboardController extends BaseController {
           exportData = await DashboardRepository.getAdminExportData(type as string);
           break;
         case 'vendor':
-          exportData = await DashboardRepository.getVendorExportData(userId, type as string);
+          // Get vendor ID from user ID
+          const vendorIdForExport = await DashboardRepository.getVendorIdFromUserId(userId);
+          if (!vendorIdForExport) {
+            return ApiResponseUtil.notFound(res, 'Vendor profile not found');
+          }
+          exportData = await DashboardRepository.getVendorExportData(vendorIdForExport, type as string);
           break;
         case 'client':
           exportData = await DashboardRepository.getClientExportData(userId, type as string);
@@ -509,6 +570,48 @@ export class DashboardController extends BaseController {
     } catch (error) {
       DebugLogger.error('Error getting vendor KPIs', error, { userId: req.user?.userId });
       this.logAction('VENDOR_DASHBOARD_KPIS_ERROR', req.user?.userId, { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return ApiResponseUtil.internalError(res);
+    }
+  });
+
+  /**
+   * Verify database data integrity (admin only)
+   */
+  verifyDataIntegrity = this.asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    if (!this.requireAuth(req, res)) return;
+
+    try {
+      const userId = req.user!.userId;
+      const userType = req.user!.user_type;
+
+      // Only allow admin users to access data verification
+      if (userType !== 'admin') {
+        DebugLogger.log('Non-admin user attempted to access data verification', { userId, userType }, 'DASHBOARD');
+        return ApiResponseUtil.forbidden(res, 'Access denied. Admin privileges required.');
+      }
+
+      const startTime = DebugLogger.startTimer();
+      DebugLogger.log('Starting data integrity verification', { userId }, 'DASHBOARD');
+
+      const verification = await DashboardRepository.verifyDataIntegrity();
+
+      DebugLogger.log('Data integrity verification completed', { 
+        userId, 
+        isRealData: verification.isRealData,
+        userCounts: verification.users,
+        equipmentCounts: verification.equipment 
+      }, 'DASHBOARD');
+      
+      this.logAction('DATA_INTEGRITY_VERIFICATION', userId, { verification });
+
+      DebugLogger.performance('Data integrity verification', startTime, { userId });
+      ApiResponseUtil.success(res, verification, 'Data integrity verification completed');
+
+    } catch (error) {
+      DebugLogger.error('Error verifying data integrity', error, { userId: req.user?.userId });
+      this.logAction('DATA_INTEGRITY_VERIFICATION_ERROR', req.user?.userId, { 
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       return ApiResponseUtil.internalError(res);

@@ -41,20 +41,24 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
   }, []);
 
   const success = useCallback((message: string, duration?: number) => {
-    showToast('success', message, duration);
-  }, [showToast]);
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, type: 'success', message, duration: duration || 4000 }]);
+  }, []);
 
   const error = useCallback((message: string, duration?: number) => {
-    showToast('error', message, duration);
-  }, [showToast]);
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, type: 'error', message, duration: duration || 4000 }]);
+  }, []);
 
   const warning = useCallback((message: string, duration?: number) => {
-    showToast('warning', message, duration);
-  }, [showToast]);
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, type: 'warning', message, duration: duration || 4000 }]);
+  }, []);
 
   const info = useCallback((message: string, duration?: number) => {
-    showToast('info', message, duration);
-  }, [showToast]);
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, type: 'info', message, duration: duration || 4000 }]);
+  }, []);
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));

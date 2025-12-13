@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import RequireRole from '@/components/auth/RequireRole';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import { 
   UserIcon,
@@ -37,6 +38,7 @@ interface UserDetail {
   last_name: string;
   display_name: string;
   email: string;
+  phone?: string;
   user_type: 'admin' | 'vendor' | 'client';
   is_locked: boolean;
   last_login: string | null;
@@ -121,10 +123,25 @@ function UserDetailContent() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletionCheck, setDeletionCheck] = useState<{
+    canDelete: boolean;
+    userType: string;
+    constraints: any;
+    message: string;
+  } | null>(null);
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: '',
-    email: ''
+    email: '',
+    phone: '',
+    primary_phone: '',
+    company_name: '',
+    business_type: '',
+    street_address: '',
+    city: '',
+    state: '',
+    zip_code: ''
   });
 
   // Fetch user details
@@ -132,6 +149,11 @@ function UserDetailContent() {
     try {
       setIsLoading(true);
       setError(null);
+
+      // Validate userId
+      if (!userId || isNaN(Number(userId))) {
+        throw new Error('Invalid user ID provided');
+      }
 
       const token = localStorage.getItem('token');
       if (!token) {
@@ -141,19 +163,41 @@ function UserDetailContent() {
       const headers = getAuthHeaders();
       const url = API_ENDPOINTS.USER_DETAILS.BY_ID(userId);
 
+      console.log('Fetching user details for ID:', userId);
       logApiCall('GET', url);
+      
       const response = await fetch(url, { headers });
       const result = await response.json();
+
+      console.log('User details response:', { success: result.success, hasData: !!result.data });
 
       if (!response.ok) {
         throw new Error(result.message || 'Failed to fetch user details');
       }
 
+      if (!result.data) {
+        throw new Error('User not found');
+      }
+
+      console.log('Setting user data:', {
+        id: result.data.id,
+        name: `${result.data.first_name} ${result.data.last_name}`,
+        type: result.data.user_type
+      });
+
       setUser(result.data);
       setEditForm({
-        first_name: result.data.first_name,
-        last_name: result.data.last_name,
-        email: result.data.email
+        first_name: result.data.first_name || '',
+        last_name: result.data.last_name || '',
+        email: result.data.email || '',
+        phone: result.data.phone || '',
+        primary_phone: result.data.vendor?.primary_phone || result.data.client?.primary_phone || '',
+        company_name: result.data.vendor?.company_name || result.data.client?.company_name || '',
+        business_type: result.data.vendor?.business_type || result.data.client?.business_type || '',
+        street_address: result.data.vendor?.street_address || result.data.client?.street_address || '',
+        city: result.data.vendor?.city || result.data.client?.city || '',
+        state: result.data.vendor?.state || result.data.client?.state || '',
+        zip_code: result.data.vendor?.zip_code || result.data.client?.zip_code || ''
       });
     } catch (err) {
       console.error('Error fetching user details:', err);
@@ -178,7 +222,19 @@ function UserDetailContent() {
       const response = await fetch(url, {
         method: 'PUT',
         headers,
-        body: JSON.stringify(editForm)
+        body: JSON.stringify({
+          first_name: editForm.first_name,
+          last_name: editForm.last_name,
+          phone: editForm.phone,
+          primary_phone: editForm.primary_phone,
+          company_name: editForm.company_name,
+          business_type: editForm.business_type,
+          street_address: editForm.street_address,
+          city: editForm.city,
+          state: editForm.state,
+          zip_code: editForm.zip_code
+          // email is excluded from updates
+        })
       });
 
       const result = await response.json();
@@ -230,12 +286,8 @@ function UserDetailContent() {
     }
   };
 
-  // Delete user account
-  const handleDeleteAccount = async () => {
-    if (!confirm('Are you sure you want to delete this user account? This action cannot be undone.')) {
-      return;
-    }
-
+  // Check user deletion constraints
+  const checkUserDeletion = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -243,7 +295,39 @@ function UserDetailContent() {
       }
 
       const headers = getAuthHeaders();
-      const url = API_ENDPOINTS.USERS.BY_ID(userId);
+      const url = API_ENDPOINTS.USER_DETAILS.DELETION_CHECK(userId);
+
+      logApiCall('GET', url);
+      const response = await fetch(url, { headers });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to check deletion constraints');
+      }
+
+      setDeletionCheck(result.data);
+      setShowDeleteConfirm(true);
+    } catch (err) {
+      console.error('Error checking deletion constraints:', err);
+      setError(err instanceof Error ? err.message : 'Failed to check deletion constraints');
+    }
+  };
+
+  // Handle delete account
+  const handleDeleteAccount = () => {
+    checkUserDeletion();
+  };
+
+  // Confirm user deletion
+  const confirmUserDeletion = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+      const url = API_ENDPOINTS.USER_DETAILS.DELETE(userId);
 
       logApiCall('DELETE', url);
       const response = await fetch(url, {
@@ -257,11 +341,55 @@ function UserDetailContent() {
         throw new Error(result.message || 'Failed to delete user');
       }
 
-      // Redirect to users list
+      alert('User deleted successfully');
       router.push('/users');
     } catch (err) {
       console.error('Error deleting user:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete user');
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  // Create deletion modal content based on constraints (similar to vendor page)
+  const getDeleteModalContent = () => {
+    if (!deletionCheck) return { title: '', message: '', type: 'danger' as const };
+
+    if (deletionCheck.canDelete) {
+      return {
+        title: 'Delete User',
+        message: `Are you sure you want to delete "${user?.display_name || `${user?.first_name} ${user?.last_name}`.trim() || 'this user'}"? This action cannot be undone.`,
+        type: 'danger' as const
+      };
+    } else {
+      const issues = [];
+      
+      if (deletionCheck.userType === 'vendor') {
+        if (deletionCheck.constraints.clientsCount > 0) {
+          issues.push(`${deletionCheck.constraints.clientsCount} client${deletionCheck.constraints.clientsCount > 1 ? 's' : ''}`);
+        }
+        if (deletionCheck.constraints.equipmentCount > 0) {
+          issues.push(`${deletionCheck.constraints.equipmentCount} equipment instance${deletionCheck.constraints.equipmentCount > 1 ? 's' : ''}`);
+        }
+        if (deletionCheck.constraints.assignmentsCount > 0) {
+          issues.push(`${deletionCheck.constraints.assignmentsCount} active assignment${deletionCheck.constraints.assignmentsCount > 1 ? 's' : ''}`);
+        }
+        if (deletionCheck.constraints.activeTicketsCount > 0) {
+          issues.push(`${deletionCheck.constraints.activeTicketsCount} active ticket${deletionCheck.constraints.activeTicketsCount > 1 ? 's' : ''}`);
+        }
+      } else if (deletionCheck.userType === 'client') {
+        if (deletionCheck.constraints.equipmentCount > 0) {
+          issues.push(`${deletionCheck.constraints.equipmentCount} assigned equipment`);
+        }
+        if (deletionCheck.constraints.activeTicketsCount > 0) {
+          issues.push(`${deletionCheck.constraints.activeTicketsCount} active ticket${deletionCheck.constraints.activeTicketsCount > 1 ? 's' : ''}`);
+        }
+      }
+
+      return {
+        title: 'Cannot Delete User',
+        message: `"${user?.display_name || `${user?.first_name} ${user?.last_name}`.trim() || 'This user'}" cannot be deleted because they have ${issues.join(', ')}. Please reassign or remove these items first.`,
+        type: 'alert' as const
+      };
     }
   };
 
@@ -307,8 +435,16 @@ function UserDetailContent() {
               <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{user?.display_name}</h1>
-              <div className="flex items-center space-x-4 mt-1">
+              <h1 className="text-2xl font-bold text-gray-900">
+                {user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Unknown User'}
+              </h1>
+              {user?.user_type === 'vendor' && user?.company?.company_name && (
+                <p className="text-lg text-gray-600 mt-1">{user.company.company_name}</p>
+              )}
+              {user?.user_type === 'client' && user?.vendor?.vendor_company && (
+                <p className="text-lg text-gray-600 mt-1">{user.vendor.vendor_company}</p>
+              )}
+              <div className="flex items-center space-x-4 mt-2">
                 <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(user?.is_locked ? 'Inactive' : 'Active')}`}>
                   {user?.is_locked ? 'Inactive' : 'Active'}
                 </span>
@@ -393,8 +529,8 @@ function UserDetailContent() {
 
               <div className="bg-white rounded-2xl border border-gray-100 p-6">
                 <div className="flex items-center">
-                  <div className="p-3 bg-orange-50 rounded-xl">
-                    <CheckCircleIcon className="h-6 w-6 text-orange-600" />
+                  <div className="p-3 bg-red-50 rounded-xl">
+                    <CheckCircleIcon className="h-6 w-6 text-red-600" />
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Specializations</p>
@@ -433,8 +569,8 @@ function UserDetailContent() {
 
               <div className="bg-white rounded-2xl border border-gray-100 p-6">
                 <div className="flex items-center">
-                  <div className="p-3 bg-orange-50 rounded-xl">
-                    <ChartBarIcon className="h-6 w-6 text-orange-600" />
+                  <div className="p-3 bg-red-50 rounded-xl">
+                    <ChartBarIcon className="h-6 w-6 text-red-600" />
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Status</p>
@@ -510,36 +646,50 @@ function UserDetailContent() {
                           />
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          value={editForm.email}
-                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                          className="input-field"
-                        />
-                      </div>
-                      <div className="flex space-x-3">
-                        <button onClick={handleUpdateUser} className="btn-primary">
-                          Save Changes
-                        </button>
-                        <button onClick={() => setIsEditing(false)} className="btn-secondary">
-                          Cancel
-                        </button>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Email
+                          </label>
+                          <input
+                            type="email"
+                            value={editForm.email}
+                            disabled
+                            className="input-field bg-gray-50 text-gray-500 cursor-not-allowed"
+                            title="Email cannot be changed to prevent conflicts"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Personal Phone
+                          </label>
+                          <input
+                            type="text"
+                            value={editForm.phone}
+                            onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                            className="input-field"
+                            placeholder="Personal phone number"
+                          />
+                        </div>
                       </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Full Name</label>
-                        <p className="text-sm text-gray-900">{user?.display_name}</p>
+                        <p className="text-sm text-gray-900">
+                          {user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Not provided'}
+                        </p>
                       </div>
                       
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Email</label>
                         <p className="text-sm text-gray-900">{user?.email}</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Personal Phone</label>
+                        <p className="text-sm text-gray-900">{user?.phone || 'Not provided'}</p>
                       </div>
                       
                       <div>
@@ -565,88 +715,194 @@ function UserDetailContent() {
                           {user?.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
                         </p>
                       </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Last Login IP</label>
+                        <p className="text-sm text-gray-900">
+                          {user?.last_login_ip || 'N/A'}
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
 
 
                 {/* Company Information */}
-                {user?.company && (
+                {(user?.company || user?.vendor) && (
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                       <BuildingOfficeIcon className="h-5 w-5 text-red-600 mr-2" />
                       Company Information
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Company Name</label>
-                        <p className="text-sm text-gray-900">{user.company.company_name}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Business Type</label>
-                        <p className="text-sm text-gray-900">{user.company.business_type}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">License Number</label>
-                        <p className="text-sm text-gray-900">{user.company.license_number || 'N/A'}</p>
-                      </div>
-                      {user.company.website && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Website</label>
-                          <a 
-                            href={user.company.website} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 hover:underline"
-                          >
-                            {user.company.website}
-                          </a>
+                    {isEditing ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Company Name
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.company_name}
+                              onChange={(e) => setEditForm({ ...editForm, company_name: e.target.value })}
+                              className="input-field"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Business Type
+                            </label>
+                            <select
+                              value={editForm.business_type}
+                              onChange={(e) => setEditForm({ ...editForm, business_type: e.target.value })}
+                              className="input-field"
+                            >
+                              <option value="">Select business type</option>
+                              <option value="Restaurant">Restaurant</option>
+                              <option value="Hotel">Hotel</option>
+                              <option value="Office Building">Office Building</option>
+                              <option value="Retail Store">Retail Store</option>
+                              <option value="Manufacturing">Manufacturing</option>
+                              <option value="Warehouse">Warehouse</option>
+                              <option value="Healthcare">Healthcare</option>
+                              <option value="Education">Education</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
                         </div>
-                      )}
-                    </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Company Phone
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.primary_phone}
+                              onChange={(e) => setEditForm({ ...editForm, primary_phone: e.target.value })}
+                              className="input-field"
+                              placeholder="Company/primary phone number"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Street Address
+                          </label>
+                          <input
+                            type="text"
+                            value={editForm.street_address}
+                            onChange={(e) => setEditForm({ ...editForm, street_address: e.target.value })}
+                            className="input-field"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              City
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.city}
+                              onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                              className="input-field"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Province
+                            </label>
+                            <select
+                              value={editForm.state}
+                              onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                              className="input-field"
+                            >
+                              <option value="">Select province</option>
+                              <option value="Western Province">Western Province</option>
+                              <option value="Central Province">Central Province</option>
+                              <option value="Southern Province">Southern Province</option>
+                              <option value="Northern Province">Northern Province</option>
+                              <option value="Eastern Province">Eastern Province</option>
+                              <option value="North Western Province">North Western Province</option>
+                              <option value="North Central Province">North Central Province</option>
+                              <option value="Uva Province">Uva Province</option>
+                              <option value="Sabaragamuwa Province">Sabaragamuwa Province</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              ZIP Code
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.zip_code}
+                              onChange={(e) => setEditForm({ ...editForm, zip_code: e.target.value })}
+                              className="input-field"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex space-x-3 pt-4">
+                          <button onClick={handleUpdateUser} className="btn-primary">
+                            Save Changes
+                          </button>
+                          <button onClick={() => setIsEditing(false)} className="btn-secondary">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Company Name</label>
+                          <p className="text-sm text-gray-900">
+                            {user.company?.company_name || user.vendor?.vendor_company || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Business Type</label>
+                          <p className="text-sm text-gray-900">
+                            {user.company?.business_type || 'Not specified'}
+                          </p>
+                        </div>
+                        {user.company?.license_number && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">License Number</label>
+                            <p className="text-sm text-gray-900">{user.company.license_number}</p>
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Phone</label>
+                          <p className="text-sm text-gray-900">
+                            {user.contact?.primary_phone || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Address</label>
+                          <p className="text-sm text-gray-900">
+                            {(() => {
+                              const address = user.addresses?.[0];
+                              if (!address?.street_address) return 'Not provided';
+                              const parts = [
+                                address.street_address,
+                                address.city,
+                                address.state,
+                                address.zip_code
+                              ].filter(Boolean);
+                              return parts.join(', ');
+                            })()}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Status</label>
+                          <p className="text-sm text-gray-900 capitalize">
+                            {user.is_locked ? 'Inactive' : 'Active'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Contact Information */}
-                {user?.contact && (
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                      <PhoneIcon className="h-5 w-5 text-red-600 mr-2" />
-                      Contact Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Contact Person</label>
-                          <p className="text-sm text-gray-900">{user.contact.contact_person_name || 'N/A'}</p>
-                          <p className="text-xs text-gray-500">{user.contact.contact_title || ''}</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Primary Email</label>
-                          <p className="text-sm text-gray-900">{user.contact.primary_email || user.email}</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Primary Phone</label>
-                          <p className="text-sm text-gray-900">{user.contact.primary_phone || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                        {user.addresses && user.addresses.length > 0 && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">Address</label>
-                            {user.addresses.map((address, index) => (
-                              <div key={index}>
-                                <p className="text-sm text-gray-900">{address.street_address}</p>
-                                <p className="text-sm text-gray-900">{address.city}, {address.state} {address.zip_code}</p>
-                                <p className="text-sm text-gray-900">{address.country}</p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+
               </div>
             )}
 
@@ -806,6 +1062,20 @@ function UserDetailContent() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && deletionCheck && (
+        <ConfirmModal
+          isOpen={showDeleteConfirm}
+          title={getDeleteModalContent().title}
+          message={getDeleteModalContent().message}
+          type={getDeleteModalContent().type}
+          confirmText={deletionCheck.canDelete ? "Delete User" : "OK"}
+          cancelText={deletionCheck.canDelete ? "Cancel" : undefined}
+          onConfirm={deletionCheck.canDelete ? confirmUserDeletion : () => setShowDeleteConfirm(false)}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </DashboardLayout>
   );
 }

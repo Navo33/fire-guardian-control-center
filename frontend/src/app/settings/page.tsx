@@ -5,6 +5,7 @@ import RequireRole from '@/components/auth/RequireRole';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
+import SmsSettingsTab from '@/components/settings/SmsSettingsTab';
 import { useToast } from '@/components/providers/ToastProvider';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '@/config/api';
 import {
@@ -43,6 +44,11 @@ export default function SystemSettingsPage() {
     maxFailedLoginAttempts: 5,
     accountLockDurationMinutes: 30
   });
+  
+  // Debug: Log whenever settings state changes
+  useEffect(() => {
+    console.log('🔄 DEBUG: Settings state changed:', settings);
+  }, [settings]);
 
   useEffect(() => {
     fetchSettings();
@@ -55,7 +61,7 @@ export default function SystemSettingsPage() {
       logApiCall('GET', API_ENDPOINTS.SETTINGS.SECURITY);
       
       const response = await fetch(API_ENDPOINTS.SETTINGS.SECURITY, {
-        headers: getAuthHeaders()
+        headers: getAuthHeaders() 
       });
 
       if (!response.ok) {
@@ -65,9 +71,13 @@ export default function SystemSettingsPage() {
 
       const data = await response.json();
       
+      console.log('📥 DEBUG: Fetched settings data:', data);
+      
       if (data.success && data.data) {
+        console.log('📥 DEBUG: Setting state with data:', data.data);
         setSettings(data.data);
       } else {
+        console.error('❌ Invalid settings response format:', data);
         throw new Error(data.message || 'Invalid response format');
       }
     } catch (err) {
@@ -80,42 +90,136 @@ export default function SystemSettingsPage() {
   };
 
   const handleSaveSettings = async () => {
+    // Prevent saving while loading or if there's an error
+    if (loading || error) {
+      console.warn('⚠️ Cannot save while loading or error state');
+      toast.error('Cannot save while loading');
+      return;
+    }
+
     setSaving(true);
 
     try {
-      // Prepare settings array for bulk update
+      console.log('🚀 Starting settings save process...');
+      console.log('📊 Current settings state:', settings);
+
+      // Create a clean settings object with only valid values
+    const cleanSettings = {
+      sessionTimeoutMinutes: Number(settings.sessionTimeoutMinutes) || 30,
+      passwordExpiryDays: Number(settings.passwordExpiryDays) || 90,
+      passwordMinLength: Number(settings.passwordMinLength) || 8,
+      requirePasswordChangeOnFirstLogin: Boolean(settings.requirePasswordChangeOnFirstLogin),
+      maxFailedLoginAttempts: Number(settings.maxFailedLoginAttempts) || 5,
+      accountLockDurationMinutes: Number(settings.accountLockDurationMinutes) || 30
+    };      console.log('🧹 Cleaned settings:', cleanSettings);
+
+      // Validation with cleaned values
+      const validationErrors: string[] = [];
+      
+      if (cleanSettings.sessionTimeoutMinutes < 1 || cleanSettings.sessionTimeoutMinutes > 1440) {
+        validationErrors.push('Session timeout must be between 1 and 1440 minutes');
+      }
+      
+      if (cleanSettings.passwordExpiryDays < 1 || cleanSettings.passwordExpiryDays > 365) {
+        validationErrors.push('Password expiry must be between 1 and 365 days');
+      }
+      
+      if (cleanSettings.passwordMinLength < 4 || cleanSettings.passwordMinLength > 50) {
+        validationErrors.push('Password minimum length must be between 4 and 50 characters');
+      }
+      
+      if (cleanSettings.maxFailedLoginAttempts < 1 || cleanSettings.maxFailedLoginAttempts > 100) {
+        validationErrors.push('Max failed login attempts must be between 1 and 100');
+      }
+      
+      if (cleanSettings.accountLockDurationMinutes < 1 || cleanSettings.accountLockDurationMinutes > 10080) {
+        validationErrors.push('Account lock duration must be between 1 and 10080 minutes');
+      }
+      
+      if (validationErrors.length > 0) {
+        console.error('❌ Validation errors:', validationErrors);
+        toast.error(`Invalid settings: ${validationErrors.join(', ')}`);
+        return;
+      }
+      
+      // Create settings array with guaranteed valid values
       const settingsArray = [
-        { key: 'session_timeout_minutes', value: String(settings.sessionTimeoutMinutes) },
-        { key: 'password_expiry_days', value: String(settings.passwordExpiryDays) },
-        { key: 'password_min_length', value: String(settings.passwordMinLength) },
-        { key: 'require_password_change_on_first_login', value: String(settings.requirePasswordChangeOnFirstLogin) },
-        { key: 'max_failed_login_attempts', value: String(settings.maxFailedLoginAttempts) },
-        { key: 'account_lock_duration_minutes', value: String(settings.accountLockDurationMinutes) }
+        { 
+          key: 'session_timeout_minutes', 
+          value: cleanSettings.sessionTimeoutMinutes.toString() 
+        },
+        { 
+          key: 'password_expiry_days', 
+          value: cleanSettings.passwordExpiryDays.toString() 
+        },
+        { 
+          key: 'password_min_length', 
+          value: cleanSettings.passwordMinLength.toString() 
+        },
+        { 
+          key: 'require_password_change_on_first_login', 
+          value: cleanSettings.requirePasswordChangeOnFirstLogin.toString() 
+        },
+        { 
+          key: 'max_failed_login_attempts', 
+          value: cleanSettings.maxFailedLoginAttempts.toString() 
+        },
+        { 
+          key: 'account_lock_duration_minutes', 
+          value: cleanSettings.accountLockDurationMinutes.toString() 
+        }
       ];
 
-      logApiCall('PUT', API_ENDPOINTS.SETTINGS.BULK_UPDATE, { settings: settingsArray });
+      // Final validation - ensure no empty or undefined values
+      const invalidSettings = settingsArray.filter(setting => 
+        !setting.key || 
+        setting.value === undefined || 
+        setting.value === null || 
+        setting.value === 'undefined' || 
+        setting.value === 'null' ||
+        setting.value.trim() === ''
+      );
+
+      if (invalidSettings.length > 0) {
+        console.error('❌ Invalid settings found:', invalidSettings);
+        toast.error('Invalid settings detected. Please refresh the page and try again.');
+        return;
+      }
+
+      console.log('✅ Settings array validated:', settingsArray);
+      
+      const requestBody = { settings: settingsArray };
+      console.log('📤 Request body:', JSON.stringify(requestBody, null, 2));
+      console.table(settingsArray);
 
       const response = await fetch(API_ENDPOINTS.SETTINGS.BULK_UPDATE, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ settings: settingsArray })
+        body: JSON.stringify(requestBody)
       });
 
+      console.log('📥 Response status:', response.status, response.statusText);
+      
       const data = await response.json();
+      console.log('📥 Response data:', data);
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to save settings');
+        console.error('❌ API Error Response:', data);
+        toast.error(data.message || 'Failed to save settings');
+        return;
       }
 
       if (data.success) {
+        console.log('✅ Settings saved successfully');
         toast.success('System settings saved successfully');
-        // Refresh settings from server to ensure we have the latest
+        // Refresh settings from server
         setTimeout(() => fetchSettings(), 1000);
       } else {
-        throw new Error(data.message || 'Failed to save settings');
+        console.error('❌ Save failed:', data);
+        toast.error(data.message || 'Failed to save settings');
       }
     } catch (err: any) {
-      console.error('Error saving settings:', err);
+      console.error('❌ ERROR saving settings:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to save settings';
       toast.error(errorMessage);
     } finally {
@@ -147,7 +251,8 @@ export default function SystemSettingsPage() {
                 {[
                   { id: 'session', name: 'Session Management', icon: ClockIcon },
                   { id: 'password', name: 'Password Policy', icon: LockClosedIcon },
-                  { id: 'security', name: 'Account Security', icon: ShieldCheckIcon }
+                  { id: 'security', name: 'Account Security', icon: ShieldCheckIcon },
+                  { id: 'sms', name: 'SMS Notifications', icon: ExclamationTriangleIcon }
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -203,7 +308,11 @@ export default function SystemSettingsPage() {
                                 type="number"
                                 min="1"
                                 value={settings.sessionTimeoutMinutes}
-                                onChange={(e) => setSettings({ ...settings, sessionTimeoutMinutes: parseInt(e.target.value) || 30 })}
+                                onChange={(e) => {
+                                  const newValue = parseInt(e.target.value) || 30;
+                                  console.log('🎛️ DEBUG sessionTimeoutMinutes change:', e.target.value, '->', newValue);
+                                  setSettings({ ...settings, sessionTimeoutMinutes: newValue });
+                                }}
                                 className="input-field pr-20"
                               />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -220,10 +329,10 @@ export default function SystemSettingsPage() {
                       <div className="flex justify-end border-t border-gray-200 pt-6">
                         <button
                           onClick={handleSaveSettings}
-                          disabled={saving}
+                          disabled={saving || loading}
                           className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {saving ? 'Saving...' : 'Save Changes'}
+                          {saving ? 'Saving...' : loading ? 'Loading...' : 'Save Changes'}
                         </button>
                       </div>
                     </div>
@@ -247,7 +356,11 @@ export default function SystemSettingsPage() {
                                 type="number"
                                 min="0"
                                 value={settings.passwordExpiryDays}
-                                onChange={(e) => setSettings({ ...settings, passwordExpiryDays: parseInt(e.target.value) || 0 })}
+                                onChange={(e) => {
+                                  const newValue = parseInt(e.target.value) || 0;
+                                  console.log('🎛️ DEBUG passwordExpiryDays change:', e.target.value, '->', newValue);
+                                  setSettings({ ...settings, passwordExpiryDays: newValue });
+                                }}
                                 className="input-field pr-16"
                               />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -269,7 +382,11 @@ export default function SystemSettingsPage() {
                                 min="6"
                                 max="32"
                                 value={settings.passwordMinLength}
-                                onChange={(e) => setSettings({ ...settings, passwordMinLength: parseInt(e.target.value) || 8 })}
+                                onChange={(e) => {
+                                  const newValue = parseInt(e.target.value) || 8;
+                                  console.log('🎛️ DEBUG passwordMinLength change:', e.target.value, '->', newValue);
+                                  setSettings({ ...settings, passwordMinLength: newValue });
+                                }}
                                 className="input-field pr-24"
                               />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -282,43 +399,50 @@ export default function SystemSettingsPage() {
                           </div>
                         </div>
 
-                        <div className="mt-6 bg-white border border-gray-200 rounded-xl p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center">
-                              <input
-                                type="checkbox"
-                                id="requirePasswordChange"
-                                checked={settings.requirePasswordChangeOnFirstLogin}
-                                onChange={(e) => setSettings({ ...settings, requirePasswordChangeOnFirstLogin: e.target.checked })}
-                                className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
-                              />
-                              <label htmlFor="requirePasswordChange" className="ml-3">
-                                <span className="block text-sm font-medium text-gray-900">
-                                  Require password change on first login
-                                </span>
-                                <span className="block text-xs text-gray-500 mt-0.5">
-                                  Force new users to set their own password
-                                </span>
-                              </label>
+                        <div className="mt-6 space-y-4">
+                          <div className="bg-white border border-gray-200 rounded-xl p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  id="requirePasswordChange"
+                                  checked={settings.requirePasswordChangeOnFirstLogin}
+                                  onChange={(e) => {
+                                    console.log('🎛️ DEBUG requirePasswordChangeOnFirstLogin change:', e.target.checked);
+                                    setSettings({ ...settings, requirePasswordChangeOnFirstLogin: e.target.checked });
+                                  }}
+                                  className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                                />
+                                <label htmlFor="requirePasswordChange" className="ml-3">
+                                  <span className="block text-sm font-medium text-gray-900">
+                                    Require password change on first login
+                                  </span>
+                                  <span className="block text-xs text-gray-500 mt-0.5">
+                                    Force new users to set their own password
+                                  </span>
+                                </label>
+                              </div>
+                              <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
+                                settings.requirePasswordChangeOnFirstLogin 
+                                  ? 'bg-green-100 text-green-800 border border-green-200' 
+                                  : 'bg-gray-100 text-gray-800 border border-gray-200'
+                              }`}>
+                                {settings.requirePasswordChangeOnFirstLogin ? 'Enabled' : 'Disabled'}
+                              </span>
                             </div>
-                            <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
-                              settings.requirePasswordChangeOnFirstLogin 
-                                ? 'bg-green-100 text-green-800 border border-green-200' 
-                                : 'bg-gray-100 text-gray-800 border border-gray-200'
-                            }`}>
-                              {settings.requirePasswordChangeOnFirstLogin ? 'Enabled' : 'Disabled'}
-                            </span>
                           </div>
+
+
                         </div>
                       </div>
 
                       <div className="flex justify-end border-t border-gray-200 pt-6">
                         <button
                           onClick={handleSaveSettings}
-                          disabled={saving}
+                          disabled={saving || loading}
                           className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {saving ? 'Saving...' : 'Save Changes'}
+                          {saving ? 'Saving...' : loading ? 'Loading...' : 'Save Changes'}
                         </button>
                       </div>
                     </div>
@@ -343,7 +467,11 @@ export default function SystemSettingsPage() {
                                 min="1"
                                 max="10"
                                 value={settings.maxFailedLoginAttempts}
-                                onChange={(e) => setSettings({ ...settings, maxFailedLoginAttempts: parseInt(e.target.value) || 5 })}
+                                onChange={(e) => {
+                                  const newValue = parseInt(e.target.value) || 5;
+                                  console.log('🎛️ DEBUG maxFailedLoginAttempts change:', e.target.value, '->', newValue);
+                                  setSettings({ ...settings, maxFailedLoginAttempts: newValue });
+                                }}
                                 className="input-field pr-20"
                               />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -364,7 +492,11 @@ export default function SystemSettingsPage() {
                                 type="number"
                                 min="1"
                                 value={settings.accountLockDurationMinutes}
-                                onChange={(e) => setSettings({ ...settings, accountLockDurationMinutes: parseInt(e.target.value) || 30 })}
+                                onChange={(e) => {
+                                  const newValue = parseInt(e.target.value) || 30;
+                                  console.log('🎛️ DEBUG accountLockDurationMinutes change:', e.target.value, '->', newValue);
+                                  setSettings({ ...settings, accountLockDurationMinutes: newValue });
+                                }}
                                 className="input-field pr-20"
                               />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -393,13 +525,18 @@ export default function SystemSettingsPage() {
                       <div className="flex justify-end border-t border-gray-200 pt-6">
                         <button
                           onClick={handleSaveSettings}
-                          disabled={saving}
+                          disabled={saving || loading}
                           className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {saving ? 'Saving...' : 'Save Changes'}
+                          {saving ? 'Saving...' : loading ? 'Loading...' : 'Save Changes'}
                         </button>
                       </div>
                     </div>
+                  )}
+
+                  {/* SMS Notifications Tab */}
+                  {activeTab === 'sms' && (
+                    <SmsSettingsTab />
                   )}
                 </>
               )}

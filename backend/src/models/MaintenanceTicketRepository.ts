@@ -88,6 +88,8 @@ export interface ResolveTicketData {
   resolution_description: string;
   actual_hours?: number;
   cost?: number;
+  custom_maintenance_date?: string; // ISO date string for override
+  custom_next_maintenance_date?: string; // ISO date string for override
 }
 
 export interface TicketFilters {
@@ -102,86 +104,130 @@ export interface TicketFilters {
 export class MaintenanceTicketRepository {
   
   /**
-   * Fetch KPI data for maintenance tickets dashboard
+   * Fetch KPI data for maintenance tickets dashboard (vendor-specific)
    */
   async getTicketKPIs(vendorId: number): Promise<TicketKPIs> {
     const query = `
       SELECT 
-        (SELECT COUNT(*) FROM maintenance_ticket WHERE vendor_id = $1) AS total_tickets,
-        (SELECT COUNT(*) FROM maintenance_ticket WHERE vendor_id = $1 AND ticket_status = 'open') AS open_tickets,
-        (SELECT COUNT(*) FROM maintenance_ticket WHERE vendor_id = $1 AND priority = 'high') AS high_priority_tickets
+        COUNT(*)::int AS total_tickets,
+        COUNT(*) FILTER (WHERE mt.ticket_status = 'open')::int AS open_tickets,
+        COUNT(*) FILTER (WHERE mt.priority = 'high')::int AS high_priority_tickets
+      FROM maintenance_ticket mt
+      LEFT JOIN clients c ON mt.client_id = c.id
+      WHERE mt.vendor_id = $1
+        AND c.created_by_vendor_id = $1  -- Only your clients
     `;
     
     const result = await pool.query(query, [vendorId]);
-    return result.rows[0];
+    return result.rows[0] || {
+      total_tickets: 0,
+      open_tickets: 0,
+      high_priority_tickets: 0
+    };
   }
 
   /**
-   * Fetch paginated ticket list with filters
+   * Fetch ticket list with summary statistics for vendor
    */
-  async getTicketList(vendorId: number, filters: TicketFilters = {}): Promise<TicketListItem[]> {
-    let query = `
-      SELECT 
-        mt.id,
-        mt.ticket_number,
-        COALESCE(ei.serial_number, 'N/A') AS equipment_serial,
-        COALESCE(c.company_name, 'N/A') AS client,
-        mt.ticket_status,
-        mt.support_type,
-        mt.priority,
-        LEFT(mt.issue_description, 50) AS issue_description,
-        mt.scheduled_date
-      FROM maintenance_ticket mt
-      LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
-      LEFT JOIN clients c ON mt.client_id = c.id
-      WHERE mt.vendor_id = $1
-    `;
-    
+  async getTicketList(vendorId: number, filters: TicketFilters = {}): Promise<any> {
     const params: any[] = [vendorId];
     let paramCount = 1;
+    let additionalFilters = '';
 
     // Add filters
     if (filters.status) {
       paramCount++;
-      query += ` AND mt.ticket_status = $${paramCount}`;
+      additionalFilters += ` AND mt.ticket_status = $${paramCount}`;
       params.push(filters.status);
     }
 
     if (filters.support_type) {
       paramCount++;
-      query += ` AND mt.support_type = $${paramCount}`;
+      additionalFilters += ` AND mt.support_type = $${paramCount}`;
       params.push(filters.support_type);
     }
 
     if (filters.priority) {
       paramCount++;
-      query += ` AND mt.priority = $${paramCount}`;
+      additionalFilters += ` AND mt.priority = $${paramCount}`;
       params.push(filters.priority);
     }
 
     if (filters.search) {
       paramCount++;
-      query += ` AND (mt.ticket_number ILIKE $${paramCount} OR mt.issue_description ILIKE $${paramCount})`;
+      additionalFilters += ` AND (mt.ticket_number ILIKE $${paramCount} OR mt.issue_description ILIKE $${paramCount})`;
       params.push(`%${filters.search}%`);
     }
 
-    query += ` ORDER BY mt.created_at DESC`;
+    // Add LIMIT and OFFSET parameters
+    const limit = filters.limit || 25;
+    const offset = filters.offset || 0;
+    
+    paramCount++;
+    const limitParam = paramCount;
+    params.push(limit);
+    
+    paramCount++;
+    const offsetParam = paramCount;
+    params.push(offset);
 
-    // Add pagination
-    if (filters.limit) {
-      paramCount++;
-      query += ` LIMIT $${paramCount}`;
-      params.push(filters.limit);
-    }
+    const query = `
+      SELECT
+        -- Summary Cards
+        COUNT(*)::text AS total_tickets,
+        COUNT(*) FILTER (WHERE mt.ticket_status = 'open')::text AS open_tickets,
+        COUNT(*) FILTER (WHERE mt.priority = 'high')::text AS high_priority,
+        COUNT(*) FILTER (WHERE mt.ticket_status = 'resolved')::text AS resolved_tickets,
 
-    if (filters.offset) {
-      paramCount++;
-      query += ` OFFSET $${paramCount}`;
-      params.push(filters.offset);
-    }
+        -- Tickets List (array)
+        COALESCE((
+            SELECT jsonb_agg(ticket_data ORDER BY created_at DESC)
+            FROM (
+              SELECT 
+                jsonb_build_object(
+                  'id', mt.id,
+                  'ticket_number', mt.ticket_number,
+                  'issue', COALESCE(mt.issue_description, 'No description'),
+                  'client_name', c.company_name,
+                  'equipment', CASE 
+                      WHEN mt.equipment_instance_id IS NOT NULL 
+                      THEN ei.serial_number 
+                      ELSE 'N/A' 
+                  END,
+                  'priority', mt.priority,
+                  'type', mt.support_type,
+                  'status', mt.ticket_status,
+                  'scheduled_date', TO_CHAR(mt.scheduled_date, 'DD/MM/YYYY'),
+                  'created_at', mt.created_at,
+                  'actions', jsonb_build_array('View', 'Edit')
+                ) as ticket_data,
+                mt.created_at
+              FROM maintenance_ticket mt
+              LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
+              LEFT JOIN clients c ON mt.client_id = c.id
+              WHERE mt.vendor_id = $1
+                AND c.created_by_vendor_id = $1
+                ${additionalFilters}
+              ORDER BY mt.created_at DESC
+              LIMIT $${limitParam} OFFSET $${offsetParam}
+            ) subquery
+        ), '[]'::jsonb) AS tickets
+
+      FROM maintenance_ticket mt
+      LEFT JOIN clients c ON mt.client_id = c.id
+      WHERE mt.vendor_id = $1
+        AND c.created_by_vendor_id = $1  -- Only your clients
+        ${additionalFilters}
+    `;
 
     const result = await pool.query(query, params);
-    return result.rows;
+    return result.rows[0] || {
+      total_tickets: '0',
+      open_tickets: '0',
+      high_priority: '0',
+      resolved_tickets: '0',
+      tickets: []
+    };
   }
 
   /**
@@ -277,42 +323,7 @@ export class MaintenanceTicketRepository {
     return result.rows;
   }
 
-  /**
-   * Generate unique ticket number
-   */
-  private async generateTicketNumber(): Promise<string> {
-    const today = new Date();
-    const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
-    
-    // Find the highest ticket number for today
-    const query = `
-      SELECT ticket_number 
-      FROM maintenance_ticket 
-      WHERE ticket_number LIKE 'TKT-${dateStr}-%'
-      ORDER BY ticket_number DESC 
-      LIMIT 1
-    `;
-    
-    const result = await pool.query(query);
-    
-    let nextNumber = 1;
-    if (result.rows.length > 0) {
-      const lastTicket = result.rows[0].ticket_number;
-      const lastNumber = parseInt(lastTicket.split('-')[2]);
-      nextNumber = lastNumber + 1;
-    }
-    
-    return `TKT-${dateStr}-${nextNumber.toString().padStart(3, '0')}`;
-  }
 
-  /**
-   * Validate ticket number uniqueness
-   */
-  private async isTicketNumberUnique(ticketNumber: string): Promise<boolean> {
-    const query = `SELECT COUNT(*) FROM maintenance_ticket WHERE ticket_number = $1`;
-    const result = await pool.query(query, [ticketNumber]);
-    return parseInt(result.rows[0].count) === 0;
-  }
 
   /**
    * Validate client belongs to vendor
@@ -352,21 +363,18 @@ export class MaintenanceTicketRepository {
       }
     }
 
-    // Generate unique ticket number
-    const ticketNumber = await this.generateTicketNumber();
-    
+    // Insert the ticket - the database trigger will automatically generate the ticket_number
     const query = `
       INSERT INTO maintenance_ticket (
-        ticket_number, equipment_instance_id, client_id, vendor_id, 
+        equipment_instance_id, client_id, vendor_id, 
         ticket_status, support_type, issue_description, priority, 
         scheduled_date, assigned_technician, created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, 'open', $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        $1, $2, $3, 'open', $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       ) RETURNING id, ticket_number
     `;
     
     const params = [
-      ticketNumber,
       ticketData.equipment_instance_id || null,
       ticketData.client_id || null,
       vendorId,
@@ -390,7 +398,7 @@ export class MaintenanceTicketRepository {
         mt.id, mt.ticket_number, mt.ticket_status, mt.support_type, 
         mt.priority, mt.issue_description, mt.scheduled_date, 
         mt.created_at, mt.updated_at, mt.resolved_at, 
-        mt.resolution_description, mt.actual_hours, mt.cost,
+        mt.resolution_description, mt.actual_hours, 0 AS cost,
         COALESCE(u.display_name, 'Unassigned') AS assigned_technician,
         c.id AS client_id, c.company_name AS client_name, 
         c.primary_phone AS client_phone, u2.email AS client_email, 
@@ -453,25 +461,25 @@ export class MaintenanceTicketRepository {
 
     if (updateData.priority !== undefined) {
       paramCount++;
-      setClauses.push(`priority = $${paramCount}`);
+      setClauses.push(`priority = $${paramCount}::text`);
       params.push(updateData.priority);
     }
 
     if (updateData.issue_description !== undefined) {
       paramCount++;
-      setClauses.push(`issue_description = $${paramCount}`);
+      setClauses.push(`issue_description = $${paramCount}::text`);
       params.push(updateData.issue_description);
     }
 
     if (updateData.scheduled_date !== undefined) {
       paramCount++;
-      setClauses.push(`scheduled_date = $${paramCount}`);
-      params.push(updateData.scheduled_date);
+      setClauses.push(`scheduled_date = $${paramCount}::date`);
+      params.push(updateData.scheduled_date || null);
     }
 
     if (updateData.assigned_technician !== undefined) {
       paramCount++;
-      setClauses.push(`assigned_technician = $${paramCount}`);
+      setClauses.push(`assigned_technician = $${paramCount}::integer`);
       params.push(updateData.assigned_technician);
     }
 
@@ -479,8 +487,7 @@ export class MaintenanceTicketRepository {
       throw new Error('No update data provided');
     }
 
-    // Always update the updated_at timestamp
-    paramCount++;
+    // Always update the updated_at timestamp (no parameter needed)
     setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
 
     // Add WHERE clause parameters
@@ -494,8 +501,8 @@ export class MaintenanceTicketRepository {
     const query = `
       UPDATE maintenance_ticket
       SET ${setClauses.join(', ')}
-      WHERE id = $${ticketIdParam}
-      AND vendor_id = $${vendorIdParam}
+      WHERE id = $${ticketIdParam}::integer
+      AND vendor_id = $${vendorIdParam}::integer
       RETURNING id, ticket_number
     `;
     
@@ -509,41 +516,95 @@ export class MaintenanceTicketRepository {
   }
 
   /**
-   * Resolve ticket with resolution details
+   * Resolve ticket with resolution details and automatic equipment maintenance date updates
    */
-  async resolveTicket(ticketId: number, vendorId: number, resolveData: ResolveTicketData): Promise<{id: number, ticket_number: string}> {
-    const query = `
-      UPDATE maintenance_ticket
-      SET 
-        ticket_status = 'resolved',
-        resolution_description = $1,
-        actual_hours = $2,
-        cost = $3,
-        resolved_at = CURRENT_TIMESTAMP,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $4
-      AND vendor_id = $5
-      RETURNING id, ticket_number
-    `;
+  async resolveTicket(ticketNumber: string, vendorId: number, resolveData: ResolveTicketData): Promise<{ticket_number: string, resolved_at: string}> {
+    const client = await pool.connect();
     
-    const params = [
-      resolveData.resolution_description,
-      resolveData.actual_hours || null,
-      resolveData.cost || null,
-      ticketId,
-      vendorId
-    ];
-    
-    const result = await pool.query(query, params);
-    
-    if (result.rows.length === 0) {
-      throw new Error('Ticket not found or access denied');
+    try {
+      await client.query('BEGIN');
+      
+      // 1. First, resolve the ticket and get ticket details
+      const ticketQuery = `
+        UPDATE maintenance_ticket
+        SET 
+          ticket_status = 'resolved',
+          resolution_description = $1,
+          resolved_at = CURRENT_TIMESTAMP,
+          actual_hours = $2,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE ticket_number = $3
+          AND vendor_id = $4
+          AND ticket_status = 'open'
+        RETURNING 
+          ticket_number,
+          TO_CHAR(resolved_at, 'Mon DD, YYYY HH12:MI AM') AS resolved_at,
+          equipment_instance_id,
+          support_type
+      `;
+      
+      const ticketParams = [
+        resolveData.resolution_description,
+        resolveData.actual_hours || null,
+        ticketNumber,
+        vendorId
+      ];
+      
+      const ticketResult = await client.query(ticketQuery, ticketParams);
+      
+      if (ticketResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throw new Error('Ticket not found, already resolved, or access denied');
+      }
+      
+      const ticket = ticketResult.rows[0];
+      
+      // 2. Update equipment maintenance dates if it's a maintenance ticket with equipment
+      if (ticket.support_type === 'maintenance' && ticket.equipment_instance_id) {
+        // Use custom dates if provided, otherwise use automatic calculation
+        const lastMaintenanceDate = resolveData.custom_maintenance_date || 'CURRENT_DATE';
+        const nextMaintenanceDate = resolveData.custom_next_maintenance_date 
+          ? `'${resolveData.custom_next_maintenance_date}'::date`
+          : `${lastMaintenanceDate} + INTERVAL '1 day' * COALESCE(maintenance_interval_days, 365)`;
+        
+        const equipmentUpdateQuery = `
+          UPDATE equipment_instance 
+          SET 
+            last_maintenance_date = ${lastMaintenanceDate},
+            next_maintenance_date = ${nextMaintenanceDate},
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+          AND vendor_id = $2
+          RETURNING 
+            serial_number,
+            TO_CHAR(last_maintenance_date, 'Mon DD, YYYY') AS new_last_maintenance_date,
+            TO_CHAR(next_maintenance_date, 'Mon DD, YYYY') AS new_next_maintenance_date
+        `;
+        
+        const equipmentResult = await client.query(equipmentUpdateQuery, [ticket.equipment_instance_id, vendorId]);
+        
+        if (equipmentResult.rows.length > 0) {
+          const isCustomDates = resolveData.custom_maintenance_date || resolveData.custom_next_maintenance_date;
+          const dateType = isCustomDates ? 'Custom' : 'Automatic';
+          console.log(`${dateType} equipment maintenance dates updated for ${equipmentResult.rows[0].serial_number}. Last: ${equipmentResult.rows[0].new_last_maintenance_date}, Next: ${equipmentResult.rows[0].new_next_maintenance_date}`);
+        }
+      }
+      
+      await client.query('COMMIT');
+      
+      return {
+        ticket_number: ticket.ticket_number,
+        resolved_at: ticket.resolved_at
+      };
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error resolving ticket:', error);
+      throw error;
+    } finally {
+      client.release();
     }
-    
-    return result.rows[0];
-  }
-
-  /**
+  }  /**
    * Close ticket
    */
   async closeTicket(ticketId: number, vendorId: number): Promise<{id: number, ticket_number: string}> {
@@ -577,6 +638,105 @@ export class MaintenanceTicketRepository {
     
     const result = await pool.query(query, [ticketId, vendorId]);
     return result.rows[0] || null;
+  }
+
+  /**
+   * Get comprehensive ticket details for detail page
+   */
+  static async getTicketDetailsByNumber(ticketNumber: string, vendorId: number): Promise<any> {
+    const query = `
+      SELECT
+        -- Header - Match frontend TicketDetails interface
+        mt.id,
+        mt.ticket_number,
+        mt.ticket_status,
+        mt.support_type,
+        mt.priority,
+        mt.issue_description,
+        mt.resolution_description,
+        mt.scheduled_date,
+        mt.created_at,
+        mt.updated_at,
+        mt.resolved_at,
+        -- Calculate hours from creation time to now (if not resolved) or to resolved time
+        ROUND(
+            CASE 
+                WHEN mt.resolved_at IS NOT NULL THEN 
+                    EXTRACT(EPOCH FROM (mt.resolved_at - mt.created_at)) / 3600
+                ELSE 
+                    EXTRACT(EPOCH FROM (NOW() - mt.created_at)) / 3600
+            END::NUMERIC, 2
+        ) AS calculated_hours,
+        0 AS cost,
+
+        -- Client object - Match frontend client interface
+        CASE 
+            WHEN mt.client_id IS NOT NULL THEN jsonb_build_object(
+                'id', c.id,
+                'company_name', c.company_name,
+                'primary_phone', c.primary_phone,
+                'email', cu.email,
+                'street_address', c.street_address
+            )
+            ELSE NULL 
+        END AS client,
+
+        -- Equipment object - Match frontend equipment interface  
+        CASE 
+            WHEN mt.equipment_instance_id IS NOT NULL THEN jsonb_build_object(
+                'id', ei.id,
+                'serial_number', ei.serial_number,
+                'equipment_name', e.equipment_name,
+                'equipment_type', e.equipment_type,
+                'compliance_status', ei.compliance_status
+            )
+            ELSE NULL 
+        END AS equipment
+
+      FROM public.maintenance_ticket mt
+      LEFT JOIN public.clients c ON mt.client_id = c.id
+      LEFT JOIN public."user" cu ON c.user_id = cu.id
+      LEFT JOIN public.equipment_instance ei ON mt.equipment_instance_id = ei.id
+      LEFT JOIN public.equipment e ON ei.equipment_id = e.id
+
+      WHERE mt.ticket_number = $1
+        AND mt.vendor_id = $2
+        AND (c.created_by_vendor_id = $2 OR mt.client_id IS NULL)
+    `;
+    
+    const result = await pool.query(query, [ticketNumber, vendorId]);
+    
+    if (result.rows.length === 0) {
+      return null;
+    }
+    
+    return result.rows[0];
+  }
+
+
+
+  /**
+   * Get equipment instances for a specific client (for maintenance tickets)
+   */
+  static async getEquipmentForClient(clientId: number, vendorId: number): Promise<{id: number, serial_number: string, equipment_name: string, location?: string, compliance_status: string}[]> {
+    const query = `
+      SELECT 
+        ei.id,
+        ei.serial_number,
+        e.equipment_name,
+        ei.location,
+        ei.compliance_status
+      FROM public.equipment_instance ei
+      JOIN public.equipment e ON ei.equipment_id = e.id
+      WHERE ei.assigned_to = $1
+        AND ei.vendor_id = $2
+        AND ei.status = 'assigned'
+        AND ei.deleted_at IS NULL
+      ORDER BY ei.serial_number
+    `;
+    
+    const result = await pool.query(query, [clientId, vendorId]);
+    return result.rows;
   }
 }
 

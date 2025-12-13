@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { AuthenticatedRequest, PaginationQuery } from '../types/api';
 import { validationResult } from 'express-validator';
+import { DebugLogger } from '../utils/DebugLogger';
 
 /**
  * Base Controller Class
@@ -20,6 +21,21 @@ export abstract class BaseController {
         message: error.msg,
         code: 'VALIDATION_ERROR'
       }));
+      
+      // Enhanced logging for debugging
+      DebugLogger.log('Validation failed', {
+        requestBody: req.body,
+        validationErrors: validationErrors,
+        allErrors: errors.array(),
+        method: req.method,
+        url: req.url
+      }, 'WARNING');
+      
+      console.log('BaseController: Validation failed:', {
+        requestBody: req.body,
+        validationErrors: validationErrors,
+        allErrors: errors.array()
+      });
       
       ApiResponseUtil.validationError(res, validationErrors);
       return false;

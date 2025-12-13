@@ -33,11 +33,71 @@ router.get('/', equipmentController.getEquipmentList);
 router.get('/types', equipmentController.getEquipmentTypes);
 
 /**
+ * @route POST /api/equipment/types
+ * @desc Create new equipment type
+ * @access Vendor/Admin
+ * @body equipment_code - Unique equipment code
+ * @body equipment_name - Name of the equipment
+ * @body equipment_type - Category type
+ * @body manufacturer - Equipment manufacturer
+ * @body model - Equipment model
+ * @body description - Optional description
+ * @body specifications - JSON specifications object
+ * @body weight_kg - Weight in kilograms
+ * @body dimensions - Physical dimensions
+ * @body warranty_years - Warranty period
+ * @body default_lifespan_years - Default lifespan
+ */
+router.post('/types', equipmentController.createEquipmentType);
+
+/**
+ * @route PUT /api/equipment/types/:id
+ * @desc Update existing equipment type
+ * @access Vendor
+ * @param id - Equipment type ID
+ * @body equipment_name - Name of the equipment
+ * @body manufacturer - Equipment manufacturer
+ * @body model - Equipment model
+ * @body description - Optional description
+ * @body warranty_years - Warranty period
+ * @body weight_kg - Weight in kilograms
+ * @body dimensions - Physical dimensions
+ * @body default_lifespan_years - Default lifespan
+ * @note equipment_code and equipment_type cannot be modified
+ */
+router.put('/types/:id', equipmentController.updateEquipmentType);
+
+/**
+ * @route GET /api/equipment/stats
+ * @desc Get aggregated equipment statistics for management page
+ * @access Vendor/Admin
+ */
+router.get('/stats', equipmentController.getEquipmentStats);
+
+/**
  * @route GET /api/equipment/clients
  * @desc Get clients for assignment modal
  * @access Vendor
  */
 router.get('/clients', equipmentController.getClientsForAssignment);
+
+/**
+ * @route POST /api/equipment/assign
+ * @desc Assign equipment instances to a client
+ * @access Vendor
+ * @body client_id - Client user ID
+ * @body equipment_instances - Array of instance IDs
+ * @body assignment_date - Assignment date
+ * @body notes - Assignment notes (optional)
+ */
+router.post('/assign', equipmentController.bulkAssignEquipment);
+
+/**
+ * @route DELETE /api/equipment/:id/remove-assignment
+ * @desc Remove equipment assignment from client
+ * @access Vendor
+ */
+router.delete('/:id/remove-assignment', equipmentController.removeEquipmentAssignment);
 
 /**
  * @route POST /api/equipment
@@ -54,10 +114,23 @@ router.get('/clients', equipmentController.getClientsForAssignment);
 router.post('/', equipmentController.addEquipmentInstance);
 
 /**
- * @route GET /api/equipment/:id
- * @desc Get equipment instance details
+ * @route GET /api/equipment/instances/:equipmentTypeId
+ * @desc Get equipment instances with enhanced maintenance information
  * @access Vendor
- * @param id - Equipment instance ID
+ * @param equipmentTypeId - Equipment type ID
+ * @query page - Page number (default: 1)
+ * @query limit - Items per page (default: 25)
+ * @query status - Filter by status
+ * @query compliance_status - Filter by compliance status
+ * @query search - Search term
+ */
+router.get('/instances/:equipmentTypeId', equipmentController.getEquipmentInstancesWithMaintenance);
+
+/**
+ * @route GET /api/equipment/:id
+ * @desc Get equipment type details with comprehensive metrics
+ * @access Vendor/Admin
+ * @param id - Equipment type ID
  */
 router.get('/:id', equipmentController.getEquipmentDetails);
 

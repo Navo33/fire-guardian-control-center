@@ -20,6 +20,8 @@ export const API_ENDPOINTS = {
     LOGIN: `${API_BASE_URL}/auth/login`,
     LOGOUT: `${API_BASE_URL}/auth/logout`,
     VERIFY: `${API_BASE_URL}/auth/verify`,
+    REFRESH: `${API_BASE_URL}/auth/refresh`,
+    CHANGE_PASSWORD: `${API_BASE_URL}/auth/change-password`,
   },
   
   // Dashboard
@@ -27,6 +29,7 @@ export const API_ENDPOINTS = {
     OVERVIEW: `${API_BASE_URL}/dashboard/overview`,
     STATS: `${API_BASE_URL}/dashboard/stats`,
     RECENT_VENDORS: `${API_BASE_URL}/dashboard/recent-vendors`,
+    CRITICAL_ALERTS: `${API_BASE_URL}/dashboard/critical-alerts`,
     RECENT_ACTIVITY: `${API_BASE_URL}/dashboard/recent-activity`,
     INSIGHTS: `${API_BASE_URL}/dashboard/insights`,
     VENDOR_KPIS: `${API_BASE_URL}/dashboard/vendor-kpis`,
@@ -56,6 +59,8 @@ export const API_ENDPOINTS = {
     BY_ID: (id: string | number) => `${API_BASE_URL}/user-details/${id}`,
     UPDATE: (id: string | number) => `${API_BASE_URL}/user-details/${id}`,
     RESET_PASSWORD: (id: string | number) => `${API_BASE_URL}/user-details/${id}/reset-password`,
+    DELETION_CHECK: (id: string | number) => `${API_BASE_URL}/user-details/${id}/deletion-check`,
+    DELETE: (id: string | number) => `${API_BASE_URL}/user-details/${id}`,
   },
   
   // Profile
@@ -76,17 +81,50 @@ export const API_ENDPOINTS = {
     BULK_UPDATE: `${API_BASE_URL}/settings/bulk`,
   },
   
-  // Analytics
-  ANALYTICS: {
-    SYSTEM: `${API_BASE_URL}/analytics/system`,
-    METRICS: `${API_BASE_URL}/analytics/metrics`,
+  // Admin Analytics
+  ADMIN_ANALYTICS: {
+    OVERVIEW: `${API_BASE_URL}/admin/analytics/overview`,
+    COMPLIANCE: {
+      SUMMARY: `${API_BASE_URL}/admin/analytics/compliance/summary`,
+      TREND: `${API_BASE_URL}/admin/analytics/compliance/trend`,
+      BY_VENDOR: `${API_BASE_URL}/admin/analytics/compliance/by-vendor`,
+    },
+    TICKETS: {
+      OVERVIEW: `${API_BASE_URL}/admin/analytics/tickets/overview`,
+      TRENDS: `${API_BASE_URL}/admin/analytics/tickets/trends`,
+      BY_TYPE: `${API_BASE_URL}/admin/analytics/tickets/by-type`,
+      RECENT_HIGH_PRIORITY: `${API_BASE_URL}/admin/analytics/tickets/recent-high-priority`,
+    },
+    VENDORS: {
+      RANKINGS: `${API_BASE_URL}/admin/analytics/vendors/rankings`,
+    },
+    EQUIPMENT: {
+      CATEGORIES: `${API_BASE_URL}/admin/analytics/equipment/categories`,
+    },
+    AUDIT: {
+      TRENDS: `${API_BASE_URL}/admin/analytics/audit/trends`,
+      RECENT: `${API_BASE_URL}/admin/analytics/audit/recent`,
+    },
+    SECURITY: {
+      SUMMARY: `${API_BASE_URL}/admin/analytics/security/summary`,
+    },
+    USERS: {
+      TRENDS: `${API_BASE_URL}/admin/analytics/users/trends`,
+      PASSWORD_RESETS: `${API_BASE_URL}/admin/analytics/users/password-resets`,
+    },
+    // New comprehensive reporting endpoints
+    COMPREHENSIVE_REPORT: `${API_BASE_URL}/admin/analytics/report/comprehensive`,
+    SECURITY_ANALYTICS: `${API_BASE_URL}/admin/analytics/security/analytics`,
   },
   
   // Equipment
   EQUIPMENT: {
+    BASE: `${API_BASE_URL}/equipment`,
     LIST: `${API_BASE_URL}/equipment`,
     CREATE: `${API_BASE_URL}/equipment`,
     TYPES: `${API_BASE_URL}/equipment/types`,
+    CREATE_TYPE: `${API_BASE_URL}/equipment/types`,
+    STATS: `${API_BASE_URL}/equipment/stats`,
     CLIENTS: `${API_BASE_URL}/equipment/clients`,
     BY_ID: (id: string | number) => `${API_BASE_URL}/equipment/${id}`,
     UPDATE: (id: string | number) => `${API_BASE_URL}/equipment/${id}`,
@@ -94,7 +132,9 @@ export const API_ENDPOINTS = {
     RELATED: (id: string | number) => `${API_BASE_URL}/equipment/${id}/related`,
     ASSIGNMENTS: (id: string | number) => `${API_BASE_URL}/equipment/${id}/assignments`,
     MAINTENANCE: (id: string | number) => `${API_BASE_URL}/equipment/${id}/maintenance`,
-    ASSIGN: (id: string | number) => `${API_BASE_URL}/equipment/${id}/assign`,
+    ASSIGN: `${API_BASE_URL}/equipment/assign`,
+    ASSIGN_SINGLE: (id: string | number) => `${API_BASE_URL}/equipment/${id}/assign`,
+    REMOVE_ASSIGNMENT: (id: string | number) => `${API_BASE_URL}/equipment/${id}/remove-assignment`,
   },
 
   // Clients (Vendor-specific)
@@ -111,6 +151,7 @@ export const API_ENDPOINTS = {
 
   // Maintenance Tickets (Vendor-specific)
   MAINTENANCE_TICKETS: {
+    BASE: `${API_BASE_URL}/vendor/tickets`,
     KPIS: `${API_BASE_URL}/vendor/tickets/kpis`,
     LIST: `${API_BASE_URL}/vendor/tickets`,
     CREATE: `${API_BASE_URL}/vendor/tickets`,
@@ -121,6 +162,7 @@ export const API_ENDPOINTS = {
     RELATED: (id: string | number) => `${API_BASE_URL}/vendor/tickets/${id}/related`,
     CLIENTS: `${API_BASE_URL}/vendor/tickets/clients`,
     EQUIPMENT: `${API_BASE_URL}/vendor/tickets/equipment`,
+    EQUIPMENT_FOR_CLIENT: (clientId: string | number) => `${API_BASE_URL}/vendor/tickets/equipment/${clientId}`,
     TECHNICIANS: `${API_BASE_URL}/vendor/tickets/technicians`,
   },
 
@@ -152,22 +194,55 @@ export const API_ENDPOINTS = {
     MAINTENANCE_REPORT: `${API_BASE_URL}/reports/maintenance-report`,
   },
 
+  // Notifications
+  NOTIFICATIONS: {
+    LIST: `${API_BASE_URL}/notifications`,
+    KPIS: `${API_BASE_URL}/notifications/kpis`,
+    MARK_READ: (id: string | number) => `${API_BASE_URL}/notifications/${id}/read`,
+    MARK_ALL_READ: `${API_BASE_URL}/notifications/mark-all-read`,
+    ARCHIVE: (id: string | number) => `${API_BASE_URL}/notifications/${id}/archive`,
+  },
+
+  // Emergency Warnings
+  EMERGENCY_WARNINGS: {
+    ALL: `${API_BASE_URL}/emergency-warnings`,
+    LATEST: `${API_BASE_URL}/emergency-warnings/latest`,
+  },
+  
+  // SMS
+  SMS: {
+    BALANCE: `${API_BASE_URL}/sms/balance`,
+    STATISTICS: `${API_BASE_URL}/sms/statistics`,
+    PREFERENCES: `${API_BASE_URL}/sms/preferences`,
+    SETTINGS: `${API_BASE_URL}/sms/settings`,
+    CHECK_NOW: `${API_BASE_URL}/sms/check-now`,
+    TEST: `${API_BASE_URL}/sms/test`,
+  },
+
   // Client Views (for client users)
   CLIENT: {
     DASHBOARD: {
-      KPIS: `${API_BASE_URL}/client/dashboard/kpis`,
-      ACTIVITY: `${API_BASE_URL}/client/dashboard/activity`,
+      KPIS: `${API_BASE_URL}/client-views/dashboard/kpis`,
+      ACTIVITY: `${API_BASE_URL}/client-views/dashboard/activity`,
     },
-    EQUIPMENT: `${API_BASE_URL}/client/equipment`,
-    TICKETS: `${API_BASE_URL}/client/tickets`,
+    EQUIPMENT: {
+      LIST: `${API_BASE_URL}/client-views/equipment`,
+      OVERVIEW: `${API_BASE_URL}/client-views/equipment/overview`,
+      BY_ID: (id: string | number) => `${API_BASE_URL}/client-views/equipment/${id}`,
+      DETAIL: `${API_BASE_URL}/client-views/equipment`,
+      STATS: `${API_BASE_URL}/client-views/equipment/stats`,
+      TYPES: `${API_BASE_URL}/client-views/equipment/types`,
+    },
+    SERVICE_REQUESTS: `${API_BASE_URL}/client-views/service-requests`,
+    SERVICE_REQUEST_BY_ID: (id: string | number) => `${API_BASE_URL}/client-views/service-requests/${id}`,
     REPORTS: {
-      KPIS: `${API_BASE_URL}/client/reports/kpis`,
-      COMPLIANCE_CHART: `${API_BASE_URL}/client/reports/compliance-chart`,
-      LIST: `${API_BASE_URL}/client/reports`,
-      BY_ID: (id: string) => `${API_BASE_URL}/client/reports/${id}`,
-      RELATED: (id: string) => `${API_BASE_URL}/client/reports/${id}/related`,
-      EXPORT: (id: string) => `${API_BASE_URL}/client/reports/${id}/export`,
-      EXPORT_ALL: `${API_BASE_URL}/client/reports/export-all`,
+      KPIS: `${API_BASE_URL}/client-views/reports/kpis`,
+      COMPLIANCE_CHART: `${API_BASE_URL}/client-views/reports/compliance-chart`,
+      LIST: `${API_BASE_URL}/client-views/reports`,
+      BY_ID: (id: string) => `${API_BASE_URL}/client-views/reports/${id}`,
+      RELATED: (id: string) => `${API_BASE_URL}/client-views/reports/${id}/related`,
+      EXPORT: (id: string) => `${API_BASE_URL}/client-views/reports/${id}/export`,
+      EXPORT_ALL: `${API_BASE_URL}/client-views/reports/export-all`,
     },
   },
 };

@@ -6,6 +6,7 @@ export interface EquipmentFilters {
   status?: string;
   compliance_status?: string;
   search?: string;
+  equipment_type_id?: number;
 }
 
 export interface CreateEquipmentInstanceData {
@@ -32,6 +33,41 @@ export interface AssignEquipmentData {
   assignment_number: string;
   unit_cost: number;
   total_cost: number;
+}
+
+export interface BulkAssignEquipmentData {
+  vendor_id: number;
+  client_id: number;
+  equipment_instances: number[];
+  assignment_date: string;
+  notes?: string;
+}
+
+export interface CreateEquipmentTypeData {
+  vendor_id: number;
+  equipment_code?: string;
+  equipment_name: string;
+  description?: string;
+  equipment_type: string;
+  manufacturer: string;
+  model: string;
+  specifications?: any;
+  weight_kg?: number;
+  dimensions?: string;
+  warranty_years?: number;
+  default_lifespan_years?: number;
+}
+
+export interface UpdateEquipmentTypeData {
+  equipment_name?: string;
+  description?: string | null;
+  manufacturer?: string | null;
+  model?: string | null;
+  specifications?: any | null;
+  weight_kg?: number | null;
+  dimensions?: string | null;
+  warranty_years?: number | null;
+  default_lifespan_years?: number | null;
 }
 
 /**
@@ -79,17 +115,26 @@ export class EquipmentRepository {
         queryParams.push(`%${filters.search}%`);
       }
 
+      // Add equipment type filter
+      if (filters.equipment_type_id) {
+        paramCount++;
+        whereClause += ` AND ei.equipment_id = $${paramCount}`;
+        queryParams.push(filters.equipment_type_id);
+      }
+
       const query = `
         SELECT 
           ei.id,
           ei.serial_number,
           e.equipment_name,
-          e.equipment_type,
+          e.equipment_type AS equipment_category,
           ei.status,
           ei.compliance_status,
+          ei.location,
           ei.next_maintenance_date,
-          ei.expiry_date,
-          COALESCE(c.company_name, 'Unassigned') AS client
+          ei.expiry_date AS warranty_expiry,
+          ei.created_at,
+          COALESCE(c.company_name, 'Unassigned') AS assigned_client
         FROM equipment_instance ei
         JOIN equipment e ON ei.equipment_id = e.id
         LEFT JOIN clients c ON ei.assigned_to = c.id
@@ -142,6 +187,13 @@ export class EquipmentRepository {
         queryParams.push(`%${filters.search}%`);
       }
 
+      // Add equipment type filter
+      if (filters.equipment_type_id) {
+        paramCount++;
+        whereClause += ` AND ei.equipment_id = $${paramCount}`;
+        queryParams.push(filters.equipment_type_id);
+      }
+
       const query = `
         SELECT COUNT(*) as count
         FROM equipment_instance ei
@@ -159,27 +211,249 @@ export class EquipmentRepository {
   }
 
   /**
-   * Get equipment types for Add Equipment modal
+   * Get equipment catalog for equipment management page
+   * Uses direct SQL queries as specified
    */
-  static async getEquipmentTypes() {
+  static async getEquipmentTypes(vendorId?: number, filters: { search?: string, category?: string } = {}) {
     const startTime = DebugLogger.startTimer();
-    DebugLogger.log('Getting equipment types', {}, 'EQUIPMENT_REPO');
+    DebugLogger.log('Getting vendor equipment catalog', { vendorId, filters }, 'EQUIPMENT_REPO');
+
+    try {
+      if (!vendorId) {
+        throw new Error('Vendor ID is required for equipment types');
+      }
+
+      const queryParams: any[] = [vendorId];
+      let additionalFilters = '';
+      let paramCount = 1;
+
+      // Add search filter
+      if (filters.search) {
+        paramCount++;
+        additionalFilters += ` AND (e.equipment_name ILIKE $${paramCount} OR e.equipment_code ILIKE $${paramCount})`;
+        queryParams.push(`%${filters.search}%`);
+      }
+
+      // Add category filter
+      if (filters.category) {
+        paramCount++;
+        additionalFilters += ` AND e.equipment_type = $${paramCount}`;
+        queryParams.push(filters.category);
+      }
+
+      // Get the equipment types list - only show equipment types owned by this vendor
+      const query = `
+        SELECT jsonb_build_object(
+          'id', e.id,
+          'equipment_name', e.equipment_name,
+          'equipment_code', e.equipment_code,
+          'equipment_type', e.equipment_type,
+          'manufacturer', e.manufacturer,
+          'model', e.model,
+          'instance_count', COALESCE(inst.cnt, 0),
+          'available_count', COALESCE(inst.available, 0),
+          'assigned_count', COALESCE(inst.assigned, 0),
+          'specifications', e.specifications,
+          -- Formatted fields for compatibility
+          'equipment_details', e.equipment_name || E'\\n' || e.manufacturer || ' - ' || COALESCE(e.model, ''),
+          'category_type', e.equipment_type,
+          'code', 'Code: ' || e.equipment_code,
+          'total_active_instances', COALESCE(inst.cnt, 0),
+          'lifespan', 'Lifespan: ' || e.default_lifespan_years || ' years',
+          'description', COALESCE(e.description, 'No description available'),
+          'default_lifespan_years', e.default_lifespan_years,
+          'created_at', e.created_at
+        ) AS equipment_type_data
+        FROM equipment e
+        LEFT JOIN LATERAL (
+          SELECT
+            COUNT(*) AS cnt,
+            COUNT(*) FILTER (WHERE ei.status = 'available') AS available,
+            COUNT(*) FILTER (WHERE ei.status = 'assigned') AS assigned
+          FROM equipment_instance ei
+          WHERE ei.equipment_id = e.id
+            AND ei.vendor_id = $1
+            AND ei.deleted_at IS NULL
+        ) inst ON TRUE
+        WHERE e.vendor_id = $1 
+          AND e.deleted_at IS NULL ${additionalFilters}
+        ORDER BY e.equipment_name
+      `;
+
+      DebugLogger.database('Vendor Equipment Catalog Query', query);
+      const result = await pool.query(query, queryParams);
+
+      DebugLogger.performance('Vendor equipment catalog fetch', startTime, { count: result.rows.length });
+      
+      // Extract equipment type data from each row
+      const equipmentTypes = result.rows.map(row => row.equipment_type_data);
+
+      return equipmentTypes;
+
+    } catch (error) {
+      DebugLogger.error('Error fetching equipment catalog', error, { vendorId, filters });
+      throw error;
+    }
+  }
+
+  /**
+   * Get aggregated equipment statistics for management cards
+   * Returns: { equipment_types, total_instances, categories, avg_lifespan }
+   */
+  static async getEquipmentStats(vendorId?: number) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Getting vendor equipment stats', { vendorId }, 'EQUIPMENT_REPO');
+
+    try {
+      if (!vendorId) {
+        throw new Error('Vendor ID is required for equipment stats');
+      }
+
+      const query = `
+        SELECT
+          -- Summary Cards - count all equipment types owned by vendor
+          (SELECT COUNT(*) FROM public.equipment WHERE vendor_id = $1 AND deleted_at IS NULL) AS equipment_types,
+          (SELECT COUNT(*) FROM public.equipment_instance WHERE vendor_id = $1 AND deleted_at IS NULL) AS total_instances,
+          (SELECT COUNT(DISTINCT equipment_type) FROM public.equipment WHERE vendor_id = $1 AND deleted_at IS NULL) AS categories,
+          (SELECT ROUND(AVG(default_lifespan_years), 1) FROM public.equipment WHERE vendor_id = $1 AND deleted_at IS NULL) AS avg_lifespan
+      `;
+
+      DebugLogger.database('Vendor Equipment Stats Query', query);
+      const result = await pool.query(query, [vendorId]);
+
+      const row = result.rows[0] || {};
+
+      DebugLogger.performance('Vendor equipment stats fetch', startTime, { vendorId, stats: row });
+
+      return {
+        equipment_types: parseInt(row.equipment_types || 0, 10),
+        total_instances: parseInt(row.total_instances || 0, 10),
+        categories: parseInt(row.categories || 0, 10),
+        avg_lifespan: row.avg_lifespan !== null && row.avg_lifespan !== undefined ? parseFloat(row.avg_lifespan) : 0
+      };
+
+    } catch (error) {
+      DebugLogger.error('Error fetching vendor equipment stats', error, { vendorId });
+      throw error;
+    }
+  }
+
+  /**
+   * Get detailed equipment type information for the details page
+   * Uses comprehensive SQL with instance metrics and maintenance data
+   */
+  static async getEquipmentTypeDetails(equipmentId: number, vendorId?: number) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Getting equipment type details', { equipmentId, vendorId }, 'EQUIPMENT_REPO');
 
     try {
       const query = `
-        SELECT id, equipment_name
-        FROM equipment
-        WHERE deleted_at IS NULL
-        ORDER BY equipment_name
+        SELECT
+          -- Header
+          e.equipment_name,
+          e.equipment_code,
+          e.equipment_type,
+          e.manufacturer,
+          e.model,
+          e.default_lifespan_years,
+          TO_CHAR(e.created_at, 'MM/DD/YYYY') AS created_date,
+          COALESCE(e.description, 'No description available') AS description,
+
+          -- Summary
+          COALESCE(inst.total, 0)::text AS total_instances,
+          COALESCE(inst.available, 0)::text AS available_instances,
+          COALESCE(inst.assigned, 0)::text AS assigned_instances,
+          COALESCE(inst.maintenance_due, 0)::text AS maintenance_instances,
+          COALESCE(inst.avg_interval_months, 12)::text AS standard_interval_months,
+          COALESCE(inst.overdue, 0)::text AS instances_requiring_maintenance,
+
+          -- Specs and Maintenance Info
+          e.specifications,
+          e.warranty_years,
+          e.weight_kg,
+          e.dimensions,
+          COALESCE(inst.avg_interval_months, 12) AS maintenance_interval_months,
+          COALESCE(e.warranty_years * 12, 0) AS warranty_period_months,
+
+          -- Instances
+          COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'id', ei.id,
+              'status', ei.status,
+              'location', ei.location,
+              'client_name', c.company_name,
+              'expiry_date', ei.expiry_date,
+              'purchase_date', ei.purchase_date,
+              'serial_number', ei.serial_number,
+              'warranty_expiry', ei.warranty_expiry,
+              'compliance_status', ei.compliance_status,
+              'next_maintenance_date', ei.next_maintenance_date
+            ))
+            FROM equipment_instance ei
+            LEFT JOIN clients c ON ei.assigned_to = c.id
+            WHERE ei.equipment_id = e.id AND ei.deleted_at IS NULL
+          ), '[]'::jsonb) AS instances,
+
+          -- Assignments – FIXED: SUM outside jsonb_agg
+          COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'assignment_id', ea.id,
+              'assignment_number', ea.assignment_number,
+              'client_name', c.company_name,
+              'assigned_at', ea.assigned_at,
+              'start_date', ea.start_date,
+              'end_date', ea.end_date,
+              'status', ea.status,
+              'quantity', ea.total_qty,
+              'notes', COALESCE(ea.notes, '')
+            ))
+            FROM (
+              SELECT 
+                ea.*,
+                SUM(ai.quantity) AS total_qty
+              FROM equipment_assignment ea
+              JOIN assignment_item ai ON ea.id = ai.assignment_id
+              JOIN equipment_instance ei ON ai.equipment_instance_id = ei.id
+              WHERE ei.equipment_id = e.id AND ei.vendor_id = $2
+              GROUP BY ea.id
+            ) ea
+            JOIN clients c ON ea.client_id = c.id
+          ), '[]'::jsonb) AS assignments
+
+        FROM public.equipment e
+        LEFT JOIN LATERAL (
+          SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE ei.status = 'available') AS available,
+            COUNT(*) FILTER (WHERE ei.status = 'assigned') AS assigned,
+            COUNT(*) FILTER (WHERE ei.next_maintenance_date <= CURRENT_DATE + 30) AS maintenance_due,
+            COUNT(*) FILTER (WHERE ei.next_maintenance_date < CURRENT_DATE) AS overdue,
+            ROUND(AVG(ei.maintenance_interval_days) / 30.0, 1) AS avg_interval_months
+          FROM equipment_instance ei
+          WHERE ei.equipment_id = e.id AND ei.vendor_id = $2 AND ei.deleted_at IS NULL
+        ) inst ON TRUE
+
+        WHERE e.id = $1 AND e.vendor_id = $2 AND e.deleted_at IS NULL
       `;
 
-      const result = await pool.query(query);
+      if (!vendorId) {
+        throw new Error('Vendor ID is required for equipment type details');
+      }
 
-      DebugLogger.performance('Equipment types fetch', startTime, { count: result.rows.length });
-      return result.rows;
+      DebugLogger.database('Equipment Type Details Query', query);
+      const result = await pool.query(query, [equipmentId, vendorId]);
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const equipmentDetails = result.rows[0];
+
+      DebugLogger.performance('Equipment type details fetch', startTime, { equipmentId });
+      return equipmentDetails;
 
     } catch (error) {
-      DebugLogger.error('Error fetching equipment types', error);
+      DebugLogger.error('Error fetching equipment type details', error, { equipmentId, vendorId });
       throw error;
     }
   }
@@ -219,30 +493,42 @@ export class EquipmentRepository {
 
     try {
       const query = `
-        INSERT INTO equipment_instance (
-          equipment_id, serial_number, vendor_id, status, purchase_date, 
-          warranty_expiry, expiry_date, next_maintenance_date, 
-          maintenance_interval_days, location, notes, created_at, updated_at
+        INSERT INTO public.equipment_instance (
+          equipment_id,
+          serial_number,
+          vendor_id,
+          purchase_date,
+          warranty_expiry,
+          location,
+          status,
+          maintenance_interval_days
         ) VALUES (
-          $1, $2, $3, 'available', $4, 
-          $5, 
-          $4::date + (SELECT default_lifespan_years * INTERVAL '1 year' FROM equipment WHERE id = $1),
-          $4::date + ($6 * INTERVAL '1 day'), 
-          $6, $7, $8, 
-          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          $1,                              -- equipment.id
+          $2,                              -- serial_number
+          $3,                              -- vendor.id
+          $4::date,                        -- purchase_date
+          $5::date,                        -- warranty_expiry
+          $6,                              -- location
+          'available',                     -- status (default)
+          $7                               -- maintenance_interval_days
         )
-        RETURNING id, serial_number
+        RETURNING 
+          id,
+          serial_number,
+          status,
+          expiry_date,                     -- auto-calculated by trigger
+          next_maintenance_date,           -- auto-set
+          compliance_status
       `;
 
       const queryParams = [
-        data.equipment_id,
-        data.serial_number,
-        data.vendor_id,
-        data.purchase_date,
-        data.warranty_expiry || null,
-        data.maintenance_interval_days,
-        data.location || null,
-        data.notes || null
+        data.equipment_id,                // $1
+        data.serial_number,               // $2
+        data.vendor_id,                   // $3
+        data.purchase_date,               // $4
+        data.warranty_expiry || null,     // $5
+        data.location || null,            // $6
+        data.maintenance_interval_days || 365  // $7
       ];
 
       DebugLogger.database('Add Equipment Instance Query', query);
@@ -618,6 +904,500 @@ export class EquipmentRepository {
       throw error;
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * Generate equipment code based on type
+   */
+  static generateEquipmentCode(equipmentType: string, manufacturer: string): string {
+    const typeMap: { [key: string]: string } = {
+      'lighting': 'LGT',
+      'extinguisher': 'EXT',
+      'alarm': 'ALM',
+      'sprinkler': 'SPR',
+      'detector': 'DET',
+      'door': 'DR',
+      'hose': 'HSE',
+      'panel': 'PNL',
+      'other': 'OTH'
+    };
+
+    const typePrefix = typeMap[equipmentType.toLowerCase()] || 'EQP';
+    const manufacturerPrefix = manufacturer.substring(0, 3).toUpperCase();
+    const timestamp = Date.now().toString().slice(-4); // Last 4 digits of timestamp
+    
+    return `${typePrefix}-${manufacturerPrefix}-${timestamp}`;
+  }
+
+  /**
+   * Create new equipment type
+   */
+  static async createEquipmentType(data: CreateEquipmentTypeData) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Creating equipment type', { data }, 'EQUIPMENT_REPO');
+
+    try {
+      const query = `
+        INSERT INTO public.equipment (
+          vendor_id,
+          equipment_code,
+          equipment_name,
+          description,
+          equipment_type,
+          manufacturer,
+          model,
+          specifications,
+          weight_kg,
+          dimensions,
+          warranty_years,
+          default_lifespan_years
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+        )
+        RETURNING 
+          id,
+          equipment_code,
+          equipment_name,
+          created_at;
+      `;
+
+      // Auto-generate equipment code if not provided
+      const equipmentCode = data.equipment_code || this.generateEquipmentCode(data.equipment_type, data.manufacturer);
+
+      const values = [
+        data.vendor_id,
+        equipmentCode,
+        data.equipment_name,
+        data.description || null,
+        data.equipment_type,
+        data.manufacturer,
+        data.model,
+        data.specifications ? JSON.stringify(data.specifications) : '{}',
+        data.weight_kg || null,
+        data.dimensions || null,
+        data.warranty_years || null,
+        data.default_lifespan_years || null
+      ];
+
+      DebugLogger.database('Create Equipment Type Query', query);
+      const result = await pool.query(query, values);
+
+      DebugLogger.performance('Equipment type creation', startTime);
+      return result.rows[0];
+
+    } catch (error) {
+      DebugLogger.error('Error creating equipment type', error, { data });
+      throw error;
+    }
+  }
+
+  /**
+   * Update equipment type details (restricted fields only)
+   */
+  static async updateEquipmentType(equipmentTypeId: number, vendorId: number, data: UpdateEquipmentTypeData) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Updating equipment type', { equipmentTypeId, vendorId, data }, 'EQUIPMENT_REPO');
+
+    try {
+      // Build dynamic update query based on provided fields
+      const updateFields: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (data.equipment_name !== undefined) {
+        updateFields.push(`equipment_name = $${paramIndex++}`);
+        values.push(data.equipment_name);
+      }
+
+      if (data.description !== undefined) {
+        updateFields.push(`description = $${paramIndex++}`);
+        values.push(data.description);
+      }
+
+      if (data.manufacturer !== undefined) {
+        updateFields.push(`manufacturer = $${paramIndex++}`);
+        values.push(data.manufacturer);
+      }
+
+      if (data.model !== undefined) {
+        updateFields.push(`model = $${paramIndex++}`);
+        values.push(data.model);
+      }
+
+      if (data.specifications !== undefined) {
+        updateFields.push(`specifications = $${paramIndex++}`);
+        values.push(data.specifications ? JSON.stringify(data.specifications) : '{}');
+      }
+
+      if (data.weight_kg !== undefined) {
+        updateFields.push(`weight_kg = $${paramIndex++}`);
+        values.push(data.weight_kg);
+      }
+
+      if (data.dimensions !== undefined) {
+        updateFields.push(`dimensions = $${paramIndex++}`);
+        values.push(data.dimensions);
+      }
+
+      if (data.warranty_years !== undefined) {
+        updateFields.push(`warranty_years = $${paramIndex++}`);
+        values.push(data.warranty_years);
+      }
+
+      if (data.default_lifespan_years !== undefined) {
+        updateFields.push(`default_lifespan_years = $${paramIndex++}`);
+        values.push(data.default_lifespan_years);
+      }
+
+      if (updateFields.length === 0) {
+        throw new Error('No fields to update');
+      }
+
+      // Add updated_at timestamp
+      updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+
+      // Add WHERE clause parameters
+      values.push(equipmentTypeId, vendorId);
+
+      const query = `
+        UPDATE equipment 
+        SET ${updateFields.join(', ')}
+        WHERE id = $${paramIndex++} 
+          AND vendor_id = $${paramIndex++}
+        RETURNING 
+          id,
+          equipment_code,
+          equipment_name,
+          description,
+          equipment_type,
+          manufacturer,
+          model,
+          specifications,
+          weight_kg,
+          dimensions,
+          warranty_years,
+          default_lifespan_years,
+          updated_at;
+      `;
+
+      DebugLogger.database('Update Equipment Type Query', query);
+      const result = await pool.query(query, values);
+
+      if (result.rows.length === 0) {
+        throw new Error('Equipment type not found or access denied');
+      }
+
+      DebugLogger.performance('Equipment type update', startTime);
+      return result.rows[0];
+
+    } catch (error) {
+      DebugLogger.error('Error updating equipment type', error, { equipmentTypeId, vendorId, data });
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk assign multiple equipment instances to a client
+   */
+  static async bulkAssignEquipmentToClient(data: BulkAssignEquipmentData) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Bulk assigning equipment to client', { data }, 'EQUIPMENT_REPO');
+
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Generate assignment number
+      const assignment_number = await this.generateAssignmentNumber();
+
+      // Create equipment assignment
+      const assignmentQuery = `
+        INSERT INTO equipment_assignment (
+          client_id, vendor_id, assignment_number, status, 
+          start_date, notes, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, 'active', 
+          $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ) RETURNING id
+      `;
+
+      const assignmentResult = await client.query(assignmentQuery, [
+        data.client_id,
+        data.vendor_id,
+        assignment_number,
+        data.assignment_date,
+        data.notes || null
+      ]);
+
+      const assignmentId = assignmentResult.rows[0].id;
+
+      // Create assignment items for each equipment instance
+      const itemPromises = data.equipment_instances.map(async (instanceId) => {
+        const itemQuery = `
+          INSERT INTO assignment_item (
+            assignment_id, equipment_instance_id, quantity
+          ) VALUES ($1, $2, 1)
+        `;
+        
+        return client.query(itemQuery, [assignmentId, instanceId]);
+      });
+
+      await Promise.all(itemPromises);
+
+      // Update equipment instance statuses to 'assigned' and set assigned_to
+      const updateInstancesQuery = `
+        UPDATE equipment_instance 
+        SET status = 'assigned', assigned_to = $1, assigned_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ANY($2::int[])
+      `;
+      
+      await client.query(updateInstancesQuery, [data.client_id, data.equipment_instances]);
+
+      await client.query('COMMIT');
+
+      DebugLogger.performance('Bulk equipment assignment', startTime);
+      
+      return {
+        assignment_id: assignmentId,
+        assignment_number,
+        client_id: data.client_id,
+        equipment_count: data.equipment_instances.length,
+        assignment_date: data.assignment_date,
+        status: 'active'
+      };
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      DebugLogger.error('Error in bulk equipment assignment', error, { data });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Remove equipment assignment from client
+   */
+  static async removeEquipmentAssignment(equipmentInstanceId: number, vendorId: number) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Removing equipment assignment', { equipmentInstanceId, vendorId }, 'EQUIPMENT_REPO');
+
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // First, verify the equipment belongs to this vendor and is assigned
+      const checkQuery = `
+        SELECT ei.id, ei.assigned_to, ei.status, c.id as client_id
+        FROM equipment_instance ei
+        LEFT JOIN clients c ON ei.assigned_to = c.id
+        WHERE ei.id = $1 AND ei.vendor_id = $2 AND ei.deleted_at IS NULL
+      `;
+      
+      const checkResult = await client.query(checkQuery, [equipmentInstanceId, vendorId]);
+      
+      if (checkResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return { 
+          success: false, 
+          message: 'Equipment instance not found or does not belong to your vendor account' 
+        };
+      }
+
+      const equipment = checkResult.rows[0];
+      
+      if (equipment.status !== 'assigned' || !equipment.assigned_to) {
+        await client.query('ROLLBACK');
+        return { 
+          success: false, 
+          message: 'Equipment is not currently assigned to any client' 
+        };
+      }
+
+      const clientId = equipment.client_id;
+
+      // Remove from assignment_item table (if exists in formal assignments)
+      const removeAssignmentItemQuery = `
+        DELETE FROM assignment_item 
+        WHERE equipment_instance_id = $1
+      `;
+      await client.query(removeAssignmentItemQuery, [equipmentInstanceId]);
+
+      // Update equipment instance to remove assignment
+      const updateEquipmentQuery = `
+        UPDATE equipment_instance 
+        SET 
+          status = 'available',
+          assigned_to = NULL,
+          assigned_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `;
+      
+      await client.query(updateEquipmentQuery, [equipmentInstanceId]);
+
+      // Check if there are any assignments with no items left and mark them as inactive
+      const cleanupAssignmentsQuery = `
+        UPDATE equipment_assignment 
+        SET status = 'inactive', updated_at = CURRENT_TIMESTAMP
+        WHERE id IN (
+          SELECT ea.id 
+          FROM equipment_assignment ea
+          LEFT JOIN assignment_item ai ON ea.id = ai.assignment_id
+          WHERE ea.status = 'active' AND ai.assignment_id IS NULL
+        )
+      `;
+      await client.query(cleanupAssignmentsQuery);
+
+      await client.query('COMMIT');
+
+      DebugLogger.performance('Equipment assignment removal', startTime);
+      
+      return {
+        success: true,
+        clientId: clientId,
+        message: 'Equipment assignment removed successfully'
+      };
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      DebugLogger.error('Error removing equipment assignment', error, { equipmentInstanceId, vendorId });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Get equipment instances with enhanced maintenance information including open tickets
+   * This is specifically for equipment details page where we need comprehensive maintenance status
+   */
+  static async getEquipmentInstancesWithMaintenanceInfo(
+    vendorId: number, 
+    equipmentTypeId: number,
+    pagination: PaginationQuery,
+    filters: EquipmentFilters = {}
+  ): Promise<any[]> {
+    const startTime = Date.now();
+    try {
+      const offset = ((pagination.page || 1) - 1) * (pagination.limit || 25);
+      
+      let whereClause = `WHERE ei.vendor_id = $1 AND ei.equipment_id = $2 AND ei.deleted_at IS NULL`;
+      const queryParams: any[] = [vendorId, equipmentTypeId];
+      let paramCount = 2;
+
+      // Add additional filters if needed
+      if (filters.status) {
+        paramCount++;
+        whereClause += ` AND ei.status = $${paramCount}`;
+        queryParams.push(filters.status);
+      }
+
+      if (filters.compliance_status) {
+        paramCount++;
+        whereClause += ` AND ei.compliance_status = $${paramCount}`;
+        queryParams.push(filters.compliance_status);
+      }
+
+      if (filters.search) {
+        paramCount++;
+        whereClause += ` AND (ei.serial_number ILIKE $${paramCount} OR e.equipment_name ILIKE $${paramCount})`;
+        queryParams.push(`%${filters.search}%`);
+      }
+
+      const query = `
+        SELECT 
+          ei.id,
+          ei.serial_number,
+          ei.status,
+          ei.compliance_status,
+          ei.location,
+          ei.next_maintenance_date,
+          ei.last_maintenance_date,
+          ei.maintenance_interval_days,
+          ei.expiry_date,
+          ei.purchase_date,
+          ei.warranty_expiry,
+          ei.created_at,
+          ei.updated_at,
+          
+          -- Equipment details
+          e.equipment_name,
+          e.equipment_type,
+          e.manufacturer,
+          e.model,
+          
+          -- Client information
+          COALESCE(c.company_name, 'Unassigned') AS client_name,
+          c.id as client_id,
+          
+          -- Maintenance status calculation
+          CASE 
+            WHEN ei.next_maintenance_date IS NULL THEN 'no_schedule'
+            WHEN ei.next_maintenance_date < CURRENT_DATE THEN 'overdue'
+            WHEN ei.next_maintenance_date - CURRENT_DATE <= 30 THEN 'due_soon'
+            ELSE 'scheduled'
+          END as maintenance_status,
+          
+          -- Days to/past maintenance
+          CASE 
+            WHEN ei.next_maintenance_date IS NULL THEN NULL
+            WHEN ei.next_maintenance_date < CURRENT_DATE THEN (CURRENT_DATE - ei.next_maintenance_date)
+            ELSE (ei.next_maintenance_date - CURRENT_DATE)
+          END as days_to_maintenance,
+          
+          -- Open maintenance tickets information
+          mt.id as open_ticket_id,
+          mt.ticket_number as open_ticket_number,
+          mt.ticket_status as open_ticket_status,
+          mt.priority as open_ticket_priority,
+          mt.created_at as open_ticket_created,
+          mt.issue_description as open_ticket_description,
+          
+          -- Enhanced maintenance status considering tickets
+          CASE 
+            WHEN mt.id IS NOT NULL AND mt.ticket_status = 'open' THEN 'has_open_ticket'
+            WHEN mt.id IS NOT NULL AND mt.ticket_status = 'resolved' THEN 'ticket_resolved'
+            WHEN ei.next_maintenance_date IS NULL THEN 'no_schedule'
+            WHEN ei.next_maintenance_date < CURRENT_DATE THEN 'overdue_no_ticket'
+            WHEN ei.next_maintenance_date - CURRENT_DATE <= 30 THEN 'due_soon'
+            ELSE 'scheduled'
+          END as enhanced_maintenance_status
+          
+        FROM equipment_instance ei
+        JOIN equipment e ON ei.equipment_id = e.id
+        LEFT JOIN clients c ON ei.assigned_to = c.id
+        LEFT JOIN maintenance_ticket mt ON ei.id = mt.equipment_instance_id 
+          AND mt.ticket_status IN ('open', 'resolved') 
+          AND mt.support_type = 'maintenance'
+        ${whereClause}
+        ORDER BY 
+          -- Priority order: open tickets first, then overdue, then due soon
+          CASE 
+            WHEN mt.ticket_status = 'open' THEN 1
+            WHEN ei.next_maintenance_date < CURRENT_DATE THEN 2
+            WHEN ei.next_maintenance_date - CURRENT_DATE <= 30 THEN 3
+            ELSE 4
+          END,
+          ei.next_maintenance_date ASC NULLS LAST,
+          ei.serial_number
+        LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
+      `;
+
+      queryParams.push(pagination.limit || 25, offset);
+
+      DebugLogger.database('Equipment Instances with Maintenance Info Query', query);
+      const result = await pool.query(query, queryParams);
+
+      DebugLogger.performance('Equipment instances with maintenance info fetch', startTime, { count: result.rows.length });
+      return result.rows;
+
+    } catch (error) {
+      DebugLogger.error('Error fetching equipment instances with maintenance info', error, { vendorId, equipmentTypeId, pagination, filters });
+      throw error;
     }
   }
 }

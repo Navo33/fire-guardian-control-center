@@ -32,6 +32,14 @@ router.get('/stats', dashboardController.getStats);
 router.get('/recent-vendors', dashboardController.getRecentVendors);
 
 /**
+ * @route   GET /api/dashboard/critical-alerts
+ * @desc    Get critical alerts (admin only)
+ * @query   limit - Number of alerts to return (default: 10)
+ * @access  Private (Admin only)
+ */
+router.get('/critical-alerts', dashboardController.getCriticalAlerts);
+
+/**
  * @route   GET /api/dashboard/insights
  * @desc    Get dashboard insights and analytics
  * @access  Private (All authenticated users)
@@ -80,5 +88,12 @@ router.get('/vendor-kpis', dashboardController.getVendorKPIs);
  * @access  Private (Vendor only)
  */
 router.get('/vendor-activity', dashboardController.getVendorActivity);
+
+/**
+ * @route   GET /api/dashboard/verify-data-integrity
+ * @desc    Verify database data integrity (admin only)
+ * @access  Private (Admin only)
+ */
+router.get('/verify-data-integrity', dashboardController.verifyDataIntegrity);
 
 export default router;

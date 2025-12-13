@@ -58,7 +58,11 @@ export class DashboardRepository {
           (SELECT COUNT(*) FROM equipment_instance WHERE deleted_at IS NULL) as total_equipment,
           (SELECT COUNT(*) FROM equipment_instance WHERE assigned_to IS NOT NULL AND deleted_at IS NULL) as equipment_assigned,
           (SELECT COUNT(*) FROM equipment_instance WHERE status = 'maintenance' AND deleted_at IS NULL) as equipment_maintenance,
-          (SELECT COUNT(*) FROM notification WHERE is_read = false AND created_at >= CURRENT_DATE - INTERVAL '7 days') as critical_alerts,
+          (SELECT COUNT(*) FROM notification 
+           WHERE is_read = false 
+             AND type = 'alert' 
+             AND priority = 'high' 
+             AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)) as critical_alerts,
           (SELECT COUNT(*) FROM equipment_instance WHERE next_maintenance_date <= CURRENT_DATE + INTERVAL '7 days' AND next_maintenance_date IS NOT NULL AND deleted_at IS NULL) as pending_inspections,
           (SELECT COUNT(*) FROM equipment_instance WHERE next_maintenance_date < CURRENT_DATE AND next_maintenance_date IS NOT NULL AND deleted_at IS NULL) as overdue_maintenances
       `;
@@ -83,6 +87,50 @@ export class DashboardRepository {
 
     } catch (error) {
       DebugLogger.error('Error fetching admin stats', error, { period, category });
+      throw error;
+    }
+  }
+
+  /**
+   * Get critical alerts for admin dashboard
+   */
+  static async getCriticalAlerts(limit: number = 10) {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Getting critical alerts', { limit }, 'DASHBOARD_REPO');
+
+    try {
+      const query = `
+        SELECT 
+          n.id, n.title, n.message, n.type, n.priority, n.category,
+          n.created_at, n.action_url, n.metadata,
+          u.display_name as user_name, u.email as user_email,
+          -- Additional context based on category
+          CASE 
+            WHEN n.category = 'equipment' THEN (
+              SELECT ei.serial_number 
+              FROM equipment_instance ei 
+              WHERE ei.id = (n.metadata->>'equipment_instance_id')::int
+            )
+            ELSE NULL
+          END as equipment_serial
+        FROM notification n
+        LEFT JOIN "user" u ON n.user_id = u.id
+        WHERE n.is_read = false 
+          AND n.type = 'alert' 
+          AND n.priority = 'high'
+          AND (n.expires_at IS NULL OR n.expires_at > CURRENT_TIMESTAMP)
+        ORDER BY n.created_at DESC
+        LIMIT $1
+      `;
+
+      DebugLogger.database('Critical Alerts Query', query, [limit]);
+      const result = await pool.query(query, [limit]);
+
+      DebugLogger.performance('Critical alerts fetch', startTime, { count: result.rows.length });
+      return result.rows;
+
+    } catch (error) {
+      DebugLogger.error('Error fetching critical alerts', error, { limit });
       throw error;
     }
   }
@@ -611,9 +659,11 @@ export class DashboardRepository {
         al.table_name,
         al.action_type,
         al.created_at,
-        al.metadata
+        al.metadata,
+        u.display_name as changed_by_name
       FROM audit_log al
-      WHERE al.changed_by = $1
+      LEFT JOIN "user" u ON al.changed_by = u.id
+      WHERE al.vendor_id = $1
       ORDER BY al.created_at DESC
       LIMIT $2 OFFSET $3
     `;
@@ -623,7 +673,7 @@ export class DashboardRepository {
   }
 
   static async getVendorActivityCount(vendorId: number): Promise<number> {
-    const result = await pool.query('SELECT COUNT(*) FROM audit_log WHERE changed_by = $1', [vendorId]);
+    const result = await pool.query('SELECT COUNT(*) FROM audit_log WHERE vendor_id = $1', [vendorId]);
     return parseInt(result.rows[0].count);
   }
 
@@ -725,11 +775,11 @@ export class DashboardRepository {
           v.company_name,
           u.display_name,
           u.avatar_url,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1) AS total_equipment,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'compliant') AS compliant_equipment,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'expired') AS expired_equipment,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'overdue') AS overdue_equipment,
-          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'due_soon') AS due_soon_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND deleted_at IS NULL) AS total_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'compliant' AND deleted_at IS NULL) AS compliant_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'expired' AND deleted_at IS NULL) AS expired_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'overdue' AND deleted_at IS NULL) AS overdue_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = $1 AND compliance_status = 'due_soon' AND deleted_at IS NULL) AS due_soon_equipment,
           (SELECT COUNT(*) FROM clients WHERE created_by_vendor_id = $1 AND status = 'active') AS active_clients,
           (SELECT COUNT(*) FROM maintenance_ticket WHERE vendor_id = $1 AND ticket_status = 'open') AS open_tickets
         FROM vendors v
@@ -828,5 +878,82 @@ export class DashboardRepository {
       '1y': 365
     };
     return periodMap[period] || 30;
+  }
+
+  /**
+   * Verify database data integrity for admin dashboard
+   * This method helps ensure we're getting real data, not mock data
+   */
+  static async verifyDataIntegrity() {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.log('Verifying database data integrity', {}, 'DASHBOARD_REPO');
+
+    try {
+      const verificationQuery = `
+        SELECT 
+          -- User counts by type
+          (SELECT COUNT(*) FROM "user" WHERE user_type = 'admin' AND deleted_at IS NULL) as admin_count,
+          (SELECT COUNT(*) FROM "user" WHERE user_type = 'vendor' AND deleted_at IS NULL) as vendor_count,
+          (SELECT COUNT(*) FROM "user" WHERE user_type = 'client' AND deleted_at IS NULL) as client_count,
+          
+          -- Equipment verification
+          (SELECT COUNT(*) FROM equipment_instance WHERE deleted_at IS NULL) as total_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE compliance_status = 'expired') as expired_equipment,
+          (SELECT COUNT(*) FROM equipment_instance WHERE compliance_status = 'overdue') as overdue_equipment,
+          
+          -- Notifications verification
+          (SELECT COUNT(*) FROM notification WHERE type = 'alert') as total_alerts,
+          (SELECT COUNT(*) FROM notification WHERE type = 'alert' AND priority = 'high') as critical_alerts,
+          
+          -- Company data verification
+          (SELECT COUNT(DISTINCT v.company_name) FROM vendors v JOIN "user" u ON v.user_id = u.id WHERE u.deleted_at IS NULL) as unique_vendor_companies,
+          (SELECT COUNT(DISTINCT c.company_name) FROM clients c JOIN "user" u ON c.user_id = u.id WHERE u.deleted_at IS NULL) as unique_client_companies,
+          
+          -- Sample company names to verify real data
+          (SELECT STRING_AGG(v.company_name, ', ') FROM vendors v JOIN "user" u ON v.user_id = u.id WHERE u.deleted_at IS NULL LIMIT 3) as sample_vendor_names,
+          (SELECT STRING_AGG(c.company_name, ', ') FROM clients c JOIN "user" u ON c.user_id = u.id WHERE u.deleted_at IS NULL LIMIT 3) as sample_client_names
+      `;
+
+      const result = await pool.query(verificationQuery);
+      const verification = result.rows[0];
+
+      const report = {
+        users: {
+          admins: parseInt(verification.admin_count) || 0,
+          vendors: parseInt(verification.vendor_count) || 0,
+          clients: parseInt(verification.client_count) || 0
+        },
+        equipment: {
+          total: parseInt(verification.total_equipment) || 0,
+          expired: parseInt(verification.expired_equipment) || 0,
+          overdue: parseInt(verification.overdue_equipment) || 0
+        },
+        notifications: {
+          totalAlerts: parseInt(verification.total_alerts) || 0,
+          criticalAlerts: parseInt(verification.critical_alerts) || 0
+        },
+        companies: {
+          vendorCount: parseInt(verification.unique_vendor_companies) || 0,
+          clientCount: parseInt(verification.unique_client_companies) || 0,
+          sampleVendors: verification.sample_vendor_names || 'None',
+          sampleClients: verification.sample_client_names || 'None'
+        },
+        isRealData: (
+          parseInt(verification.vendor_count) > 0 &&
+          parseInt(verification.client_count) > 0 &&
+          parseInt(verification.total_equipment) > 0 &&
+          verification.sample_vendor_names && verification.sample_vendor_names.length > 0
+        )
+      };
+
+      DebugLogger.log('Data integrity verification completed', report, 'DASHBOARD_REPO');
+      DebugLogger.performance('Data integrity verification', startTime, report);
+      
+      return report;
+
+    } catch (error) {
+      DebugLogger.error('Error verifying data integrity', error, {});
+      throw error;
+    }
   }
 }

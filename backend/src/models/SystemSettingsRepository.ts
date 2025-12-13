@@ -132,14 +132,22 @@ export class SystemSettingsRepository {
     settings: { key: string; value: string }[],
     updatedBy: number
   ): Promise<SystemSetting[]> {
+    console.log('🗄️ SystemSettingsRepository.updateMultipleSettings called');
+    console.log('📥 Settings to update:', settings);
+    console.log('👤 Updated by user ID:', updatedBy);
+
     const client = await pool.connect();
 
     try {
       await client.query('BEGIN');
+      console.log('✅ Database transaction started');
 
       const updatedSettings: SystemSetting[] = [];
 
-      for (const setting of settings) {
+      for (let i = 0; i < settings.length; i++) {
+        const setting = settings[i];
+        console.log(`🔄 Processing setting ${i + 1}/${settings.length}: ${setting.key} = "${setting.value}"`);
+
         const query = `
           UPDATE system_settings
           SET 
@@ -150,14 +158,19 @@ export class SystemSettingsRepository {
           RETURNING *
         `;
 
+        console.log('🔧 Executing query with params:', [setting.value, updatedBy, setting.key]);
+
         const result = await client.query(query, [
           setting.value,
           updatedBy,
           setting.key
         ]);
 
+        console.log(`📊 Query result: ${result.rows.length} rows affected`);
+
         if (result.rows.length > 0) {
           const row = result.rows[0];
+          console.log('✅ Setting updated successfully:', row.setting_key);
           updatedSettings.push({
             id: row.id,
             settingKey: row.setting_key,
@@ -167,16 +180,35 @@ export class SystemSettingsRepository {
             updatedAt: row.updated_at,
             updatedBy: row.updated_by
           });
+        } else {
+          console.error(`❌ No rows updated for setting: ${setting.key}`);
+          console.log('🔍 Checking if setting exists...');
+          
+          const checkQuery = 'SELECT * FROM system_settings WHERE setting_key = $1';
+          const checkResult = await client.query(checkQuery, [setting.key]);
+          
+          if (checkResult.rows.length === 0) {
+            console.error(`❌ Setting key "${setting.key}" does not exist in database`);
+          } else {
+            console.log('✅ Setting exists in database:', checkResult.rows[0]);
+            console.error(`❌ UPDATE failed for unknown reason`);
+          }
         }
       }
 
+      console.log(`✅ All settings processed. ${updatedSettings.length} settings updated successfully`);
       await client.query('COMMIT');
+      console.log('✅ Database transaction committed');
+      
       return updatedSettings;
     } catch (error) {
+      console.error('💥 Error in updateMultipleSettings:', error);
       await client.query('ROLLBACK');
+      console.log('🔄 Database transaction rolled back');
       throw error;
     } finally {
       client.release();
+      console.log('🔌 Database connection released');
     }
   }
 

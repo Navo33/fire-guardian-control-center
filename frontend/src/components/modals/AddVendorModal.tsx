@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { API_ENDPOINTS, getAuthHeaders, logApiCall } from '../../config/api';
 import { useToast } from '../providers/ToastProvider';
 import { handleApiError, TOAST_MESSAGES } from '../../utils/toastUtils';
+import DebugLogger from '../../utils/DebugLogger';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import {
   XMarkIcon,
@@ -26,9 +27,6 @@ const vendorSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters'),
   lastName: z.string().min(2, 'Last name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters')
-    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, 
-    'Password must contain uppercase, lowercase, number and special character'),
   
   // Company Information
   companyName: z.string().min(2, 'Company name must be at least 2 characters'),
@@ -36,16 +34,13 @@ const vendorSchema = z.object({
   licenseNumber: z.string().optional(),
   
   // Contact Information
-  contactPersonName: z.string().min(2, 'Contact person name is required'),
-  contactTitle: z.string().optional(),
-  primaryEmail: z.string().email('Please enter a valid email address'),
-  primaryPhone: z.string().min(10, 'Please enter a valid phone number'),
+  primaryPhone: z.string().regex(/^(\+94|0)[1-9]\d{8}$/, 'Please enter a valid Sri Lankan phone number'),
   
   // Address Information
   streetAddress: z.string().min(5, 'Street address is required'),
   city: z.string().min(2, 'City is required'),
   state: z.string().min(2, 'State is required'),
-  zipCode: z.string().min(5, 'Valid ZIP code is required'),
+  zipCode: z.string().min(3, 'Valid ZIP code is required').max(10, 'ZIP code too long'),
   country: z.string().min(2, 'Country is required'),
   
   // Specializations
@@ -63,7 +58,8 @@ interface AddVendorModalProps {
 
 export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }: AddVendorModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [specializationOptions, setSpecializationOptions] = useState<string[]>([]);
+  const [isLoadingSpecializations, setIsLoadingSpecializations] = useState(false);
   const toast = useToast();
 
   const {
@@ -73,24 +69,204 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
     reset,
     watch,
     setValue,
+    trigger,
+    getValues
   } = useForm<VendorFormData>({
     resolver: zodResolver(vendorSchema),
     defaultValues: {
       specializations: [],
       country: 'Sri Lanka',
-      primaryEmail: '', // Will be set to same as email when email changes
     },
   });
 
+  // Real-time validation state
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [isEmailChecking, setIsEmailChecking] = useState(false);
+
   const watchSpecializations = watch('specializations');
   const watchEmail = watch('email');
+  const watchZipCode = watch('zipCode');
 
-  // Sync primaryEmail with email
+  // Real-time validation functions
+  const validateEmail = async (email: string) => {
+    if (!email || email.length < 3) return '';
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return 'Please enter a valid email address';
+    }
+
+    // Check if email already exists
+    try {
+      setIsEmailChecking(true);
+      const token = localStorage.getItem('token');
+      const headers = { 'Authorization': `Bearer ${token}` };
+      
+      const response = await fetch(`${API_ENDPOINTS.VENDORS.LIST}?search=${encodeURIComponent(email)}`, { headers });
+      const result = await response.json();
+      
+      if (result.success && result.data.vendors.length > 0) {
+        const existingVendor = result.data.vendors.find((v: any) => v.email === email);
+        if (existingVendor) {
+          return 'A vendor with this email already exists';
+        }
+      }
+    } catch (error) {
+      console.warn('Email uniqueness check failed:', error);
+    } finally {
+      setIsEmailChecking(false);
+    }
+    
+    return '';
+  };
+
+  const validateZipCode = (zipCode: string) => {
+    if (!zipCode) return '';
+    
+    // Accept various formats: 12345, 12345-6789, or international postal codes
+    const zipRegex = /^[A-Za-z0-9\s\-]{3,10}$/;
+    if (!zipRegex.test(zipCode)) {
+      return 'Please enter a valid postal/ZIP code (3-10 characters)';
+    }
+    return '';
+  };
+
+  const validatePhone = (phone: string) => {
+    if (!phone) return '';
+    
+    // Sri Lankan phone number format: +94XXXXXXXXX or 0XXXXXXXXX
+    const phoneRegex = /^(\+94|0)[1-9][0-9]{8}$/;
+    if (!phoneRegex.test(phone.replace(/\s/g, ''))) {
+      return 'Please enter a valid Sri Lankan phone number';
+    }
+    return '';
+  };
+
+  const validateName = (name: string, fieldName: string) => {
+    if (!name) return `${fieldName} is required`;
+    if (name.length < 2) return `${fieldName} must be at least 2 characters`;
+    if (name.length > 50) return `${fieldName} must not exceed 50 characters`;
+    if (!/^[a-zA-Z\s'-]+$/.test(name)) return `${fieldName} can only contain letters, spaces, hyphens, and apostrophes`;
+    return '';
+  };
+
+  const validateCompanyName = (name: string) => {
+    if (!name) return 'Company name is required';
+    if (name.length < 2) return 'Company name must be at least 2 characters';
+    if (name.length > 200) return 'Company name must not exceed 200 characters';
+    return '';
+  };
+
+  const validateLicenseNumber = (license: string) => {
+    if (!license) return ''; // Optional field
+    if (license.length > 100) return 'License number must not exceed 100 characters';
+    return '';
+  };
+
+  const validateAddress = (address: string) => {
+    if (!address) return 'Street address is required';
+    if (address.length < 5) return 'Street address must be at least 5 characters';
+    if (address.length > 500) return 'Street address must not exceed 500 characters';
+    return '';
+  };
+
+  const validateCity = (city: string) => {
+    if (!city) return 'City is required';
+    if (city.length < 2) return 'City must be at least 2 characters';
+    if (city.length > 100) return 'City must not exceed 100 characters';
+    return '';
+  };
+
+  // Real-time email validation
   React.useEffect(() => {
     if (watchEmail) {
-      setValue('primaryEmail', watchEmail);
+      const timer = setTimeout(async () => {
+        const error = await validateEmail(watchEmail);
+        setFieldErrors(prev => ({ ...prev, email: error }));
+      }, 500); // Debounce for 500ms
+
+      return () => clearTimeout(timer);
     }
-  }, [watchEmail, setValue]);
+  }, [watchEmail]);
+
+  // Real-time ZIP code validation
+  React.useEffect(() => {
+    if (watchZipCode) {
+      const error = validateZipCode(watchZipCode);
+      setFieldErrors(prev => ({ ...prev, zipCode: error }));
+    }
+  }, [watchZipCode]);
+
+  // Real-time validation for all fields
+  const watchPrimaryPhone = watch('primaryPhone');
+  const watchFirstName = watch('firstName');
+  const watchLastName = watch('lastName');
+  const watchCompanyName = watch('companyName');
+  const watchLicenseNumber = watch('licenseNumber');
+  const watchStreetAddress = watch('streetAddress');
+  const watchCity = watch('city');
+
+  // Real-time phone validation
+  React.useEffect(() => {
+    if (watchPrimaryPhone) {
+      const error = validatePhone(watchPrimaryPhone);
+      setFieldErrors(prev => ({ ...prev, primaryPhone: error }));
+    }
+  }, [watchPrimaryPhone]);
+
+  // Real-time name validations
+  React.useEffect(() => {
+    if (watchFirstName) {
+      const error = validateName(watchFirstName, 'First name');
+      setFieldErrors(prev => ({ ...prev, firstName: error }));
+    }
+  }, [watchFirstName]);
+
+  React.useEffect(() => {
+    if (watchLastName) {
+      const error = validateName(watchLastName, 'Last name');
+      setFieldErrors(prev => ({ ...prev, lastName: error }));
+    }
+  }, [watchLastName]);
+
+  // Real-time company name validation
+  React.useEffect(() => {
+    if (watchCompanyName) {
+      const error = validateCompanyName(watchCompanyName);
+      setFieldErrors(prev => ({ ...prev, companyName: error }));
+    }
+  }, [watchCompanyName]);
+
+  // Real-time license validation
+  React.useEffect(() => {
+    if (watchLicenseNumber) {
+      const error = validateLicenseNumber(watchLicenseNumber);
+      setFieldErrors(prev => ({ ...prev, licenseNumber: error }));
+    }
+  }, [watchLicenseNumber]);
+
+  // Real-time address validation
+  React.useEffect(() => {
+    if (watchStreetAddress) {
+      const error = validateAddress(watchStreetAddress);
+      setFieldErrors(prev => ({ ...prev, streetAddress: error }));
+    }
+  }, [watchStreetAddress]);
+
+  // Real-time city validation
+  React.useEffect(() => {
+    if (watchCity) {
+      const error = validateCity(watchCity);
+      setFieldErrors(prev => ({ ...prev, city: error }));
+    }
+  }, [watchCity]);
+
+  // Fetch specializations when modal opens
+  useEffect(() => {
+    if (isOpen && specializationOptions.length === 0) {
+      fetchSpecializations();
+    }
+  }, [isOpen]);
 
   const businessTypes = [
     'Private Limited',
@@ -111,18 +287,61 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
     'Sabaragamuwa Province'
   ];
 
-  const specializationOptions = [
-    'Fire Extinguishers',
-    'Sprinkler Systems',
-    'Fire Alarms',
-    'Emergency Lighting',
-    'Fire Suppression Systems',
-    'Exit Signs',
-    'Emergency Equipment',
-    'Fire Safety Inspections',
-    'Fire Safety Training',
-    'Hazmat Services'
-  ];
+  // Fetch specializations from API
+  const fetchSpecializations = async () => {
+    const startTime = DebugLogger.startTimer();
+    DebugLogger.ui('AddVendorModal', 'fetchSpecializations started');
+    
+    try {
+      setIsLoadingSpecializations(true);
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const headers = getAuthHeaders();
+
+      logApiCall('GET', API_ENDPOINTS.VENDORS.SPECIALIZATIONS);
+      const response = await fetch(API_ENDPOINTS.VENDORS.SPECIALIZATIONS, { headers });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch specializations: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      DebugLogger.api('GET', API_ENDPOINTS.VENDORS.SPECIALIZATIONS, undefined, result, response.status);
+
+      if (result.success) {
+        // Extract specialization names from the API response
+        const specializations = result.data.map((spec: any) => spec.name || spec);
+        setSpecializationOptions(specializations);
+        DebugLogger.log('Specializations loaded successfully', { count: specializations.length }, 'VENDOR_MODAL');
+      } else {
+        throw new Error(result.message || 'Failed to load specializations');
+      }
+
+      DebugLogger.performance('Specializations fetch', startTime);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load specializations';
+      DebugLogger.error('Specializations fetch failed', err, { errorMessage });
+      // Use fallback specializations if API fails
+      setSpecializationOptions([
+        'Fire Extinguishers',
+        'Sprinkler Systems', 
+        'Fire Alarms',
+        'Emergency Lighting',
+        'Fire Suppression Systems',
+        'Exit Signs',
+        'Emergency Equipment',
+        'Fire Safety Inspections',
+        'Fire Safety Training',
+        'Hazmat Services'
+      ]);
+    } finally {
+      setIsLoadingSpecializations(false);
+    }
+  };
 
   const handleSpecializationChange = (specialization: string, checked: boolean) => {
     const current = watchSpecializations || [];
@@ -135,9 +354,27 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
 
   const onFormSubmit = async (data: VendorFormData) => {
     setIsLoading(true);
-    setError(null);
     
     try {
+      // Log the data being sent for debugging
+      console.log('AddVendorModal: Submitting vendor data:', {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        companyName: data.companyName,
+        businessType: data.businessType,
+        licenseNumber: data.licenseNumber,
+        primaryPhone: data.primaryPhone,
+        streetAddress: data.streetAddress,
+        city: data.city,
+        state: data.state,
+        zipCode: data.zipCode,
+        country: data.country,
+        specializations: data.specializations,
+        dataKeys: Object.keys(data),
+        fullDataObject: data
+      });
+      
       // If onSubmit prop is provided, use it instead of the default API call
       if (onSubmit) {
         await onSubmit(data);
@@ -168,8 +405,34 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
 
       const result = await response.json();
 
+      console.log('AddVendorModal: API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        result: result
+      });
+
       if (!response.ok) {
-        throw new Error(result.message || 'Failed to create vendor');
+        // Enhanced error logging
+        console.error('AddVendorModal: API Error Details:', {
+          status: response.status,
+          message: result.message,
+          errors: result.errors,
+          validationErrors: result.validationErrors,
+          fullResult: result
+        });
+        
+        // Handle specific error types with toast notifications
+        if (response.status === 409) {
+          toast.error(result.message || 'A vendor with this email already exists');
+        } else if (response.status === 400 && result.validationErrors) {
+          // Handle validation errors
+          const firstError = result.validationErrors[0];
+          toast.error(`Validation Error: ${firstError.message}`);
+        } else {
+          toast.error(result.message || 'Failed to create vendor');
+        }
+        return; // Don't throw error, just show toast and return
       }
 
       toast.success(TOAST_MESSAGES.VENDOR_CREATED);
@@ -179,10 +442,20 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
         onSuccess();
       }
     } catch (error) {
-      console.error('Error creating vendor:', error);
+      console.error('AddVendorModal: Error creating vendor:', error);
+      
+      // Enhanced error logging
+      if (error instanceof Error) {
+        console.error('AddVendorModal: Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+      }
+      
+      // Only use toast notifications, no modal error state
       const errorMessage = error instanceof Error ? error.message : 'Failed to create vendor';
-      setError(errorMessage);
-      handleApiError(toast, error, 'Failed to create vendor');
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -222,12 +495,7 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
             </button>
           </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
-              <p className="text-sm text-red-600">{error}</p>
-            </div>
-          )}
+
 
           {/* Form Content */}
           <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
@@ -247,12 +515,20 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                     </label>
                     <input
                       type="text"
-                      className={`input-field ${errors.firstName ? 'border-red-500' : ''}`}
+                      className={`input-field ${
+                        errors.firstName || fieldErrors.firstName 
+                          ? 'border-red-500' 
+                          : fieldErrors.firstName === '' && watchFirstName 
+                            ? 'border-green-500' 
+                            : ''
+                      }`}
                       placeholder="Enter first name"
                       {...register('firstName')}
                     />
-                    {errors.firstName && (
-                      <p className="mt-1 text-sm text-red-600">{errors.firstName.message}</p>
+                    {(errors.firstName || fieldErrors.firstName) && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.firstName?.message || fieldErrors.firstName}
+                      </p>
                     )}
                   </div>
 
@@ -262,43 +538,66 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                     </label>
                     <input
                       type="text"
-                      className={`input-field ${errors.lastName ? 'border-red-500' : ''}`}
+                      className={`input-field ${
+                        errors.lastName || fieldErrors.lastName 
+                          ? 'border-red-500' 
+                          : fieldErrors.lastName === '' && watchLastName 
+                            ? 'border-green-500' 
+                            : ''
+                      }`}
                       placeholder="Enter last name"
                       {...register('lastName')}
                     />
-                    {errors.lastName && (
-                      <p className="mt-1 text-sm text-red-600">{errors.lastName.message}</p>
+                    {(errors.lastName || fieldErrors.lastName) && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.lastName?.message || fieldErrors.lastName}
+                      </p>
                     )}
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Email *
+                      {isEmailChecking && (
+                        <span className="ml-2 text-xs text-blue-600">
+                          Checking availability...
+                        </span>
+                      )}
                     </label>
                     <input
                       type="email"
-                      className={`input-field ${errors.email ? 'border-red-500' : ''}`}
+                      className={`input-field ${
+                        errors.email || fieldErrors.email 
+                          ? 'border-red-500' 
+                          : fieldErrors.email === '' && watchEmail 
+                            ? 'border-green-500' 
+                            : ''
+                      }`}
                       placeholder="Enter email address"
                       {...register('email')}
                     />
-                    {errors.email && (
-                      <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+                    {(errors.email || fieldErrors.email) && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.email?.message || fieldErrors.email}
+                      </p>
+                    )}
+                    {!errors.email && !fieldErrors.email && watchEmail && fieldErrors.email === '' && (
+                      <p className="mt-1 text-sm text-green-600">✓ Email is available</p>
                     )}
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Password *
-                    </label>
-                    <input
-                      type="password"
-                      className={`input-field ${errors.password ? 'border-red-500' : ''}`}
-                      placeholder="Enter password"
-                      {...register('password')}
-                    />
-                    {errors.password && (
-                      <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-                    )}
+                {/* Password Info Message */}
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <ShieldCheckIcon className="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-medium text-blue-900">Secure Password Generation</h4>
+                      <p className="text-sm text-blue-700 mt-1">
+                        A secure temporary password will be automatically generated and sent to the vendor's email address. 
+                        The vendor will be required to change this password upon first login.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -317,12 +616,20 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                     </label>
                     <input
                       type="text"
-                      className={`input-field ${errors.companyName ? 'border-red-500' : ''}`}
+                      className={`input-field ${
+                        errors.companyName || fieldErrors.companyName 
+                          ? 'border-red-500' 
+                          : fieldErrors.companyName === '' && watchCompanyName 
+                            ? 'border-green-500' 
+                            : ''
+                      }`}
                       placeholder="Enter company name"
                       {...register('companyName')}
                     />
-                    {errors.companyName && (
-                      <p className="mt-1 text-sm text-red-600">{errors.companyName.message}</p>
+                    {(errors.companyName || fieldErrors.companyName) && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.companyName?.message || fieldErrors.companyName}
+                      </p>
                     )}
                   </div>
 
@@ -350,12 +657,20 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                     </label>
                     <input
                       type="text"
-                      className={`input-field ${errors.licenseNumber ? 'border-red-500' : ''}`}
+                      className={`input-field ${
+                        errors.licenseNumber || fieldErrors.licenseNumber 
+                          ? 'border-red-500' 
+                          : fieldErrors.licenseNumber === '' && watchLicenseNumber 
+                            ? 'border-green-500' 
+                            : ''
+                      }`}
                       placeholder="Enter license number"
                       {...register('licenseNumber')}
                     />
-                    {errors.licenseNumber && (
-                      <p className="mt-1 text-sm text-red-600">{errors.licenseNumber.message}</p>
+                    {(errors.licenseNumber || fieldErrors.licenseNumber) && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.licenseNumber?.message || fieldErrors.licenseNumber}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -368,50 +683,7 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                   <h3 className="text-lg font-medium text-gray-900">Contact Information</h3>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Person Name *
-                    </label>
-                    <input
-                      type="text"
-                      className={`input-field ${errors.contactPersonName ? 'border-red-500' : ''}`}
-                      placeholder="Primary contact name"
-                      {...register('contactPersonName')}
-                    />
-                    {errors.contactPersonName && (
-                      <p className="mt-1 text-sm text-red-600">{errors.contactPersonName.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Title (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      className={`input-field ${errors.contactTitle ? 'border-red-500' : ''}`}
-                      placeholder="e.g., Operations Manager"
-                      {...register('contactTitle')}
-                    />
-                    {errors.contactTitle && (
-                      <p className="mt-1 text-sm text-red-600">{errors.contactTitle.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Primary Email *
-                    </label>
-                    <input
-                      type="email"
-                      className="input-field bg-gray-50"
-                      placeholder="Auto-filled from user email"
-                      {...register('primaryEmail')}
-                      readOnly
-                    />
-                    <p className="mt-1 text-xs text-gray-500">This will be the same as the user email above</p>
-                  </div>
+                <div className="grid grid-cols-1 gap-4">
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -419,12 +691,23 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                     </label>
                     <input
                       type="tel"
-                      className={`input-field ${errors.primaryPhone ? 'border-red-500' : ''}`}
-                      placeholder="+94 XX XXX XXXX"
+                      className={`input-field ${
+                        errors.primaryPhone || fieldErrors.primaryPhone 
+                          ? 'border-red-500' 
+                          : !fieldErrors.primaryPhone && watchPrimaryPhone 
+                            ? 'border-green-500' 
+                            : ''
+                      }`}
+                      placeholder="+94 XX XXX XXXX or 0XX XXX XXXX"
                       {...register('primaryPhone')}
                     />
-                    {errors.primaryPhone && (
-                      <p className="mt-1 text-sm text-red-600">{errors.primaryPhone.message}</p>
+                    {(errors.primaryPhone || fieldErrors.primaryPhone) && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.primaryPhone?.message || fieldErrors.primaryPhone}
+                      </p>
+                    )}
+                    {!errors.primaryPhone && !fieldErrors.primaryPhone && watchPrimaryPhone && (
+                      <p className="mt-1 text-sm text-green-600">✓ Valid phone number format</p>
                     )}
                   </div>
                 </div>
@@ -444,12 +727,20 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                     </label>
                     <input
                       type="text"
-                      className={`input-field ${errors.streetAddress ? 'border-red-500' : ''}`}
+                      className={`input-field ${
+                        errors.streetAddress || fieldErrors.streetAddress 
+                          ? 'border-red-500' 
+                          : fieldErrors.streetAddress === '' && watchStreetAddress 
+                            ? 'border-green-500' 
+                            : ''
+                      }`}
                       placeholder="123 Main Street, Suite 100"
                       {...register('streetAddress')}
                     />
-                    {errors.streetAddress && (
-                      <p className="mt-1 text-sm text-red-600">{errors.streetAddress.message}</p>
+                    {(errors.streetAddress || fieldErrors.streetAddress) && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.streetAddress?.message || fieldErrors.streetAddress}
+                      </p>
                     )}
                   </div>
 
@@ -460,12 +751,20 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                       </label>
                       <input
                         type="text"
-                        className={`input-field ${errors.city ? 'border-red-500' : ''}`}
+                        className={`input-field ${
+                          errors.city || fieldErrors.city 
+                            ? 'border-red-500' 
+                            : fieldErrors.city === '' && watchCity 
+                              ? 'border-green-500' 
+                              : ''
+                        }`}
                         placeholder="Colombo"
                         {...register('city')}
                       />
-                      {errors.city && (
-                        <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>
+                      {(errors.city || fieldErrors.city) && (
+                        <p className="mt-1 text-sm text-red-600">
+                          {errors.city?.message || fieldErrors.city}
+                        </p>
                       )}
                     </div>
 
@@ -493,12 +792,23 @@ export default function AddVendorModal({ isOpen, onClose, onSuccess, onSubmit }:
                       </label>
                       <input
                         type="text"
-                        className={`input-field ${errors.zipCode ? 'border-red-500' : ''}`}
-                        placeholder="00100"
+                        className={`input-field ${
+                          errors.zipCode || fieldErrors.zipCode 
+                            ? 'border-red-500' 
+                            : !fieldErrors.zipCode && watchZipCode 
+                              ? 'border-green-500' 
+                              : ''
+                        }`}
+                        placeholder="00100 (3-10 characters)"
                         {...register('zipCode')}
                       />
-                      {errors.zipCode && (
-                        <p className="mt-1 text-sm text-red-600">{errors.zipCode.message}</p>
+                      {(errors.zipCode || fieldErrors.zipCode) && (
+                        <p className="mt-1 text-sm text-red-600">
+                          {errors.zipCode?.message || fieldErrors.zipCode}
+                        </p>
+                      )}
+                      {!errors.zipCode && !fieldErrors.zipCode && watchZipCode && (
+                        <p className="mt-1 text-sm text-green-600">✓ Valid postal code format</p>
                       )}
                     </div>
 

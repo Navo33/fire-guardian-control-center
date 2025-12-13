@@ -21,9 +21,10 @@
     "db:deploy:migrate": "ts-node src/scripts/deployMigrations.ts migrate",
     "db:deploy:backup": "ts-node src/scripts/deployMigrations.ts backup",
     "heroku-postbuild": "npm run build && npm run db:deploy:migrate",
-    "railway-postbuild": "npm run build && npm run db:deploy:migrate", 
+    "railway-postbuild": "npm run build && npm run db:deploy:migrate",
     "render-postbuild": "npm run build && npm run db:deploy:migrate",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:email": "ts-node test-email.ts"
   },
   "keywords": [
     "fire-safety",
@@ -33,18 +34,28 @@
   "author": "Fire Guardian Team",
   "license": "ISC",
   "dependencies": {
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^7.0.4",
+    "@types/pdfkit": "^0.17.4",
+    "axios": "^1.13.2",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "express-validator": "^7.2.1",
+    "handlebars": "^4.7.8",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
+    "node-cron": "^4.2.1",
+    "node-fetch": "^2.7.0",
+    "nodemailer": "^7.0.11",
+    "pdfkit": "^0.17.2",
     "pg": "^8.16.3",
     "recharts": "^3.2.1",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -55,6 +66,7 @@
     "@types/node": "^24.3.1",
     "@types/pg": "^8.15.5",
     "@types/uuid": "^10.0.0",
+    "@types/xml2js": "^0.4.14",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"

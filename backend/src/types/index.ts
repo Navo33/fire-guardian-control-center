@@ -15,6 +15,7 @@ export interface User {
   failed_login_attempts: number;
   last_login?: Date;
   last_login_ip?: string;
+  is_temporary_password?: boolean;
   created_at: Date;
   deleted_at?: Date;
 }
@@ -185,6 +186,7 @@ export interface JwtPayload {
   email: string;
   user_type: string;
   role_id?: number;
+  vendorId?: number;
   iat?: number;
   exp?: number;
 }
@@ -248,16 +250,14 @@ export interface CreateVendorRequest {
   lastName: string;
   email: string;
   password: string;
+  isTemporaryPassword?: boolean;
   
   // Company Information (for vendor_company table)
   companyName: string;
   businessType: string;
   licenseNumber?: string;
   
-  // Contact Information (for vendor_contact table)
-  contactPersonName: string;
-  contactTitle?: string;
-  primaryEmail: string;
+  // Contact Information (from vendors table)
   primaryPhone: string;
   
   // Address Information (for vendor_address table)
@@ -280,4 +280,5 @@ export interface DetailedVendor extends User {
   locations_count?: number;
   equipment_count?: number;
   assignments_count?: number;
+  clients_count?: number;
 }

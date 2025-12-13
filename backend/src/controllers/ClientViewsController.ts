@@ -2,6 +2,9 @@ import { Response } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest } from '../types/api';
 import { ClientViewsRepository } from '../models/ClientViewsRepository';
+import { emailService } from '../services/emailService';
+import { pool } from '../config/database';
+import { emailRepository } from '../models/EmailRepository';
 
 export class ClientViewsController extends BaseController {
   
@@ -23,13 +26,9 @@ export class ClientViewsController extends BaseController {
    */
   static async getDashboardKPIs(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const clientId = await ClientViewsController.getClientId(req);
-      if (!clientId) {
-        res.status(404).json({ success: false, message: 'Client not found' });
-        return;
-      }
-
-      const kpis = await ClientViewsRepository.getDashboardKPIs(clientId);
+      const userId = req.user!.userId;
+      
+      const kpis = await ClientViewsRepository.getDashboardKPIs(userId);
       res.json({ success: true, data: kpis });
     } catch (error) {
       console.error('Error fetching client dashboard KPIs:', error);
@@ -42,13 +41,9 @@ export class ClientViewsController extends BaseController {
    */
   static async getRecentActivity(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const clientId = await ClientViewsController.getClientId(req);
-      if (!clientId) {
-        res.status(404).json({ success: false, message: 'Client not found' });
-        return;
-      }
-
-      const activity = await ClientViewsRepository.getRecentActivity(clientId, req.user!.userId);
+      const userId = req.user!.userId;
+      
+      const activity = await ClientViewsRepository.getRecentActivity(userId);
       res.json({ success: true, data: activity });
     } catch (error) {
       console.error('Error fetching recent activity:', error);
@@ -289,6 +284,328 @@ export class ClientViewsController extends BaseController {
     } catch (error) {
       console.error('Error exporting report:', error);
       res.status(500).json({ success: false, message: 'Failed to export report' });
+    }
+  }
+
+  /**
+   * Get equipment detail for client
+   */
+  static async getEquipmentDetail(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      const equipmentId = parseInt(req.params.id);
+
+      if (isNaN(equipmentId)) {
+        res.status(400).json({ success: false, message: 'Invalid equipment ID' });
+        return;
+      }
+
+      const equipmentDetail = await ClientViewsRepository.getEquipmentDetail(userId, equipmentId);
+      
+      if (!equipmentDetail) {
+        res.status(404).json({ success: false, message: 'Equipment not found' });
+        return;
+      }
+
+      res.json({ success: true, data: equipmentDetail });
+    } catch (error) {
+      console.error('Error fetching equipment detail:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch equipment detail' });
+    }
+  }
+
+  /**
+   * Get equipment stats for client
+   */
+  static async getEquipmentStats(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      
+      const stats = await ClientViewsRepository.getEquipmentStats(userId);
+      res.json({ success: true, data: stats });
+    } catch (error) {
+      console.error('Error fetching equipment stats:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch equipment stats' });
+    }
+  }
+
+  /**
+   * Get equipment types overview for client (like vendor equipment types page)
+   */
+  static async getEquipmentTypesOverview(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      
+      const overview = await ClientViewsRepository.getEquipmentTypesOverview(userId);
+      res.json({ success: true, data: overview });
+    } catch (error) {
+      console.error('Error fetching equipment types overview:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch equipment types overview' });
+    }
+  }
+
+  /**
+   * Get service requests/tickets for client
+   */
+  static async getServiceRequests(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      
+      const serviceRequests = await ClientViewsRepository.getServiceRequests(userId);
+      res.json({ success: true, data: serviceRequests });
+    } catch (error) {
+      console.error('Error fetching service requests:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch service requests' });
+    }
+  }
+
+  /**
+   * Create a new service request/ticket for client
+   */
+  static async createServiceRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const clientId = await ClientViewsController.getClientId(req);
+      if (!clientId) {
+        res.status(404).json({ success: false, message: 'Client not found' });
+        return;
+      }
+
+      const { equipment_serial_number, priority, issue_description } = req.body;
+
+      // Validate required fields
+      if (!equipment_serial_number || !priority || !issue_description) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Equipment, priority, and issue description are required' 
+        });
+        return;
+      }
+
+      // Validate priority
+      if (!['low', 'normal', 'high'].includes(priority)) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Priority must be low, normal, or high' 
+        });
+        return;
+      }
+
+      // Validate issue description length
+      if (issue_description.length < 10 || issue_description.length > 1000) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Issue description must be between 10 and 1000 characters' 
+        });
+        return;
+      }
+
+      // Find equipment instance ID by serial number and verify it belongs to the client
+      const equipmentInstance = await ClientViewsRepository.getEquipmentBySerialNumber(clientId, equipment_serial_number);
+      
+      if (!equipmentInstance) {
+        res.status(404).json({ 
+          success: false, 
+          message: 'Equipment not found or not assigned to your account' 
+        });
+        return;
+      }
+
+      const ticketData = {
+        equipment_instance_id: equipmentInstance.id,
+        priority,
+        issue_description,
+        support_type: 'maintenance' // Client tickets are always maintenance type
+      };
+
+      const result = await ClientViewsRepository.createServiceRequest(clientId, ticketData);
+      
+      if (result.success && result.data) {
+        // Send email notifications to both client and vendor
+        this.sendServiceRequestCreatedEmail(result.data.id).catch(err => {
+          console.error('Failed to send service request email:', err);
+          // Don't fail the request if email fails
+        });
+        
+        res.status(201).json({ 
+          success: true, 
+          data: result.data,
+          message: 'Service request created successfully' 
+        });
+      } else {
+        res.status(400).json({ 
+          success: false, 
+          message: result.message || 'Failed to create service request' 
+        });
+      }
+    } catch (error) {
+      console.error('Error creating service request:', error);
+      res.status(500).json({ success: false, message: 'Failed to create service request' });
+    }
+  }
+
+  /**
+   * Get service request details for a client
+   */
+  static async getServiceRequestDetails(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user!.userId;
+      const ticketId = parseInt(req.params.id);
+
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+        return;
+      }
+
+      if (!ticketId || isNaN(ticketId)) {
+        res.status(400).json({ success: false, message: 'Invalid ticket ID' });
+        return;
+      }
+      
+      const ticketDetails = await ClientViewsRepository.getServiceRequestDetails(userId, ticketId);
+      
+      if (!ticketDetails) {
+        res.status(404).json({ success: false, message: 'Service request not found' });
+        return;
+      }
+
+      res.json({ success: true, data: ticketDetails });
+    } catch (error) {
+      console.error('Error fetching service request details:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch service request details' });
+    }
+  }
+
+  /**
+   * Send email notifications when a service request is created
+   * Private helper method
+   */
+  private static async sendServiceRequestCreatedEmail(ticketId: number): Promise<void> {
+    try {
+      console.log('\n===== SENDING SERVICE REQUEST CREATED EMAILS =====');
+      console.log('[Ticket ID]:', ticketId);
+      console.log('[Timestamp]:', new Date().toISOString());
+      
+      // Get ticket details with both client and vendor info
+      const query = `
+        SELECT 
+          mt.id,
+          mt.ticket_number,
+          mt.issue_description,
+          mt.priority,
+          mt.ticket_status,
+          mt.scheduled_date,
+          eq.equipment_name,
+          ei.serial_number,
+          c.company_name as client_name,
+          cu.email as client_email,
+          v.company_name as vendor_name,
+          vu.email as vendor_email
+        FROM maintenance_ticket mt
+        LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
+        LEFT JOIN equipment eq ON ei.equipment_id = eq.id
+        JOIN clients c ON mt.client_id = c.id
+        JOIN "user" cu ON c.user_id = cu.id
+        JOIN vendors v ON mt.vendor_id = v.id
+        JOIN "user" vu ON v.user_id = vu.id
+        WHERE mt.id = $1;
+      `;
+
+      const result = await pool.query(query, [ticketId]);
+      
+      if (result.rows.length === 0) {
+        console.warn(`⚠️ Ticket ${ticketId} not found for email notification`);
+        return;
+      }
+
+      const ticket = result.rows[0];
+      console.log('[Ticket Details Retrieved]');
+      console.log('   - Ticket #:', ticket.ticket_number);
+      console.log('   - Equipment:', ticket.equipment_name);
+      console.log('   - Client:', ticket.client_name, '(' + ticket.client_email + ')');
+      console.log('   - Vendor:', ticket.vendor_name, '(' + ticket.vendor_email + ')');
+      console.log('   - Priority:', ticket.priority);
+      console.log('   - Status:', ticket.ticket_status);
+      
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+      console.log('\n[Sending email to CLIENT]');
+      // Send email to CLIENT
+      const clientEmailResult = await emailService.sendMaintenanceTicketCreated({
+        to: ticket.client_email,
+        clientName: ticket.client_name,
+        ticketId: ticketId,
+        equipmentName: ticket.equipment_name || 'General Maintenance',
+        serialNumber: ticket.serial_number || 'N/A',
+        scheduledDate: ticket.scheduled_date 
+          ? new Date(ticket.scheduled_date).toLocaleDateString() 
+          : 'To be scheduled',
+        priority: ticket.priority,
+        status: ticket.ticket_status,
+        description: ticket.issue_description,
+        dashboardUrl: `${frontendUrl}/client/tickets/${ticket.ticket_number}`,
+      });
+
+      // Log client email
+      await emailRepository.logEmail({
+        recipientEmail: ticket.client_email,
+        templateType: 'maintenanceTicketCreated',
+        subject: `New Service Request Created - #${ticketId}`,
+        status: clientEmailResult.success ? 'sent' : 'failed',
+        messageId: clientEmailResult.messageId,
+        errorMessage: clientEmailResult.error,
+        metadata: { ticketId, ticketNumber: ticket.ticket_number, recipient: 'client' },
+      });
+      
+      if (clientEmailResult.success) {
+        console.log('[SUCCESS] Client email sent successfully');
+      } else {
+        console.log('[FAILED] Client email failed:', clientEmailResult.error);
+      }
+
+      console.log('\n[Sending email to VENDOR]');
+      // Send email to VENDOR
+      const vendorEmailResult = await emailService.sendMaintenanceTicketCreated({
+        to: ticket.vendor_email,
+        clientName: ticket.vendor_name,
+        ticketId: ticketId,
+        equipmentName: ticket.equipment_name || 'General Maintenance',
+        serialNumber: ticket.serial_number || 'N/A',
+        scheduledDate: ticket.scheduled_date 
+          ? new Date(ticket.scheduled_date).toLocaleDateString() 
+          : 'To be scheduled',
+        priority: ticket.priority,
+        status: ticket.ticket_status,
+        description: ticket.issue_description,
+        dashboardUrl: `${frontendUrl}/vendors/tickets`,
+      });
+
+      // Log vendor email
+      await emailRepository.logEmail({
+        recipientEmail: ticket.vendor_email,
+        templateType: 'maintenanceTicketCreated',
+        subject: `New Service Request Created - #${ticketId}`,
+        status: vendorEmailResult.success ? 'sent' : 'failed',
+        messageId: vendorEmailResult.messageId,
+        errorMessage: vendorEmailResult.error,
+        metadata: { ticketId, ticketNumber: ticket.ticket_number, recipient: 'vendor' },
+      });
+      
+      if (vendorEmailResult.success) {
+        console.log('[SUCCESS] Vendor email sent successfully');
+      } else {
+        console.log('[FAILED] Vendor email failed:', vendorEmailResult.error);
+      }
+      
+      console.log('\n[SERVICE REQUEST EMAIL PROCESS COMPLETED]');
+      console.log('   - Client Email:', clientEmailResult.success ? '[SENT]' : '[FAILED]');
+      console.log('   - Vendor Email:', vendorEmailResult.success ? '[SENT]' : '[FAILED]');
+      console.log('===========================\n');
+    } catch (error) {
+      console.error('\n[ERROR IN SERVICE REQUEST EMAIL PROCESS]');
+      console.error('[Ticket ID]:', ticketId);
+      console.error('[Error]:', error);
+      console.error('===========================\n');
+      throw error;
     }
   }
 }

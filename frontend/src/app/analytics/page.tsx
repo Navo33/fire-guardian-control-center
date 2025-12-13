@@ -1,24 +1,29 @@
 'use client';
-
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RequireRole from '@/components/auth/RequireRole';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorDisplay from '@/components/ui/ErrorDisplay';
-import { API_ENDPOINTS, getAuthHeaders, logApiCall, buildApiUrl } from '@/config/api';
+import { API_ENDPOINTS } from '@/config/api';
 import { 
-  ChartBarIcon, 
-  UserGroupIcon, 
-  BuildingOfficeIcon, 
+  ChartBarIcon,
+  UserGroupIcon,
+  BuildingOfficeIcon,
   WrenchScrewdriverIcon,
-  TruckIcon,
+  ShieldCheckIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  EyeIcon,
   CalendarIcon,
   FunnelIcon,
   ArrowDownTrayIcon,
+  FireIcon,
+  ClipboardDocumentListIcon,
   ChevronDownIcon
 } from '@heroicons/react/24/outline';
 
-// Chart components - we'll use recharts for professional charts
+// Chart components
 import {
   LineChart,
   Line,
@@ -32,153 +37,119 @@ import {
   Pie,
   Cell,
   BarChart,
-  Bar,
-  Area,
-  AreaChart
+  Bar
 } from 'recharts';
 
-// Types for our analytics data
-interface SystemMetrics {
-  totalVendors: number;
-  totalClients: number;
-  totalEquipment: number;
-  totalAssignments: number;
-  activeAssignments: number;
-  pendingReturns: number;
-  criticalAlerts?: number;
-  warningAlerts?: number;
-  infoAlerts?: number;
+// Helper function to safely convert database numeric strings to numbers
+const safeNumber = (value: any): number => {
+  if (typeof value === 'number') return value;
+  const num = parseFloat(String(value));
+  return isNaN(num) ? 0 : num;
+};
+
+// Types
+interface SystemOverview {
+  active_vendors: string;
+  active_clients: string;
+  total_equipment_instances: string;
+  assigned_equipment: string;
+  tickets_in_period: string;
+  user_logins_in_period: string;
+  assignment_rate_pct: string;
+  user_distribution: { [key: string]: number };
 }
 
-interface VendorMetrics {
-  vendorId: number;
-  vendorName: string;
-  companyName: string;
-  totalEquipment: number;
-  totalAssignments: number;
-  activeAssignments: number;
-  completedAssignments: number;
-  totalClients: number;
-  specializations: string[];
+interface ComplianceSummary {
+  total_eq: string;
+  compliant_eq: string;
+  expired_eq: string;
+  overdue_eq: string;
+  compliance_rate_pct: string;
+  vendors_below_80_pct: string;
+  avg_lifespan_years: string;
 }
 
-interface EquipmentMetrics {
-  equipmentId: number;
-  equipmentName: string;
-  totalInstances: number;
-  availableInstances: number;
-  assignedInstances: number;
-  maintenanceInstances: number;
-  utilizationRate: number;
-  totalAssignments: number;
+interface TicketsOverview {
+  total_tickets: number;
+  open_tickets: number;
+  high_priority_tickets: number;
+  avg_resolution_hours: number;
 }
 
-interface ClientMetrics {
-  clientId: number;
-  clientName: string;
-  totalAssignments: number;
-  activeAssignments: number;
-  totalEquipment: number;
-  lastAssignmentDate: string | null;
-}
 
-interface TimeSeriesData {
-  date: string;
-  newVendors: number;
-  newClients: number;
-  newAssignments: number;
-  completedAssignments: number;
-}
 
-interface Company {
+interface Vendor {
   id: number;
-  name: string;
-  vendorCount: number;
-}
-
-interface AlertMetrics {
-  alertId: number;
-  alertType: string;
-  alertLevel: 'critical' | 'warning' | 'info';
-  message: string;
-  count: number;
-  lastOccurrence: string;
-  affectedEntities: number;
-}
-
-interface AlertTrend {
-  date: string;
-  critical: number;
-  warning: number;
-  info: number;
-  resolved: number;
-}
-
-interface AnalyticsData {
-  systemMetrics: SystemMetrics;
-  vendorMetrics: VendorMetrics[];
-  equipmentMetrics: EquipmentMetrics[];
-  clientMetrics: ClientMetrics[];
-  timeSeriesData: TimeSeriesData[];
-  companies: Company[];
-  alertMetrics: AlertMetrics[];
-  alertTrends: AlertTrend[];
-}
-
-interface AnalyticsFilters {
-  startDate: string;
-  endDate: string;
-  selectedCompanies: number[];
-  selectedVendors: number[];
-  selectedClients: number[];
-  equipmentTypes: string[];
-  specializations: string[];
+  company_name: string;
 }
 
 // Professional color palette
 const CHART_COLORS = ['#E65100', '#059669', '#7C3AED', '#DC6D00', '#0891B2', '#64748B'];
 
-const COLORS = {
-  primary: '#E65100',     // Blue
-  secondary: '#059669',   // Green
-  accent: '#7C3AED',      // Purple
-  warning: '#DC6D00',     // Orange
-  danger: '#DC2626',      // Red
-  info: '#0891B2',        // Cyan
-  neutral: '#64748B',     // Slate
-  success: '#16A34A'      // Green success
-};
-
-export default function SystemAnalyticsPage() {
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+export default function AdminAnalyticsPage() {
+  // State management
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  
+  // Data state
+  const [systemOverview, setSystemOverview] = useState<SystemOverview | null>(null);
+  const [complianceSummary, setComplianceSummary] = useState<ComplianceSummary | null>(null);
+  const [ticketsOverview, setTicketsOverview] = useState<TicketsOverview | null>(null);
+  const [complianceTrend, setComplianceTrend] = useState<any[]>([]);
+  const [ticketTrends, setTicketTrends] = useState<any[]>([]);
+  const [equipmentCategories, setEquipmentCategories] = useState<any[]>([]);
+  const [vendorRankings, setVendorRankings] = useState<any[]>([]);
+  const [recentTickets, setRecentTickets] = useState<any[]>([]);
+  const [auditEvents, setAuditEvents] = useState<any[]>([]);
+  
+  // NEW: Vendor data for dropdown
+  const [vendors, setVendors] = useState<Vendor[]>([]);
 
-  // Filter states
-  const [filters, setFilters] = useState<AnalyticsFilters>({
+  // Filter states (ENHANCED with vendor filtering)
+  const [dateRange, setDateRange] = useState({
     startDate: '',
-    endDate: '',
-    selectedCompanies: [],
-    selectedVendors: [],
-    selectedClients: [],
-    equipmentTypes: [],
-    specializations: []
+    endDate: ''
   });
+  const [selectedVendor, setSelectedVendor] = useState<number | null>(null);
 
-  // Initialize date filters to last 14 days (2 weeks)
+  // Initialize date filters and fetch vendors
   useEffect(() => {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 14); // 2 weeks from today
+    startDate.setDate(startDate.getDate() - 90);
 
-    setFilters(prev => ({
-      ...prev,
+    setDateRange({
       startDate: startDate.toISOString().split('T')[0],
       endDate: endDate.toISOString().split('T')[0]
-    }));
+    });
+
+    // Fetch vendors for dropdown
+    fetchVendors();
   }, []);
 
-  // Fetch analytics data
+  // Fetch vendors for dropdown filter
+  const fetchVendors = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      const response = await fetch(API_ENDPOINTS.VENDORS.LIST, { headers });
+      if (response.ok) {
+        const data = await response.json();
+        setVendors(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching vendors:', error);
+    }
+  };
+
+  // ENHANCED: Fetch all analytics data with vendor filtering
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true);
@@ -189,724 +160,1010 @@ export default function SystemAnalyticsPage() {
         throw new Error('No authentication token found');
       }
 
-      // Build query parameters
-      const queryParams = new URLSearchParams();
-      if (filters.startDate) queryParams.append('startDate', filters.startDate);
-      if (filters.endDate) queryParams.append('endDate', filters.endDate);
-      if (filters.selectedCompanies.length > 0) {
-        filters.selectedCompanies.forEach(id => queryParams.append('vendorIds', id.toString()));
-      }
-      if (filters.selectedVendors.length > 0) {
-        filters.selectedVendors.forEach(id => queryParams.append('vendorIds', id.toString()));
-      }
-      if (filters.selectedClients.length > 0) {
-        filters.selectedClients.forEach(id => queryParams.append('clientIds', id.toString()));
-      }
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
 
-      const headers = getAuthHeaders();
-      const url = `${API_ENDPOINTS.ANALYTICS.SYSTEM}?${queryParams}`;
+      
+      // Build query params with date range and optional vendor filter
+      const queryParams = new URLSearchParams({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate
+      });
 
-      logApiCall('GET', url);
-      const response = await fetch(url, { headers });
-
-      console.log('Fetch response:', response);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (selectedVendor) {
+        queryParams.set('vendorId', selectedVendor.toString());
       }
 
-      const result = await response.json();
-      if (result.success) {
-        setAnalyticsData(result.data);
-      } else {
-        throw new Error(result.message || 'Failed to fetch analytics data');
+      // Query params for vendor-filterable endpoints
+      const vendorQueryParams = new URLSearchParams();
+      if (selectedVendor) {
+        vendorQueryParams.set('vendorId', selectedVendor.toString());
       }
+
+      // Fetch all data in parallel - vendor filtering enabled
+      const [
+        overviewRes,
+        complianceRes,
+        ticketsOverviewRes,
+        complianceTrendRes,
+        ticketTrendsRes,
+        equipmentCategoriesRes,
+        vendorRankingsRes,
+        recentTicketsRes,
+        auditEventsRes
+      ] = await Promise.all([
+        fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.OVERVIEW}?${queryParams}`, { headers }),
+        fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.COMPLIANCE.SUMMARY}?${vendorQueryParams}`, { headers }),
+        fetch(API_ENDPOINTS.ADMIN_ANALYTICS.TICKETS.OVERVIEW, { headers }),
+        fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.COMPLIANCE.TREND}?${queryParams}`, { headers }),
+        fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.TICKETS.TRENDS}?${queryParams}`, { headers }),
+        fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.EQUIPMENT.CATEGORIES}?${vendorQueryParams}`, { headers }),
+        fetch(API_ENDPOINTS.ADMIN_ANALYTICS.VENDORS.RANKINGS, { headers }),
+        fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.TICKETS.RECENT_HIGH_PRIORITY}?${vendorQueryParams}`, { headers }),
+        fetch(API_ENDPOINTS.ADMIN_ANALYTICS.AUDIT.RECENT, { headers })
+      ]);
+
+      // Check for critical errors (allow some to fail gracefully)
+      if (!overviewRes.ok) throw new Error('Failed to fetch system overview');
+      if (!complianceRes.ok) throw new Error('Failed to fetch compliance data');
+      if (!ticketsOverviewRes.ok) throw new Error('Failed to fetch tickets overview');
+
+      // Parse responses
+      const [
+        overviewData,
+        complianceData,
+        ticketsOverviewData,
+        complianceTrendData,
+        ticketTrendsData,
+        equipmentCategoriesData,
+        vendorRankingsData,
+        recentTicketsData,
+        auditEventsData
+      ] = await Promise.all([
+        overviewRes.json(),
+        complianceRes.json(),
+        ticketsOverviewRes.json(),
+        complianceTrendRes.json(),
+        ticketTrendsRes.json(),
+        equipmentCategoriesRes.json(),
+        vendorRankingsRes.json(),
+        recentTicketsRes.json(),
+        auditEventsRes.json()
+      ]);
+
+      // Set state
+      setSystemOverview(overviewData.data);
+      setComplianceSummary(complianceData.data);
+      setTicketsOverview(ticketsOverviewData.data);
+      setComplianceTrend(complianceTrendData.data || []);
+      setTicketTrends(ticketTrendsData.data || []);
+      setEquipmentCategories(equipmentCategoriesData.data || []);
+      setVendorRankings(vendorRankingsData.data || []);
+      setRecentTickets(recentTicketsData.data || []);
+      setAuditEvents(auditEventsData.data || []);
+
     } catch (err) {
       console.error('Error fetching analytics data:', err);
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch data on component mount and when filters change
+  // Fetch data when date range or selected vendor changes
   useEffect(() => {
-    if (filters.startDate && filters.endDate) {
+    if (dateRange.startDate && dateRange.endDate) {
       fetchAnalyticsData();
     }
-  }, [filters.startDate, filters.endDate, filters.selectedCompanies, filters.selectedVendors, filters.selectedClients]);
+  }, [dateRange, selectedVendor]);
 
-  // Apply filters
-  const applyFilters = () => {
-    fetchAnalyticsData();
+  // Export to PDF functionality - Comprehensive Admin Report
+  const exportToPDF = async () => {
+    try {
+      setExportingPDF(true);
+      
+      // Import jsPDF and autoTable plugin
+      const { jsPDF } = await import('jspdf');
+      await import('jspdf-autotable');
+      
+      // Fetch comprehensive report data
+      const token = localStorage.getItem('token');
+      const headers = { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      // Build query parameters
+      const params = new URLSearchParams({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        ...(selectedVendor && { vendorId: selectedVendor.toString() })
+      });
+      
+      const [comprehensiveResponse, securityResponse] = await Promise.all([
+        fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.COMPREHENSIVE_REPORT}?${params}`, { headers }),
+        fetch(`${API_ENDPOINTS.ADMIN_ANALYTICS.SECURITY_ANALYTICS}?${params}`, { headers })
+      ]);
+      
+      if (!comprehensiveResponse.ok || !securityResponse.ok) {
+        throw new Error('Failed to fetch comprehensive report data');
+      }
+      
+      const comprehensiveData = await comprehensiveResponse.json();
+      const securityData = await securityResponse.json();
+      
+      const reportData = comprehensiveData.data;
+      const securityMetrics = securityData.data;
+      
+      const doc = new jsPDF();
+      let y = 20;
+      
+      // Header with branding
+      doc.setFontSize(22);
+      doc.setTextColor(220, 38, 38); // Red color for Fire Guardian
+      doc.text('FIRE GUARDIAN', 20, y);
+      y += 8;
+      
+      doc.setFontSize(16);
+      doc.setTextColor(0, 0, 0);
+      doc.text('System Analytics Report - Administrative Overview', 20, y);
+      y += 15;
+      
+      // Report metadata
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 20, y);
+      doc.text(`Report ID: FG-ADMIN-${Date.now().toString().slice(-8)}`, 120, y);
+      y += 6;
+      doc.text(`System: Fire Guardian Control Center v2.0`, 20, y);
+      y += 15;
+      
+      doc.setTextColor(0, 0, 0);
+      
+      // Applied Filters Section
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('📊 Applied Filters & Scope', 20, y);
+      y += 10;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const filterScope = selectedVendor 
+        ? `Vendor-Specific: ${vendors.find(v => v.id === selectedVendor)?.company_name || 'Unknown'}`
+        : 'System-Wide: All Vendors';
+      doc.text(`• Scope: ${filterScope}`, 25, y);
+      y += 6;
+      doc.text(`• Date Range: ${dateRange.startDate} to ${dateRange.endDate}`, 25, y);
+      y += 6;
+      doc.text(`• Analysis Period: ${Math.ceil((new Date(dateRange.endDate).getTime() - new Date(dateRange.startDate).getTime()) / (1000 * 60 * 60 * 24))} days`, 25, y);
+      y += 15;
+      
+      // System Overview KPIs - Using comprehensive data
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('🏢 System Overview & Performance Metrics', 20, y);
+      y += 10;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      if (reportData?.system_metrics) {
+        const metrics = reportData.system_metrics;
+        doc.text(`• Active Vendors: ${safeNumber(metrics.active_vendors)}`, 25, y);
+        y += 6;
+        doc.text(`• Active Clients: ${safeNumber(metrics.active_clients)}`, 25, y);
+        y += 6;
+        doc.text(`• Total Equipment Instances: ${safeNumber(metrics.total_equipment)}`, 25, y);
+        y += 6;
+        doc.text(`• Monthly Tickets: ${safeNumber(metrics.monthly_tickets)}`, 25, y);
+        y += 6;
+        doc.text(`• Active User Sessions: ${safeNumber(metrics.active_sessions)}`, 25, y);
+        y += 6;
+        doc.text(`• System Uptime: ${metrics.system_uptime || '99.9%'}`, 25, y);
+        y += 10;
+      }
+      
+      // Compliance Analytics - Using comprehensive data
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('🛡️ Compliance Status & Risk Assessment', 20, y);
+      y += 10;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      if (reportData?.compliance_breakdown) {
+        const compliance = reportData.compliance_breakdown;
+        doc.text(`• Total Equipment Monitored: ${safeNumber(compliance.total_equipment)}`, 25, y);
+        y += 6;
+        doc.text(`• Compliant Equipment: ${safeNumber(compliance.compliant)} (${safeNumber(compliance.compliance_rate)}%)`, 25, y);
+        y += 6;
+        doc.text(`• Due Soon (30 days): ${safeNumber(compliance.due_soon)}`, 25, y);
+        y += 6;
+        doc.text(`• Overdue Equipment: ${safeNumber(compliance.overdue)}`, 25, y);
+        y += 6;
+        doc.text(`• Critical Risk Items: ${safeNumber(compliance.critical)}`, 25, y);
+        y += 6;
+        doc.text(`• Average Compliance Score: ${safeNumber(compliance.avg_score)}%`, 25, y);
+        y += 10;
+      }
+      
+      // Check if we need a new page
+      if (y > 200) {
+        doc.addPage();
+        y = 20;
+      }
+      
+      // Maintenance & Support Analytics - Using comprehensive data
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('🔧 Maintenance & Support Operations', 20, y);
+      y += 10;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      if (reportData?.ticket_analysis) {
+        const tickets = reportData.ticket_analysis;
+        doc.text(`• Total Tickets (Period): ${safeNumber(tickets.total_tickets)}`, 25, y);
+        y += 6;
+        doc.text(`• Open Tickets: ${safeNumber(tickets.open_tickets)}`, 25, y);
+        y += 6;
+        doc.text(`• Resolved Tickets: ${safeNumber(tickets.resolved_tickets)}`, 25, y);
+        y += 6;
+        doc.text(`• Average Resolution Hours: ${safeNumber(tickets.avg_resolution_hours)}`, 25, y);
+        y += 6;
+        doc.text(`• High Priority Tickets: ${safeNumber(tickets.high_priority_count)}`, 25, y);
+        y += 6;
+        doc.text(`• Resolution Rate: ${safeNumber(tickets.resolution_rate)}%`, 25, y);
+        y += 10;
+      }
+      
+      // Equipment Categories Breakdown - Using comprehensive data
+      if (reportData?.equipment_categories && reportData.equipment_categories.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('📦 Equipment Categories Distribution', 20, y);
+        y += 10;
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        reportData.equipment_categories.slice(0, 8).forEach((item: any) => {
+          doc.text(`• ${item.category_name}: ${safeNumber(item.total_count)} units (${safeNumber(item.compliance_rate)}% compliant)`, 25, y);
+          y += 6;
+        });
+        y += 10;
+      }
+      
+      // Vendor Performance Rankings - Using comprehensive data
+      if (reportData?.vendor_performance && reportData.vendor_performance.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('🏆 Top Vendor Performance Rankings', 20, y);
+        y += 10;
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        reportData.vendor_performance.slice(0, 5).forEach((vendor: any, index: number) => {
+          doc.text(`${index + 1}. ${vendor.vendor_name}`, 25, y);
+          y += 5;
+          doc.text(`   • Score: ${safeNumber(vendor.performance_score)} | Clients: ${safeNumber(vendor.client_count)} | Equipment: ${safeNumber(vendor.equipment_count)}`, 30, y);
+          y += 5;
+          doc.text(`   • Compliance: ${safeNumber(vendor.compliance_rate)}% | Avg Response: ${safeNumber(vendor.avg_response_time)}h`, 30, y);
+          y += 8;
+        });
+        y += 10;
+      }
+      
+      // Check if we need a new page
+      if (y > 220) {
+        doc.addPage();
+        y = 20;
+      }
+      
+      // Security Analytics - Using comprehensive security data
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('🔐 Security & Access Analytics', 20, y);
+      y += 10;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      if (securityMetrics?.security_metrics) {
+        const security = securityMetrics.security_metrics;
+        doc.text(`• Total Login Attempts: ${safeNumber(security.total_login_attempts)}`, 25, y);
+        y += 6;
+        doc.text(`• Successful Logins: ${safeNumber(security.successful_logins)}`, 25, y);
+        y += 6;
+        doc.text(`• Failed Login Attempts: ${safeNumber(security.failed_logins)}`, 25, y);
+        y += 6;
+        doc.text(`• Success Rate: ${safeNumber(security.success_rate)}%`, 25, y);
+        y += 6;
+        doc.text(`• Unique Users Active: ${safeNumber(security.unique_users)}`, 25, y);
+        y += 6;
+        doc.text(`• Password Reset Requests: ${safeNumber(security.password_resets)}`, 25, y);
+        y += 10;
+      }
+      
+      // Session Analytics
+      if (securityMetrics?.session_metrics) {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('👥 User Session Analytics', 20, y);
+        y += 10;
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        const sessions = securityMetrics.session_metrics;
+        doc.text(`• Active Sessions: ${safeNumber(sessions.active_sessions)}`, 25, y);
+        y += 6;
+        doc.text(`• Average Session Duration: ${safeNumber(sessions.avg_session_duration)} minutes`, 25, y);
+        y += 6;
+        doc.text(`• Peak Concurrent Users: ${safeNumber(sessions.peak_concurrent_users)}`, 25, y);
+        y += 6;
+        doc.text(`• Browser Distribution: Chrome ${safeNumber(sessions.chrome_usage)}%, Firefox ${safeNumber(sessions.firefox_usage)}%, Other ${safeNumber(sessions.other_browsers)}%`, 25, y);
+        y += 10;
+      }
+      
+      // System Audit Summary
+      if (securityMetrics?.audit_summary) {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('📋 System Audit Summary', 20, y);
+        y += 10;
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        const audit = securityMetrics.audit_summary;
+        doc.text(`• Total Audit Events: ${safeNumber(audit.total_events)}`, 25, y);
+        y += 6;
+        doc.text(`• User Management Events: ${safeNumber(audit.user_events)}`, 25, y);
+        y += 6;
+        doc.text(`• Equipment Changes: ${safeNumber(audit.equipment_events)}`, 25, y);
+        y += 6;
+        doc.text(`• System Configuration Changes: ${safeNumber(audit.system_events)}`, 25, y);
+        y += 6;
+        doc.text(`• Most Active User: ${audit.most_active_user || 'N/A'}`, 25, y);
+        y += 10;
+      }
+      
+      // Add a new page for recommendations
+      doc.addPage();
+      y = 20;
+      
+      // System Recommendations - Using comprehensive data
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('💡 Administrative Recommendations & Action Items', 20, y);
+      y += 10;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      
+      // Generate intelligent recommendations based on comprehensive data
+      const recommendations = [];
+      
+      // Compliance-based recommendations
+      if (reportData?.compliance_breakdown) {
+        const compliance = reportData.compliance_breakdown;
+        if (safeNumber(compliance.compliance_rate) < 85) {
+          recommendations.push('🚨 CRITICAL: System compliance rate below 85% - implement immediate compliance improvement program');
+        }
+        if (safeNumber(compliance.overdue) > 10) {
+          recommendations.push('⚠️ HIGH: Significant overdue equipment detected - prioritize maintenance scheduling');
+        }
+        if (safeNumber(compliance.due_soon) > 20) {
+          recommendations.push('📅 MEDIUM: Large number of items due soon - prepare proactive maintenance plan');
+        }
+      }
+      
+      // Ticket-based recommendations
+      if (reportData?.ticket_analysis) {
+        const tickets = reportData.ticket_analysis;
+        if (safeNumber(tickets.resolution_rate) < 80) {
+          recommendations.push('🔧 HIGH: Low ticket resolution rate - review support processes and resource allocation');
+        }
+        if (safeNumber(tickets.avg_resolution_hours) > 48) {
+          recommendations.push('⏱️ MEDIUM: Resolution times exceed standard - optimize support workflows');
+        }
+        if (safeNumber(tickets.high_priority_count) > 10) {
+          recommendations.push('🚨 HIGH: Elevated high-priority ticket volume - investigate root causes');
+        }
+      }
+      
+      // Security-based recommendations
+      if (securityMetrics?.security_metrics) {
+        const security = securityMetrics.security_metrics;
+        if (safeNumber(security.success_rate) < 90) {
+          recommendations.push('🔐 MEDIUM: Low login success rate - review authentication processes');
+        }
+        if (safeNumber(security.password_resets) > 50) {
+          recommendations.push('🔑 LOW: High password reset volume - consider user training or policy review');
+        }
+      }
+      
+      // Performance-based recommendations
+      if (reportData?.vendor_performance && reportData.vendor_performance.length > 0) {
+        const lowPerformingVendors = reportData.vendor_performance.filter((v: any) => safeNumber(v.performance_score) < 70);
+        if (lowPerformingVendors.length > 0) {
+          recommendations.push(`🏢 MEDIUM: ${lowPerformingVendors.length} vendor(s) with low performance scores - conduct performance reviews`);
+        }
+      }
+      
+      // Add positive recommendations if system is performing well
+      if (recommendations.length === 0) {
+        recommendations.push('✅ GOOD: System performance is within acceptable parameters');
+        recommendations.push('📊 CONTINUE: Maintain current monitoring and compliance trends');
+        recommendations.push('🔄 OPTIMIZE: Consider proactive maintenance scheduling to prevent issues');
+        recommendations.push('📈 IMPROVE: Explore automation opportunities for routine tasks');
+      }
+      
+      recommendations.slice(0, 12).forEach(rec => {
+        doc.text(rec, 25, y);
+        y += 8;
+      });
+      
+      y += 10;
+      
+      // Report Summary
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('📈 Executive Summary', 20, y);
+      y += 8;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const periodDays = Math.ceil((new Date(dateRange.endDate).getTime() - new Date(dateRange.startDate).getTime()) / (1000 * 60 * 60 * 24));
+      doc.text(`This comprehensive analytics report covers ${periodDays} days of system activity`, 25, y);
+      y += 6;
+      doc.text(`across the Fire Guardian Control Center platform. The analysis includes`, 25, y);
+      y += 6;
+      doc.text(`performance metrics, compliance status, security analytics, and actionable`, 25, y);
+      y += 6;
+      doc.text(`recommendations for system optimization and risk mitigation.`, 25, y);
+      
+      // Footer with report metadata
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Fire Guardian Analytics Report - Page ${i} of ${pageCount}`, 20, 290);
+        doc.text(`Generated: ${new Date().toLocaleDateString()} | CONFIDENTIAL`, 140, 290);
+      }
+      
+      // Save the PDF
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const vendorScope = selectedVendor 
+        ? vendors.find(v => v.id === selectedVendor)?.company_name?.replace(/\s+/g, '-') || 'Vendor-Specific'
+        : 'System-Wide';
+      const filename = `Fire-Guardian-Admin-Analytics-${vendorScope}-${timestamp}.pdf`;
+      
+      doc.save(filename);
+      
+      // Success notification
+      alert(`Comprehensive admin analytics report generated successfully!\nFile: ${filename}`);
+      
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Error generating PDF report. Please try again.');
+    } finally {
+      setExportingPDF(false);
+    }
   };
 
-  // Reset filters
-  const resetFilters = () => {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 14); // Reset to 2 weeks
-
-    setFilters({
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0],
-      selectedCompanies: [],
-      selectedVendors: [],
-      selectedClients: [],
-      equipmentTypes: [],
-      specializations: []
-    });
+  // Format data for charts
+  const formatComplianceTrendForChart = (data: any[]) => {
+    return data.map(item => ({
+      month: new Date(item.month).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      'Compliance Rate %': safeNumber(item.compliance_rate_pct),
+      'Total Equipment': safeNumber(item.total),
+      'Compliant': safeNumber(item.compliant)
+    }));
   };
 
-  // Export data function
-  const exportData = () => {
-    if (!analyticsData) return;
-    
-    const dataToExport = {
-      generatedAt: new Date().toISOString(),
-      filters: filters,
-      systemMetrics: analyticsData.systemMetrics,
-      vendorMetrics: analyticsData.vendorMetrics,
-      equipmentMetrics: analyticsData.equipmentMetrics,
-      clientMetrics: analyticsData.clientMetrics,
-      timeSeriesData: analyticsData.timeSeriesData
-    };
-
-    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `analytics-report-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const formatTicketTrendsForChart = (data: any[]) => {
+    return data.map(item => ({
+      month: new Date(item.month).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      'Created': safeNumber(item.created),
+      'Resolved': safeNumber(item.resolved),
+      'High Priority': safeNumber(item.high_priority)
+    }));
   };
+
+
+
+  if (loading) {
+    return (
+      <RequireRole allowedRoles={['admin']}>
+        <DashboardLayout>
+          <div className="flex items-center justify-center min-h-64">
+            <LoadingSpinner size="lg" />
+          </div>
+        </DashboardLayout>
+      </RequireRole>
+    );
+  }
+
+  if (error) {
+    return (
+      <RequireRole allowedRoles={['admin']}>
+        <DashboardLayout>
+          <ErrorDisplay message={error} />
+        </DashboardLayout>
+      </RequireRole>
+    );
+  }
 
   return (
     <RequireRole allowedRoles={['admin']}>
       <DashboardLayout>
         <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="flex-shrink-0">
-              <ChartBarIcon className="h-8 w-8 text-gray-900" />
-            </div>
+          {/* Header */}
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">System Analytics</h1>
-              <p className="text-gray-600 mt-1">Comprehensive analytics and insights for Fire Guardian Control Center</p>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+                <ChartBarIcon className="h-7 w-7 text-red-600 mr-3" />
+                System Analytics & Reports
+              </h1>
+              <p className="text-gray-600 mt-1">Monitor system performance, compliance, and operational health</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={exportToPDF}
+                disabled={exportingPDF}
+                className="btn-primary flex items-center space-x-2"
+              >
+                {exportingPDF ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    <span>Exporting...</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDownTrayIcon className="h-4 w-4" />
+                    <span>Export PDF Report</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
-          <div className="mt-4 sm:mt-0">
-            <button
-              onClick={exportData}
-              className="btn-primary flex items-center space-x-2"
-            >
-              <ArrowDownTrayIcon className="h-5 w-5" />
-              <span>Export Report</span>
-            </button>
-          </div>
-        </div>
 
-        {/* Loading State */}
-        {loading && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12">
-            <LoadingSpinner text="Loading analytics data..." />
-          </div>
-        )}
+          {/* Search and Filters */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-end">
+              {/* Start Date */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                <input
+                  type="date"
+                  value={dateRange.startDate}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                  className="input-field w-full"
+                />
+              </div>
+              
+              {/* End Date */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                <input
+                  type="date"
+                  value={dateRange.endDate}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                  className="input-field w-full"
+                />
+              </div>
 
-        {/* Error State */}
-        {error && !loading && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12">
-            <ErrorDisplay 
-              message={error}
-              action={{
-                label: 'Try Again',
-                onClick: fetchAnalyticsData
-              }}
-            />
-          </div>
-        )}
-
-        {/* Content - Only show when not loading and no error */}
-        {!loading && !error && analyticsData && (
-          <>
-            {/* Filters Panel - Vendor-style Inline Layout */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <div className="flex flex-col lg:flex-row gap-3">
-                {/* Date Range Filters */}
-                <div className="flex-1 relative">
-                  <CalendarIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
-                  <input
-                    type="date"
-                    value={filters.startDate}
-                    onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
-                    className="input-field pl-10"
-                    placeholder="Start Date"
-                  />
-                </div>
-
-                <div className="flex-1 relative">
-                  <CalendarIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
-                  <input
-                    type="date"
-                    value={filters.endDate}
-                    onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
-                    className="input-field pl-10"
-                    placeholder="End Date"
-                  />
-                </div>
-
-                {/* Company Filter - Inline Dropdown */}
-                <div className="relative">
-                  <select
-                    value={filters.selectedCompanies.length === 1 ? filters.selectedCompanies[0] : ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setFilters(prev => ({
-                        ...prev,
-                        selectedCompanies: value ? [parseInt(value)] : []
-                      }));
-                    }}
-                    className="input-field appearance-none pr-8 min-w-[180px]"
-                  >
-                    <option value="">All Companies</option>
-                    {analyticsData.companies.map((company: any) => (
-                      <option key={company.id} value={company.id}>
-                        {company.name} ({company.vendorCount})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDownIcon className="h-4 w-4 absolute right-2 top-3 text-gray-400 pointer-events-none" />
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={applyFilters}
-                    className="btn-primary px-6"
-                  >
-                    Apply
-                  </button>
-                  <button
-                    onClick={resetFilters}
-                    className="btn-secondary px-4"
-                  >
-                    Reset
-                  </button>
-                </div>
+              {/* Vendor Filter */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Vendor</label>
+                <select
+                  value={selectedVendor || ''}
+                  onChange={(e) => setSelectedVendor(e.target.value ? parseInt(e.target.value) : null)}
+                  className="input-field appearance-none pr-8 w-full"
+                >
+                  <option value="">All Vendors</option>
+                  {vendors.map(vendor => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.company_name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDownIcon className="h-4 w-4 absolute right-2 top-9 text-gray-400 pointer-events-none" />
               </div>
             </div>
+            {selectedVendor && (
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center">
+                  <EyeIcon className="h-4 w-4 text-blue-600 mr-2" />
+                  <p className="text-sm text-blue-700">
+                    <span className="font-medium">Filtered View:</span> Showing data for {vendors.find(v => v.id === selectedVendor)?.company_name} only.
+                    Select "All Vendors" to view system-wide analytics.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
 
-            {/* Key Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-shadow">
+          {/* System Overview KPIs */}
+          {systemOverview && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <UserGroupIcon className="h-8 w-8 text-red-600" />
+                    <div className="p-3 bg-blue-50 rounded-xl">
+                      <BuildingOfficeIcon className="h-8 w-8 text-blue-600" />
+                    </div>
                   </div>
-                  <div className="ml-4 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Total Vendors</dt>
-                      <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.totalVendors}</dd>
-                </dl>
+                  <div className="ml-5">
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Active Vendors</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{systemOverview.active_vendors}</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <BuildingOfficeIcon className="h-8 w-8 text-green-600" />
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="p-3 bg-green-50 rounded-xl">
+                      <UserGroupIcon className="h-8 w-8 text-green-600" />
+                    </div>
+                  </div>
+                  <div className="ml-5">
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Active Clients</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{systemOverview.active_clients}</p>
+                  </div>
+                </div>
               </div>
-              <div className="ml-4 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Total Clients</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.totalClients}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <WrenchScrewdriverIcon className="h-8 w-8 text-purple-600" />
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="p-3 bg-orange-50 rounded-xl">
+                      <FireIcon className="h-8 w-8 text-orange-600" />
+                    </div>
+                  </div>
+                  <div className="ml-5">
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Equipment</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{systemOverview.total_equipment_instances}</p>
+                  </div>
+                </div>
               </div>
-              <div className="ml-4 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Total Equipment</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.totalEquipment}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <TruckIcon className="h-8 w-8 text-orange-600" />
-              </div>
-              <div className="ml-4 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Active Assignments</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.activeAssignments}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ChartBarIcon className="h-8 w-8 text-indigo-600" />
-              </div>
-              <div className="ml-4 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Total Assignments</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.totalAssignments}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <CalendarIcon className="h-8 w-8 text-red-600" />
-              </div>
-              <div className="ml-4 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Pending Returns</dt>
-                  <dd className="text-2xl font-bold text-gray-900">{analyticsData.systemMetrics.pendingReturns}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Time Series Chart */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Activity Trends Over Time</h3>
-          {analyticsData.timeSeriesData.length > 0 ? (
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart 
-                  data={analyticsData.timeSeriesData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                >
-                  <defs>
-                    <linearGradient id="vendorsGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0.05}/>
-                    </linearGradient>
-                    <linearGradient id="clientsGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.secondary} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={COLORS.secondary} stopOpacity={0.05}/>
-                    </linearGradient>
-                    <linearGradient id="assignmentsGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.accent} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={COLORS.accent} stopOpacity={0.05}/>
-                    </linearGradient>
-                    <linearGradient id="completedGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.success} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={COLORS.success} stopOpacity={0.05}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 11 }} 
-                    domain={[0, 'dataMax + 2']}
-                    allowDecimals={false}
-                  />
-                  <Tooltip 
-                    labelFormatter={(value) => `Date: ${new Date(value).toLocaleDateString()}`}
-                    formatter={(value: any, name: any) => [value, name]}
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                    }}
-                  />
-                  <Legend />
-                  <Area 
-                    type="monotone" 
-                    dataKey="newVendors" 
-                    stroke={COLORS.primary}
-                    fill="url(#vendorsGradient)"
-                    strokeWidth={2}
-                    name="New Vendors"
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="newClients" 
-                    stroke={COLORS.secondary}
-                    fill="url(#clientsGradient)"
-                    strokeWidth={2}
-                    name="New Clients"
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="newAssignments" 
-                    stroke={COLORS.accent}
-                    fill="url(#assignmentsGradient)"
-                    strokeWidth={2}
-                    name="New Assignments"
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="completedAssignments" 
-                    stroke={COLORS.success}
-                    fill="url(#completedGradient)"
-                    strokeWidth={2}
-                    name="Completed"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-80 flex items-center justify-center text-gray-500">
-              <div className="text-center">
-                <ChartBarIcon className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                <div className="text-lg font-medium">No trend data available</div>
-                <div className="text-sm">Data will appear as activity occurs over time</div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="p-3 bg-purple-50 rounded-xl">
+                      <WrenchScrewdriverIcon className="h-8 w-8 text-purple-600" />
+                    </div>
+                  </div>
+                  <div className="ml-5">
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Tickets (Period)</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">{systemOverview.tickets_in_period}</p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
-        </div>
 
-        {/* Vendor Performance Chart */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Top Vendor Performance</h3>
-          {analyticsData.vendorMetrics.length > 0 ? (
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
-                  data={analyticsData.vendorMetrics
-                    .sort((a: any, b: any) => b.totalEquipment - a.totalEquipment)
-                    .slice(0, 8)
-                  }
-                  margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis 
-                    dataKey="companyName" 
-                    tick={{ fontSize: 10 }}
-                    angle={-45}
-                    textAnchor="end"
-                    height={100}
-                    interval={0}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 12 }} 
-                    domain={[0, 'dataMax + 5']}
-                  />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                    }}
-                  />
-                  <Legend />
-                  <Bar 
-                    dataKey="totalEquipment" 
-                    fill={COLORS.primary} 
-                    name="Total Equipment" 
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar 
-                    dataKey="activeAssignments" 
-                    fill={COLORS.secondary} 
-                    name="Active Assignments" 
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar 
-                    dataKey="totalClients" 
-                    fill={COLORS.accent} 
-                    name="Total Clients" 
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-80 flex items-center justify-center text-gray-500">
-              <div className="text-center">
-                <BuildingOfficeIcon className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                <div className="text-lg font-medium">No vendor data available</div>
-                <div className="text-sm">Add vendors to see performance metrics</div>
+          {/* Compliance & Tickets Overview */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Compliance Summary */}
+            {complianceSummary && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+                <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                  <div className="p-2 bg-green-50 rounded-lg mr-3">
+                    <ShieldCheckIcon className="h-6 w-6 text-green-600" />
+                  </div>
+                  Compliance Overview
+                </h2>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="text-center p-4 bg-green-50 rounded-xl">
+                    <div className="text-3xl font-bold text-green-600">{safeNumber(complianceSummary.compliance_rate_pct).toFixed(1)}%</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Compliance Rate</div>
+                  </div>
+                  <div className="text-center p-4 bg-red-50 rounded-xl">
+                    <div className="text-3xl font-bold text-red-600">{complianceSummary.vendors_below_80_pct}</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Low Compliance Vendors</div>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-xl">
+                    <div className="text-2xl font-bold text-orange-600">{complianceSummary.expired_eq}</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Expired Equipment</div>
+                  </div>
+                  <div className="text-center p-4 bg-yellow-50 rounded-xl">
+                    <div className="text-2xl font-bold text-yellow-600">{complianceSummary.overdue_eq}</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Overdue Equipment</div>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* System Alerts Overview */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">System Alerts Overview</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <div className="text-center p-4 bg-red-50 rounded-lg border border-red-100">
-              <div className="text-3xl font-bold" style={{ color: COLORS.danger }}>{analyticsData.systemMetrics?.criticalAlerts || 0}</div>
-              <div className="text-sm font-medium text-red-700">Critical Alerts</div>
+            {/* Tickets Summary */}
+            {ticketsOverview && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+                <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                  <div className="p-2 bg-purple-50 rounded-lg mr-3">
+                    <WrenchScrewdriverIcon className="h-6 w-6 text-purple-600" />
+                  </div>
+                  Tickets Overview
+                </h2>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="text-center p-4 bg-blue-50 rounded-xl">
+                    <div className="text-3xl font-bold text-blue-600">{ticketsOverview.total_tickets}</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Total Tickets</div>
+                  </div>
+                  <div className="text-center p-4 bg-yellow-50 rounded-xl">
+                    <div className="text-3xl font-bold text-yellow-600">{ticketsOverview.open_tickets}</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Open Tickets</div>
+                  </div>
+                  <div className="text-center p-4 bg-red-50 rounded-xl">
+                    <div className="text-2xl font-bold text-red-600">{ticketsOverview.high_priority_tickets}</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">High Priority</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded-xl">
+                    <div className="text-2xl font-bold text-green-600">{safeNumber(ticketsOverview.avg_resolution_hours).toFixed(1)}h</div>
+                    <div className="text-sm font-medium text-gray-600 mt-1">Avg Resolution</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Charts Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Compliance Trend */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-green-50 rounded-lg mr-3">
+                  <ShieldCheckIcon className="h-6 w-6 text-green-600" />
+                </div>
+                Compliance Trend Over Time
+              </h2>
+              {complianceTrend.length > 0 ? (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={formatComplianceTrendForChart(complianceTrend)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#fff', 
+                          border: '1px solid #e5e7eb', 
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                        }} 
+                      />
+                      <Legend />
+                      <Line type="monotone" dataKey="Compliance Rate %" stroke="#059669" strokeWidth={3} dot={{ fill: '#059669', r: 4 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <ShieldCheckIcon className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No compliance trend data available</p>
+                </div>
+              )}
             </div>
-            <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-100">
-              <div className="text-3xl font-bold" style={{ color: COLORS.warning }}>{analyticsData.systemMetrics?.warningAlerts || 0}</div>
-              <div className="text-sm font-medium text-orange-700">Warning Alerts</div>
-            </div>
-            <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-100">
-              <div className="text-3xl font-bold" style={{ color: COLORS.info }}>{analyticsData.systemMetrics?.infoAlerts || 0}</div>
-              <div className="text-sm font-medium text-blue-700">Info Alerts</div>
+
+            {/* Ticket Trends */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-purple-50 rounded-lg mr-3">
+                  <ChartBarIcon className="h-6 w-6 text-purple-600" />
+                </div>
+                Ticket Activity Trends
+              </h2>
+              {ticketTrends.length > 0 ? (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={formatTicketTrendsForChart(ticketTrends)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#fff', 
+                          border: '1px solid #e5e7eb', 
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                        }} 
+                      />
+                      <Legend />
+                      <Line type="monotone" dataKey="Created" stroke="#E65100" strokeWidth={3} dot={{ fill: '#E65100', r: 4 }} />
+                      <Line type="monotone" dataKey="Resolved" stroke="#059669" strokeWidth={3} dot={{ fill: '#059669', r: 4 }} />
+                      <Line type="monotone" dataKey="High Priority" stroke="#DC2626" strokeWidth={3} dot={{ fill: '#DC2626', r: 4 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <ChartBarIcon className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No ticket trend data available</p>
+                </div>
+              )}
             </div>
           </div>
-          
-          {analyticsData.alertTrends && analyticsData.alertTrends.length > 0 ? (
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart 
-                  data={analyticsData.alertTrends}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                >
-                  <defs>
-                    <linearGradient id="criticalGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.danger} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={COLORS.danger} stopOpacity={0.05}/>
-                    </linearGradient>
-                    <linearGradient id="warningGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.warning} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={COLORS.warning} stopOpacity={0.05}/>
-                    </linearGradient>
-                    <linearGradient id="infoGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.info} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={COLORS.info} stopOpacity={0.05}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 11 }} 
-                    domain={[0, 'dataMax + 1']}
-                    allowDecimals={false}
-                  />
-                  <Tooltip 
-                    labelFormatter={(value) => `Date: ${new Date(value).toLocaleDateString()}`}
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                    }}
-                  />
-                  <Legend />
-                  <Area 
-                    type="monotone" 
-                    dataKey="critical" 
-                    stroke={COLORS.danger}
-                    fill="url(#criticalGradient)"
-                    strokeWidth={2}
-                    name="Critical"
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="warning" 
-                    stroke={COLORS.warning}
-                    fill="url(#warningGradient)"
-                    strokeWidth={2}
-                    name="Warning"
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="info" 
-                    stroke={COLORS.info}
-                    fill="url(#infoGradient)"
-                    strokeWidth={2}
-                    name="Info"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-80 flex items-center justify-center text-gray-500">
-              <div className="text-center">
-                <ChartBarIcon className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                <div className="text-lg font-medium">No alert trends available</div>
-                <div className="text-sm">Alert history will appear here as events occur</div>
+
+
+
+          {/* Equipment Categories */}
+          {equipmentCategories.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-red-50 rounded-lg mr-3">
+                  <FireIcon className="h-6 w-6 text-red-600" />
+                </div>
+                Equipment Categories Distribution
+              </h2>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={equipmentCategories.map(cat => ({
+                        name: cat.equipment_type,
+                        value: safeNumber(cat.instance_count)
+                      }))}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }: any) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={120}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {equipmentCategories.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             </div>
           )}
-        </div>
 
-        {/* Equipment Status Distribution */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Equipment Status Distribution</h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={[
-                      { name: 'Available', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.availableInstances, 0) },
-                      { name: 'Assigned', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.assignedInstances, 0) },
-                      { name: 'Maintenance', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.maintenanceInstances, 0) }
-                    ]}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {[
-                      { name: 'Available', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.availableInstances, 0), color: COLORS.secondary },
-                      { name: 'Assigned', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.assignedInstances, 0), color: COLORS.primary },
-                      { name: 'Maintenance', value: analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.maintenanceInstances, 0), color: COLORS.warning }
-                    ].map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+          {/* Vendor Rankings */}
+          {vendorRankings.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-blue-50 rounded-lg mr-3">
+                  <BuildingOfficeIcon className="h-6 w-6 text-blue-600" />
+                </div>
+                Top Vendor Performance
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Vendor</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Clients</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Equipment</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Tickets</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Compliance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vendorRankings.slice(0, 10).map((vendor, index) => (
+                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="py-4 px-6 font-medium text-gray-900">{vendor.company_name}</td>
+                        <td className="py-4 px-6 text-gray-600 font-medium">{vendor.client_count}</td>
+                        <td className="py-4 px-6 text-gray-600 font-medium">{vendor.equipment_assigned}</td>
+                        <td className="py-4 px-6 text-gray-600 font-medium">{vendor.tickets_raised}</td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full ${
+                            safeNumber(vendor.avg_compliance_pct) >= 80 
+                              ? 'bg-green-100 text-green-800' 
+                              : safeNumber(vendor.avg_compliance_pct) >= 60 
+                              ? 'bg-yellow-100 text-yellow-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {safeNumber(vendor.avg_compliance_pct).toFixed(1)}%
+                          </span>
+                        </td>
+                      </tr>
                     ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Recent Activity Summary */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Activity Summary</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-sm text-gray-600">Most Active Vendor:</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {analyticsData.vendorMetrics.length > 0 ? analyticsData.vendorMetrics[0].companyName : 'N/A'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-sm text-gray-600">Most Utilized Equipment:</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {analyticsData.equipmentMetrics.length > 0 ? analyticsData.equipmentMetrics[0].equipmentName : 'N/A'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                <span className="text-sm text-gray-600">Average Utilization Rate:</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {analyticsData.equipmentMetrics.length > 0 
-                    ? `${(analyticsData.equipmentMetrics.reduce((acc: number, eq: any) => acc + eq.utilizationRate, 0) / analyticsData.equipmentMetrics.length).toFixed(1)}%`
-                    : '0%'
-                  }
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-gray-600">Total Companies:</span>
-                <span className="text-sm font-medium text-gray-900">{analyticsData.companies.length}</span>
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Data Tables */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Top Vendors Table */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Top Performing Vendors</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 text-sm font-medium text-gray-500">
-                      Company
-                    </th>
-                    <th className="text-left py-3 text-sm font-medium text-gray-500">
-                      Equipment
-                    </th>
-                    <th className="text-left py-3 text-sm font-medium text-gray-500">
-                      Assignments
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {analyticsData.vendorMetrics.slice(0, 5).map((vendor: any) => (
-                    <tr key={vendor.vendorId} className="hover:bg-gray-50">
-                      <td className="py-3 text-sm font-medium text-gray-900">
-                        {vendor.companyName}
-                      </td>
-                      <td className="py-3 text-sm text-gray-600">
-                        {vendor.totalEquipment}
-                      </td>
-                      <td className="py-3 text-sm text-gray-600">
-                        {vendor.totalAssignments}
-                      </td>
+          {/* Recent High-Priority Tickets */}
+          {recentTickets.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-orange-50 rounded-lg mr-3">
+                  <ExclamationTriangleIcon className="h-6 w-6 text-orange-600" />
+                </div>
+                Recent High-Priority Tickets
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Ticket #</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Vendor</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Client</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Equipment</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Status</th>
+                      <th className="text-left py-4 px-6 font-semibold text-gray-900">Created</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {recentTickets.slice(0, 10).map((ticket) => (
+                      <tr key={ticket.ticket_number} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="py-4 px-6 font-medium text-blue-600">{ticket.ticket_number}</td>
+                        <td className="py-4 px-6 text-gray-900">{ticket.vendor || 'N/A'}</td>
+                        <td className="py-4 px-6 text-gray-900">{ticket.client || 'N/A'}</td>
+                        <td className="py-4 px-6 text-gray-600">{ticket.equipment || 'N/A'}</td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full ${
+                            ticket.status === 'open' 
+                              ? 'bg-yellow-100 text-yellow-800' 
+                              : ticket.status === 'resolved' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {ticket.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-gray-600 text-sm">{ticket.created}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Top Equipment Table */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Most Utilized Equipment</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 text-sm font-medium text-gray-500">
-                      Equipment
-                    </th>
-                    <th className="text-left py-3 text-sm font-medium text-gray-500">
-                      Utilization
-                    </th>
-                    <th className="text-left py-3 text-sm font-medium text-gray-500">
-                      Assignments
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {analyticsData.equipmentMetrics.slice(0, 5).map((equipment: any) => (
-                    <tr key={equipment.equipmentId} className="hover:bg-gray-50">
-                      <td className="py-3 text-sm font-medium text-gray-900">
-                        {equipment.equipmentName}
-                      </td>
-                      <td className="py-3 text-sm text-gray-600">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                          equipment.utilizationRate > 80 
-                            ? 'bg-red-100 text-red-800' 
-                            : equipment.utilizationRate > 60 
-                            ? 'bg-yellow-100 text-yellow-800' 
-                            : 'bg-green-100 text-green-800'
-                        }`}>
-                          {equipment.utilizationRate.toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className="py-3 text-sm text-gray-600">
-                        {equipment.totalAssignments}
-                      </td>
+
+
+          {/* Recent Audit Events */}
+          {auditEvents.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-shadow">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <div className="p-2 bg-indigo-50 rounded-lg mr-3">
+                  <ClipboardDocumentListIcon className="h-6 w-6 text-indigo-600" />
+                </div>
+                Recent Audit Events
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Table</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Action</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-900">User</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-900">IP Address</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-900">Timestamp</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {auditEvents.slice(0, 10).map((event, index) => (
+                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 px-4 font-medium text-gray-900">{event.table_name}</td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                            event.action_type === 'insert' 
+                              ? 'bg-green-100 text-green-800' 
+                              : event.action_type === 'update' 
+                              ? 'bg-blue-100 text-blue-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {event.action_type}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-gray-900">{event.changed_by || 'System'}</td>
+                        <td className="py-3 px-4 text-gray-600 font-mono text-sm">{event.ip_address}</td>
+                        <td className="py-3 px-4 text-gray-600 text-sm">{event.timestamp}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        </div>
-          </>
-        )}
-
+          )}
         </div>
       </DashboardLayout>
     </RequireRole>

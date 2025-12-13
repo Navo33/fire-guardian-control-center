@@ -33,7 +33,9 @@ interface User {
   created_at: string;
   role_name: string;
   companies_count: number;
+  client_count: number;
   equipment_count: number;
+  assignments_count: number;
   status: 'Active' | 'Inactive' | 'Locked';
 }
 
@@ -55,11 +57,18 @@ export default function UserManagementPage() {
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [itemsPerPage] = useState(10);
+  
   const toast = useToast();
   const confirmModal = useConfirmModal();
   
-  // Fetch users from API
-  const fetchUsers = async () => {
+  // Fetch users from API with pagination
+  const fetchUsers = async (page: number = currentPage) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -71,14 +80,18 @@ export default function UserManagementPage() {
       }
 
       const headers = getAuthHeaders();
+      const url = `${API_ENDPOINTS.USERS.LIST}?page=${page}&limit=${itemsPerPage}`;
 
-      logApiCall('GET', API_ENDPOINTS.USERS.LIST);
-      const response = await fetch(API_ENDPOINTS.USERS.LIST, { headers });
+      logApiCall('GET', url);
+      const response = await fetch(url, { headers });
 
       const result = await response.json();
 
       if (result.success) {
         setUsers(result.data);
+        setCurrentPage(result.pagination.currentPage);
+        setTotalPages(result.pagination.totalPages);
+        setTotalCount(result.pagination.totalCount);
       } else {
         throw new Error(result.message || 'Failed to fetch users');
       }
@@ -159,45 +172,133 @@ export default function UserManagementPage() {
     }
   };
 
-  // Delete user
+  // Delete user with constraint checking
   const deleteUser = async (userId: number, userName: string) => {
-    const confirmed = await confirmModal.danger({
-      title: 'Delete User',
-      message: `Are you sure you want to delete ${userName}? This action cannot be undone and will permanently remove all associated data.`,
-      confirmText: 'Delete User',
-      cancelText: 'Cancel'
-    });
-
-    if (!confirmed) return;
-
     try {
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('No authentication token found');
       }
 
+      // First check deletion constraints
       const headers = getAuthHeaders();
-      const url = API_ENDPOINTS.USERS.BY_ID(userId);
+      const checkUrl = API_ENDPOINTS.USER_DETAILS.DELETION_CHECK(userId);
+      
+      logApiCall('GET', checkUrl);
+      const checkResponse = await fetch(checkUrl, { headers });
+      const checkResult = await checkResponse.json();
 
-      logApiCall('DELETE', url);
-      const response = await fetch(url, {
+      if (!checkResponse.ok) {
+        throw new Error(checkResult.message || 'Failed to check deletion constraints');
+      }
+
+      const deletionCheck = checkResult.data;
+      
+      // Determine modal type and content based on constraints
+      let modalConfig;
+      if (deletionCheck.canDelete) {
+        modalConfig = {
+          type: 'danger' as const,
+          title: 'Delete User',
+          message: `Are you sure you want to delete "${userName}"? This action cannot be undone.`,
+          confirmText: 'Delete User'
+        };
+      } else {
+        const issues = [];
+        
+        if (deletionCheck.userType === 'vendor') {
+          if (deletionCheck.constraints.clientsCount > 0) {
+            issues.push(`${deletionCheck.constraints.clientsCount} client${deletionCheck.constraints.clientsCount > 1 ? 's' : ''}`);
+          }
+          if (deletionCheck.constraints.equipmentCount > 0) {
+            issues.push(`${deletionCheck.constraints.equipmentCount} equipment instance${deletionCheck.constraints.equipmentCount > 1 ? 's' : ''}`);
+          }
+          if (deletionCheck.constraints.assignmentsCount > 0) {
+            issues.push(`${deletionCheck.constraints.assignmentsCount} active assignment${deletionCheck.constraints.assignmentsCount > 1 ? 's' : ''}`);
+          }
+          if (deletionCheck.constraints.activeTicketsCount > 0) {
+            issues.push(`${deletionCheck.constraints.activeTicketsCount} active ticket${deletionCheck.constraints.activeTicketsCount > 1 ? 's' : ''}`);
+          }
+        } else if (deletionCheck.userType === 'client') {
+          if (deletionCheck.constraints.equipmentCount > 0) {
+            issues.push(`${deletionCheck.constraints.equipmentCount} assigned equipment`);
+          }
+          if (deletionCheck.constraints.activeTicketsCount > 0) {
+            issues.push(`${deletionCheck.constraints.activeTicketsCount} active ticket${deletionCheck.constraints.activeTicketsCount > 1 ? 's' : ''}`);
+          }
+        }
+
+        modalConfig = {
+          type: 'alert' as const,
+          title: 'Cannot Delete User',
+          message: `"${userName}" cannot be deleted because they have ${issues.join(', ')}. Please reassign or remove these items first.`,
+          confirmText: 'OK'
+        };
+      }
+
+      // Show appropriate modal
+      if (!deletionCheck.canDelete) {
+        // Show warning modal for constraints
+        await confirmModal.alert({
+          title: modalConfig.title,
+          message: modalConfig.message,
+          confirmText: modalConfig.confirmText
+        });
+        return; // Stop here - cannot delete
+      }
+
+      // Show confirmation modal for deletion
+      const confirmed = await confirmModal.danger({
+        title: modalConfig.title,
+        message: modalConfig.message,
+        confirmText: modalConfig.confirmText,
+        cancelText: 'Cancel'
+      });
+
+      if (!confirmed) return;
+
+      // Proceed with deletion
+      const deleteUrl = API_ENDPOINTS.USER_DETAILS.DELETE(userId);
+      
+      logApiCall('DELETE', deleteUrl);
+      const deleteResponse = await fetch(deleteUrl, {
         method: 'DELETE',
         headers
       });
 
-      const result = await response.json();
+      const deleteResult = await deleteResponse.json();
 
-      if (result.success) {
-        toast.success(`${userName} has been deleted successfully`);
-        // Refresh users list
-        fetchUsers();
-        fetchUserStats();
-      } else {
-        throw new Error(result.message || 'Failed to delete user');
+      if (!deleteResponse.ok) {
+        throw new Error(deleteResult.message || 'Failed to delete user');
       }
+
+      toast.success(`${userName} has been deleted successfully`);
+      // Refresh users list
+      fetchUsers();
+      fetchUserStats();
     } catch (err) {
       console.error('Error deleting user:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to delete user');
+    }
+  };
+
+  // Pagination control functions
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      fetchUsers(page);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      handlePageChange(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      handlePageChange(currentPage + 1);
     }
   };
 
@@ -207,7 +308,7 @@ export default function UserManagementPage() {
     fetchUserStats();
   }, []);
 
-  // Filter users based on search and filters
+  // Filter users based on search and filters (applied to current page data)
   const filteredUsers = users.filter(user => {
     const matchesSearch = 
       user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -467,7 +568,7 @@ export default function UserManagementPage() {
                           {user.user_type === 'vendor' && (
                             <>
                               <div className="flex items-center text-xs text-gray-600">
-                                <span className="font-medium mr-1">{user.companies_count || 0}</span>
+                                <span className="font-medium mr-1">{user.client_count || 0}</span>
                                 <span className="text-gray-500">Clients</span>
                               </div>
                               <div className="flex items-center text-xs text-gray-600">
@@ -478,12 +579,12 @@ export default function UserManagementPage() {
                           )}
                           {user.user_type === 'client' && (
                             <>
-                              <div className="flex items-center text-xs text-gray-600">
+                              <div className="flex items-center text-xs text-gray-600" title="Total equipment units assigned to this client">
                                 <span className="font-medium mr-1">{user.equipment_count || 0}</span>
                                 <span className="text-gray-500">Equipment Units</span>
                               </div>
-                              <div className="flex items-center text-xs text-gray-500">
-                                <span>{user.companies_count || 0} Active Assignments</span>
+                              <div className="flex items-center text-xs text-gray-500" title="Number of formal assignment documents (each assignment can contain multiple equipment units)">
+                                <span>{user.assignments_count || 0} Assignment{user.assignments_count === 1 ? '' : 's'}</span>
                               </div>
                             </>
                           )}
@@ -548,6 +649,33 @@ export default function UserManagementPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {!isLoading && totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white px-6 py-4 border border-gray-100 rounded-2xl">
+              <div className="text-sm text-gray-700">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
+                {Math.min(currentPage * itemsPerPage, totalCount)} of{' '}
+                {totalCount} results
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePreviousPage}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>

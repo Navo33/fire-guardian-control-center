@@ -19,16 +19,31 @@ import { securityMiddleware, cleanupExpiredSessions } from './middleware/securit
 import authRoutes from './routes/auth';
 import dashboardRoutes from './routes/dashboard';
 import vendorRoutes from './routes/vendors';
-import analyticsRoutes from './routes/analytics';
 import usersRoutes from './routes/users';
 import userDetailsRoutes from './routes/userDetails';
 import profileRoutes from './routes/profile';
 import settingsRoutes from './routes/settings';
+import adminAnalyticsRoutes from './routes/adminAnalytics';
+import vendorAnalyticsRoutes from './routes/vendorAnalytics';
 import equipmentRoutes from './routes/equipment';
 import clientRoutes from './routes/clients';
 import maintenanceTicketRoutes from './routes/maintenanceTickets';
 import reportsRoutes from './routes/reports';
 import clientViewsRoutes from './routes/clientViews';
+import clientAnalyticsRoutes from './routes/clientAnalytics';
+import notificationRoutes from './routes/notifications';
+import emailRoutes from './routes/email';
+import pdfReportsRoutes from './routes/pdfReports';
+import emergencyWarningsRoutes from './routes/emergencyWarnings';
+import smsRoutes from './routes/sms';
+
+// Import email services
+import { verifyEmailConfig } from './config/email';
+import { emailScheduler } from './services/emailScheduler';
+
+// Import SMS services
+import NotificationScheduler from './services/NotificationScheduler';
+import { smsConfig } from './config/sms';
 
 // Load environment variables
 dotenv.config();
@@ -67,6 +82,27 @@ const initializeDatabase = async () => {
     }
   } else {
     console.log('ℹ️  Auto-migration disabled. Run "npm run db:init" if needed.');
+  }
+  
+  // Verify email configuration
+  console.log('📧 Verifying email configuration...');
+  const emailConfigured = await verifyEmailConfig();
+  if (emailConfigured) {
+    // Start email scheduler for automated reminders
+    emailScheduler.start();
+  } else {
+    console.warn('⚠️  Email service not configured. Email features will be disabled.');
+    console.log('ℹ️  To enable emails, set EMAIL_USER and EMAIL_PASSWORD in .env');
+  }
+  
+  // Verify SMS configuration and start scheduler
+  console.log('📱 Verifying SMS configuration...');
+  if (smsConfig.enabled && smsConfig.apiKey) {
+    NotificationScheduler.start();
+    console.log('✅ SMS notification scheduler started - Daily checks at 8:00 AM');
+  } else {
+    console.warn('⚠️  SMS service not configured. SMS notifications will be disabled.');
+    console.log('ℹ️  To enable SMS, set DIALOG_SMS_ENABLED=true and DIALOG_SMS_API_KEY in .env');
   }
   
   // Start periodic cleanup of expired sessions (every 1 hour)
@@ -136,7 +172,7 @@ const corsOptions = {
   },
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 
@@ -192,14 +228,21 @@ app.use('/api/dashboard', securityMiddleware, dashboardRoutes);
 app.use('/api/vendors', securityMiddleware, vendorRoutes);
 app.use('/api/users', securityMiddleware, usersRoutes);
 app.use('/api/user-details', securityMiddleware, userDetailsRoutes);
-app.use('/api/analytics', securityMiddleware, analyticsRoutes);
 app.use('/api/profile', securityMiddleware, profileRoutes);
 app.use('/api/settings', securityMiddleware, settingsRoutes);
 app.use('/api/equipment', securityMiddleware, equipmentRoutes);
+app.use('/api/admin/analytics', securityMiddleware, adminAnalyticsRoutes);
+app.use('/api/vendor/analytics', securityMiddleware, vendorAnalyticsRoutes);
+app.use('/api/client/analytics', securityMiddleware, clientAnalyticsRoutes);
 app.use('/api/vendor/clients', securityMiddleware, clientRoutes);
 app.use('/api/vendor/tickets', securityMiddleware, maintenanceTicketRoutes);
 app.use('/api/reports', securityMiddleware, reportsRoutes);
-app.use('/api/client', securityMiddleware, clientViewsRoutes);
+app.use('/api/client-views', securityMiddleware, clientViewsRoutes);
+app.use('/api/notifications', securityMiddleware, notificationRoutes);
+app.use('/api/email', securityMiddleware, emailRoutes);
+app.use('/api/pdf-reports', securityMiddleware, pdfReportsRoutes);
+app.use('/api/emergency-warnings', securityMiddleware, emergencyWarningsRoutes);
+app.use('/api/sms', securityMiddleware, smsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -282,3 +325,4 @@ const startServer = async () => {
 startServer();
 
 export default app;
+

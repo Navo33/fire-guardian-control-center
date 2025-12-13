@@ -9,6 +9,7 @@ import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { API_ENDPOINTS, logApiCall } from '../../config/api';
 import { useToast } from '../../components/providers/ToastProvider';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import ChangePasswordModal from '../../components/modals/ChangePasswordModal';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -20,6 +21,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const toast = useToast();
 
   const {
@@ -38,7 +40,7 @@ export default function LoginPage() {
         toast.warning('Your session has expired. Please log in again.');
       }
     }
-  }, [toast]);
+  }, []); // Only run once on mount
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
@@ -51,15 +53,23 @@ export default function LoginPage() {
         localStorage.setItem('token', response.data.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
 
-        // Show success toast
-        toast.success('Login successful! Redirecting...');
+        // Check if password change is required (first login with temporary password)
+        if (response.data.data.requirePasswordChange) {
+          // Store the temporary password temporarily for the change password modal
+          localStorage.setItem('temp_password', data.password);
+          setShowChangePasswordModal(true);
+          toast.info('Please change your temporary password to continue');
+        } else {
+          // Show success toast
+          toast.success('Login successful! Redirecting...');
 
-        // Redirect after a short delay to show the toast
-        setTimeout(() => {
-          // All user types now go to the same dashboard URL
-          // The dashboard page will render different content based on user_type
-          window.location.href = '/dashboard';
-        }, 1000);
+          // Redirect after a short delay to show the toast
+          setTimeout(() => {
+            // All user types now go to the same dashboard URL
+            // The dashboard page will render different content based on user_type
+            window.location.href = '/dashboard';
+          }, 1000);
+        }
       }
     } catch (error: unknown) {
       const errorMessage = (error as any).response?.data?.message || 'Login failed. Please try again.';
@@ -67,6 +77,18 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePasswordChanged = () => {
+    // Remove temporary password from storage
+    localStorage.removeItem('temp_password');
+    setShowChangePasswordModal(false);
+    
+    // Show success toast and redirect
+    toast.success('Password changed successfully! Redirecting...');
+    setTimeout(() => {
+      window.location.href = '/dashboard';
+    }, 1000);
   };
 
   return (
@@ -186,6 +208,16 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Change Password Modal for first login */}
+      {showChangePasswordModal && (
+        <ChangePasswordModal
+          isOpen={showChangePasswordModal}
+          onClose={() => setShowChangePasswordModal(false)}
+          onPasswordChanged={handlePasswordChanged}
+          isFirstLogin={true}
+        />
+      )}
     </div>
   );
 }

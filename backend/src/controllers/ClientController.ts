@@ -4,6 +4,8 @@ import { BaseController } from './BaseController';
 import { ClientRepository } from '../models/ClientRepository';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { AuthenticatedRequest } from '../types/api';
+import { generateTemporaryPassword } from '../utils/passwordGenerator';
+import emailService from '../services/emailService';
 
 export class ClientController extends BaseController {
   private clientRepository: ClientRepository;
@@ -133,21 +135,21 @@ export class ClientController extends BaseController {
       first_name,
       last_name,
       email,
-      password,
       phone,
       company_name,
       business_type,
       primary_phone,
       street_address,
       city,
-      zip_code
+      zip_code,
+      country
     } = req.body;
 
-    // Validate required fields
+    // Validate required fields (removed password from required fields)
     const requiredFields = [
-      'first_name', 'last_name', 'email', 'password', 'phone',
+      'first_name', 'last_name', 'email', 'phone',
       'company_name', 'business_type', 'primary_phone', 
-      'street_address', 'city', 'zip_code'
+      'street_address', 'city', 'zip_code', 'country'
     ];
 
     const missingFields = requiredFields.filter(field => !req.body[field]);
@@ -167,14 +169,12 @@ export class ClientController extends BaseController {
       return ApiResponseUtil.error(res, 'Email address is already in use', 400);
     }
 
-    // Validate password length (minimum 8 characters)
-    if (password.length < 8) {
-      return ApiResponseUtil.error(res, 'Password must be at least 8 characters long', 400);
-    }
+    // Generate temporary password
+    const temporaryPassword = generateTemporaryPassword();
 
     // Hash password
     const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await bcrypt.hash(temporaryPassword, saltRounds);
 
     // Create client
     const clientData = {
@@ -188,11 +188,28 @@ export class ClientController extends BaseController {
       primary_phone,
       street_address,
       city,
-      zip_code
+      zip_code,
+      country,
+      is_temporary_password: true
     };
 
     const newClient = await this.clientRepository.createClient(vendorId, clientData);
-    return ApiResponseUtil.created(res, newClient, 'Client created successfully');
+
+    // Send temporary password email
+    try {
+      const userName = `${first_name} ${last_name}`;
+      await emailService.sendTemporaryPassword(
+        email,
+        userName,
+        temporaryPassword,
+        'client'
+      );
+    } catch (emailError) {
+      console.error('Failed to send temporary password email:', emailError);
+      // Don't fail the client creation if email fails
+    }
+
+    return ApiResponseUtil.created(res, newClient, 'Client created successfully. Temporary password sent via email.');
   });
 
   /**

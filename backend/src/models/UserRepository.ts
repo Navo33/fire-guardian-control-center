@@ -12,7 +12,7 @@ export class UserRepository {
       SELECT 
         id, first_name, last_name, display_name, email, password, 
         user_type, role_id, is_locked, locked_until, failed_login_attempts,
-        last_login, last_login_ip, created_at, deleted_at
+        last_login, last_login_ip, created_at, deleted_at, is_temporary_password
       FROM "user" 
       WHERE email = $1 AND deleted_at IS NULL
     `;
@@ -34,7 +34,7 @@ export class UserRepository {
       SELECT 
         id, first_name, last_name, display_name, email, password, 
         user_type, role_id, is_locked, locked_until, failed_login_attempts,
-        last_login, last_login_ip, created_at, deleted_at
+        last_login, last_login_ip, created_at, deleted_at, is_temporary_password
       FROM "user" 
       WHERE id = $1 AND deleted_at IS NULL
     `;
@@ -139,6 +139,27 @@ export class UserRepository {
   }
 
   /**
+   * Update user password and clear temporary password flag
+   */
+  static async updatePassword(userId: number, hashedPassword: string): Promise<void> {
+    const query = `
+      UPDATE "user" 
+      SET 
+        password = $2,
+        is_temporary_password = false,
+        last_password_change = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `;
+    
+    try {
+      await pool.query(query, [userId, hashedPassword]);
+    } catch (error) {
+      console.error('Error updating password:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if account is locked
    */
   static async isAccountLocked(userId: number): Promise<boolean> {
@@ -235,30 +256,13 @@ export class UserRepository {
   }
 
   /**
-   * Update user password
-   */
-  static async updatePassword(userId: number, hashedPassword: string): Promise<void> {
-    const query = `
-      UPDATE "user" 
-      SET password = $2
-      WHERE id = $1
-    `;
-    
-    try {
-      await pool.query(query, [userId, hashedPassword]);
-    } catch (error) {
-      console.error('Error updating password:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Get recent vendors with comprehensive data for dashboard (same structure as VendorRepository.getVendors)
    */
   static async getRecentVendors(limit: number = 5): Promise<any[]> {
     const query = `
       SELECT 
-        u.id, u.first_name, u.last_name, u.display_name, u.email, 
+        v.id as vendor_id,  -- This is the vendors.id that frontend needs
+        u.id as user_id, u.first_name, u.last_name, u.display_name, u.email, 
         u.user_type, u.is_locked, u.last_login, u.created_at,
         
         -- Company details from vendors table
@@ -269,8 +273,8 @@ export class UserRepository {
         -- Equipment count
         (SELECT COUNT(*) FROM equipment_instance WHERE vendor_id = v.id AND deleted_at IS NULL) as equipment_count,
         
-        -- Client assignments count  
-        (SELECT COUNT(DISTINCT client_id) FROM equipment_assignment WHERE vendor_id = v.id) as client_count,
+        -- Client count (clients created by this vendor)
+        (SELECT COUNT(*) FROM clients WHERE created_by_vendor_id = v.id) as client_count,
         
         -- Specializations (comma-separated)
         (SELECT STRING_AGG(s.name, ', ') 
@@ -294,6 +298,7 @@ export class UserRepository {
       // Map to same structure as VendorRepository.getVendors
       return result.rows.map(row => ({
         ...row,
+        id: row.vendor_id,  // Use vendor_id as the primary id for frontend
         equipment_count: parseInt(row.equipment_count) || 0,
         client_count: parseInt(row.client_count) || 0,
         // Add computed fields that frontend expects
@@ -362,14 +367,42 @@ export class UserRepository {
           )
           ELSE 0
         END as companies_count,
+        
+        -- For vendors: count clients created by them
+        CASE 
+          WHEN u.user_type = 'vendor' THEN (
+            SELECT COUNT(*) FROM clients c 
+            JOIN vendors v ON c.created_by_vendor_id = v.id
+            WHERE v.user_id = u.id
+          )
+          ELSE 0
+        END as client_count,
+        
+        -- For vendors: count equipment instances owned by them
+        -- For clients: count equipment instances assigned to them  
         CASE 
           WHEN u.user_type = 'vendor' THEN (
             SELECT COUNT(*) FROM equipment_instance ei 
             JOIN vendors v ON v.id = ei.vendor_id
             WHERE v.user_id = u.id AND ei.deleted_at IS NULL
           )
+          WHEN u.user_type = 'client' THEN (
+            SELECT COUNT(*) FROM equipment_instance ei
+            JOIN clients c ON c.id = ei.assigned_to
+            WHERE c.user_id = u.id AND ei.deleted_at IS NULL
+          )
           ELSE 0
         END as equipment_count,
+        
+        -- For clients: count active equipment assignments
+        CASE 
+          WHEN u.user_type = 'client' THEN (
+            SELECT COUNT(*) FROM equipment_assignment ea
+            JOIN clients c ON c.id = ea.client_id
+            WHERE c.user_id = u.id AND ea.status IN ('active', 'pending')
+          )
+          ELSE 0
+        END as assignments_count,
         CASE 
           WHEN u.last_login > NOW() - INTERVAL '30 days' THEN 'Active'
           WHEN u.is_locked THEN 'Locked'
@@ -386,6 +419,114 @@ export class UserRepository {
       return result.rows;
     } catch (error) {
       console.error('Error getting all users:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get users with pagination
+   */
+  static async getUsersPaginated(page: number = 1, limit: number = 10): Promise<{
+    users: any[];
+    totalCount: number;
+    totalPages: number;
+    currentPage: number;
+  }> {
+    const offset = (page - 1) * limit;
+    
+    // Get total count
+    const countQuery = `
+      SELECT COUNT(*) FROM "user" u
+      WHERE u.deleted_at IS NULL
+    `;
+    
+    // Get paginated users
+    const usersQuery = `
+      SELECT 
+        u.id,
+        u.first_name,
+        u.last_name,
+        u.display_name,
+        u.email,
+        u.user_type,
+        u.is_locked,
+        u.last_login,
+        u.created_at,
+        r.role_name as role_name,
+        CASE 
+          WHEN u.user_type = 'vendor' THEN (
+            SELECT COUNT(*) FROM vendors v WHERE v.user_id = u.id
+          )
+          WHEN u.user_type = 'client' THEN (
+            SELECT COUNT(*) FROM clients c WHERE c.user_id = u.id
+          )
+          ELSE 0
+        END as companies_count,
+        
+        -- For vendors: count clients created by them
+        CASE 
+          WHEN u.user_type = 'vendor' THEN (
+            SELECT COUNT(*) FROM clients c 
+            JOIN vendors v ON c.created_by_vendor_id = v.id
+            WHERE v.user_id = u.id
+          )
+          ELSE 0
+        END as client_count,
+        
+        -- For vendors: count equipment instances owned by them
+        -- For clients: count equipment instances assigned to them  
+        CASE 
+          WHEN u.user_type = 'vendor' THEN (
+            SELECT COUNT(*) FROM equipment_instance ei 
+            JOIN vendors v ON v.id = ei.vendor_id
+            WHERE v.user_id = u.id AND ei.deleted_at IS NULL
+          )
+          WHEN u.user_type = 'client' THEN (
+            SELECT COUNT(*) FROM equipment_instance ei
+            JOIN clients c ON c.id = ei.assigned_to
+            WHERE c.user_id = u.id AND ei.deleted_at IS NULL
+          )
+          ELSE 0
+        END as equipment_count,
+        
+        -- For clients: count active equipment assignments
+        CASE 
+          WHEN u.user_type = 'client' THEN (
+            SELECT COUNT(*) FROM equipment_assignment ea
+            JOIN clients c ON c.id = ea.client_id
+            WHERE c.user_id = u.id AND ea.status IN ('active', 'pending')
+          )
+          ELSE 0
+        END as assignments_count,
+        CASE 
+          WHEN u.last_login > NOW() - INTERVAL '30 days' THEN 'Active'
+          WHEN u.is_locked THEN 'Locked'
+          ELSE 'Inactive'
+        END as status
+      FROM "user" u
+      LEFT JOIN "role" r ON u.role_id = r.id
+      WHERE u.deleted_at IS NULL
+      ORDER BY u.created_at DESC
+      LIMIT $1 OFFSET $2
+    `;
+    
+    try {
+      const [countResult, usersResult] = await Promise.all([
+        pool.query(countQuery),
+        pool.query(usersQuery, [limit, offset])
+      ]);
+      
+      const totalCount = parseInt(countResult.rows[0].count);
+      const totalPages = Math.ceil(totalCount / limit);
+      
+      return {
+        users: usersResult.rows,
+        totalCount,
+        totalPages,
+        currentPage: page
+      };
+    } catch (error) {
+      console.error('Error getting paginated users:', error);
       throw error;
     }
   }
@@ -500,11 +641,18 @@ export class UserRepository {
    */
   static async getUserDetailById(userId: number): Promise<any> {
     try {
+      // Validate userId
+      if (!userId || isNaN(userId)) {
+        console.error('Invalid userId provided:', userId);
+        return null;
+      }
+
       // Get basic user info
       const userQuery = `
         SELECT 
           u.id, u.first_name, u.last_name, u.display_name, u.email, u.user_type,
-          u.is_locked, u.last_login, u.created_at, u.last_login_ip,
+          u.is_locked, u.last_login, u.created_at, u.last_login_ip, u.phone,
+          u.avatar_url, u.bio,
           r.role_name
         FROM "user" u
         LEFT JOIN role r ON u.role_id = r.id
@@ -514,11 +662,14 @@ export class UserRepository {
       const userResult = await pool.query(userQuery, [userId]);
       
       if (userResult.rows.length === 0) {
+        console.log('No user found with ID:', userId);
         return null;
       }
 
       const user = userResult.rows[0];
       let detailedInfo: any = { ...user };
+
+      console.log('Found user:', { id: user.id, name: `${user.first_name} ${user.last_name}`, type: user.user_type });
 
       // Fetch role-specific information
       if (user.user_type === 'vendor') {
@@ -538,99 +689,156 @@ export class UserRepository {
    * Get vendor-specific details
    */
   private static async getVendorDetails(userId: number, baseInfo: any): Promise<any> {
-    // Get vendor information from the vendors table
-    const vendorQuery = `
-      SELECT 
-        v.company_name, v.business_type, v.license_number, 
-        v.primary_phone, v.street_address, v.city, v.state, 
-        v.zip_code, v.country, v.status,
-        v.created_at as company_created_at, v.updated_at as company_updated_at
-      FROM vendors v
-      WHERE v.user_id = $1
-    `;
-    const vendorResult = await pool.query(vendorQuery, [userId]);
+    try {
+      // Get vendor information from the vendors table
+      const vendorQuery = `
+        SELECT 
+          v.id, v.company_name, v.business_type, v.license_number, 
+          v.primary_phone, v.street_address, v.city, v.state, 
+          v.zip_code, v.country, v.status,
+          v.created_at as company_created_at, v.updated_at as company_updated_at
+        FROM vendors v
+        WHERE v.user_id = $1
+      `;
+      const vendorResult = await pool.query(vendorQuery, [userId]);
+      
+      if (vendorResult.rows.length === 0) {
+        console.log('No vendor record found for user ID:', userId);
+        return {
+          ...baseInfo,
+          vendor: null,
+          specializations: [],
+          equipment_count: 0,
+          client_count: 0
+        };
+      }
 
-    // Get vendor specializations (using vendor ID from vendors table)
-    const specializationsQuery = `
-      SELECT 
-        s.id, s.name, s.description, s.category
-      FROM vendor_specialization vs
-      JOIN specialization s ON s.id = vs.specialization_id
-      JOIN vendors v ON v.id = vs.vendor_id
-      WHERE v.user_id = $1
-    `;
-    const specializationsResult = await pool.query(specializationsQuery, [userId]);
+      const vendor = vendorResult.rows[0];
+      console.log('Found vendor:', { id: vendor.id, company: vendor.company_name });
 
-    // Get equipment count (using vendor ID from vendors table)
-    const equipmentCountQuery = `
-      SELECT COUNT(*) as equipment_count
-      FROM equipment_instance ei
-      JOIN vendors v ON v.id = ei.vendor_id
-      WHERE v.user_id = $1 AND ei.deleted_at IS NULL
-    `;
-    const equipmentCountResult = await pool.query(equipmentCountQuery, [userId]);
+      // Get vendor specializations (using vendor ID from vendors table)
+      const specializationsQuery = `
+        SELECT 
+          s.id, s.name, s.description, s.category
+        FROM vendor_specialization vs
+        JOIN specialization s ON s.id = vs.specialization_id
+        WHERE vs.vendor_id = $1
+      `;
+      const specializationsResult = await pool.query(specializationsQuery, [vendor.id]);
 
-    // Get client count (using vendor ID from vendors table)
-    const clientCountQuery = `
-      SELECT COUNT(DISTINCT ea.client_id) as client_count
-      FROM equipment_assignment ea
-      JOIN vendors v ON v.id = ea.vendor_id
-      WHERE v.user_id = $1
-    `;
-    const clientCountResult = await pool.query(clientCountQuery, [userId]);
+      // Get equipment count (using vendor ID from vendors table)
+      const equipmentCountQuery = `
+        SELECT COUNT(*) as equipment_count
+        FROM equipment_instance ei
+        WHERE ei.vendor_id = $1 AND ei.deleted_at IS NULL
+      `;
+      const equipmentCountResult = await pool.query(equipmentCountQuery, [vendor.id]);
 
-    return {
-      ...baseInfo,
-      vendor: vendorResult.rows[0] || null,
-      specializations: specializationsResult.rows,
-      equipment_count: parseInt(equipmentCountResult.rows[0]?.equipment_count || 0),
-      client_count: parseInt(clientCountResult.rows[0]?.client_count || 0)
-    };
+      // Get client count (using vendor ID from vendors table)
+      const clientCountQuery = `
+        SELECT COUNT(DISTINCT c.id) as client_count
+        FROM clients c
+        WHERE c.created_by_vendor_id = $1
+      `;
+      const clientCountResult = await pool.query(clientCountQuery, [vendor.id]);
+
+      return {
+        ...baseInfo,
+        vendor: vendor,
+        specializations: specializationsResult.rows || [],
+        equipment_count: parseInt(equipmentCountResult.rows[0]?.equipment_count || 0),
+        client_count: parseInt(clientCountResult.rows[0]?.client_count || 0)
+      };
+    } catch (error) {
+      console.error('Error getting vendor details for user:', userId, error);
+      return {
+        ...baseInfo,
+        vendor: null,
+        specializations: [],
+        equipment_count: 0,
+        client_count: 0
+      };
+    }
   }
 
   /**
    * Get client-specific details
    */
   private static async getClientDetails(userId: number, baseInfo: any): Promise<any> {
-    // Get client information from the clients table
-    const clientQuery = `
-      SELECT 
-        c.company_name, c.business_type, c.primary_phone,
-        c.street_address, c.city, c.state, c.zip_code, c.country,
-        c.status, c.created_at as company_created_at, c.updated_at as company_updated_at,
-        v.company_name as created_by_vendor_name
-      FROM clients c
-      LEFT JOIN vendors v ON v.id = c.created_by_vendor_id
-      WHERE c.user_id = $1
-    `;
-    const clientResult = await pool.query(clientQuery, [userId]);
+    try {
+      // Get client information from the clients table
+      const clientQuery = `
+        SELECT 
+          c.id, c.company_name, c.business_type, c.primary_phone,
+          c.street_address, c.city, c.state, c.zip_code, c.country,
+          c.status, c.created_at as company_created_at, c.updated_at as company_updated_at,
+          v.company_name as created_by_vendor_name,
+          v.id as vendor_id,
+          vu.display_name as vendor_user_name,
+          vu.email as vendor_email
+        FROM clients c
+        LEFT JOIN vendors v ON v.id = c.created_by_vendor_id
+        LEFT JOIN "user" vu ON vu.id = v.user_id
+        WHERE c.user_id = $1
+      `;
+      const clientResult = await pool.query(clientQuery, [userId]);
+      
+      if (clientResult.rows.length === 0) {
+        console.log('No client record found for user ID:', userId);
+        return {
+          ...baseInfo,
+          client: null,
+          vendor: null,
+          equipment: []
+        };
+      }
 
-    // Get equipment assigned to this client (using proper table relationships)
-    const equipmentQuery = `
-      SELECT 
-        e.equipment_name, e.equipment_code, e.equipment_type, e.manufacturer,
-        ei.serial_number, ei.status,
-        ea.assigned_at, ea.status as assignment_status,
-        ea.start_date, ea.end_date,
-        v.company_name as vendor_company,
-        u.display_name as vendor_name
-      FROM equipment_assignment ea
-      JOIN assignment_item ai ON ai.assignment_id = ea.id
-      JOIN equipment_instance ei ON ei.id = ai.equipment_instance_id
-      JOIN equipment e ON e.id = ei.equipment_id
-      JOIN vendors v ON v.id = ea.vendor_id
-      JOIN "user" u ON u.id = v.user_id
-      JOIN clients c ON c.id = ea.client_id
-      WHERE c.user_id = $1 AND ea.status = 'active'
-      ORDER BY ea.assigned_at DESC
-    `;
-    const equipmentResult = await pool.query(equipmentQuery, [userId]);
+      const client = clientResult.rows[0];
+      console.log('Found client:', { id: client.id, company: client.company_name });
 
-    return {
-      ...baseInfo,
-      client: clientResult.rows[0] || null,
-      equipment: equipmentResult.rows
-    };
+      // Get all equipment units directly assigned to this client
+      const equipmentQuery = `
+        SELECT 
+          e.equipment_name, e.equipment_code, e.equipment_type, e.manufacturer,
+          ei.serial_number, ei.asset_tag, ei.status, ei.condition_rating,
+          ei.created_at as assigned_at, ei.status as assignment_status,
+          ei.purchase_date as start_date, ei.expiry_date as end_date,
+          v.company_name as vendor_company,
+          u.display_name as vendor_name,
+          u.first_name as vendor_first_name,
+          u.last_name as vendor_last_name
+        FROM equipment_instance ei
+        JOIN equipment e ON e.id = ei.equipment_id
+        JOIN vendors v ON v.id = ei.vendor_id
+        JOIN "user" u ON u.id = v.user_id
+        WHERE ei.assigned_to = $1 AND ei.deleted_at IS NULL
+        ORDER BY ei.created_at DESC
+      `;
+      const equipmentResult = await pool.query(equipmentQuery, [client.id]);
+
+      // Structure vendor information for client details
+      const vendorInfo = client.vendor_id ? {
+        id: client.vendor_id,
+        display_name: client.vendor_user_name,
+        email: client.vendor_email,
+        vendor_company: client.created_by_vendor_name
+      } : null;
+
+      return {
+        ...baseInfo,
+        client: client,
+        vendor: vendorInfo,
+        equipment: equipmentResult.rows || []
+      };
+    } catch (error) {
+      console.error('Error getting client details for user:', userId, error);
+      return {
+        ...baseInfo,
+        client: null,
+        vendor: null,
+        equipment: []
+      };
+    }
   }
 
   /**
@@ -660,6 +868,219 @@ export class UserRepository {
       return result.rows[0];
     } catch (error) {
       console.error('Error updating user info:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user can be deleted based on constraints
+   */
+  static async checkUserDeletionConstraints(userId: number): Promise<{
+    canDelete: boolean;
+    userType: string;
+    constraints: {
+      clientsCount?: number;
+      equipmentCount?: number;
+      assignmentsCount?: number;
+      activeTicketsCount?: number;
+    };
+    message: string;
+  }> {
+    try {
+      console.log('Checking user deletion constraints for user ID:', userId);
+
+      // First get the user type
+      const userQuery = `
+        SELECT u.user_type, u.first_name, u.last_name
+        FROM "user" u
+        WHERE u.id = $1 AND u.deleted_at IS NULL
+      `;
+      const userResult = await pool.query(userQuery, [userId]);
+      
+      if (userResult.rows.length === 0) {
+        return {
+          canDelete: false,
+          userType: 'unknown',
+          constraints: {},
+          message: 'User not found'
+        };
+      }
+
+      const user = userResult.rows[0];
+      const userType = user.user_type;
+      const userName = `${user.first_name} ${user.last_name}`.trim();
+
+      if (userType === 'vendor') {
+        // Get vendor ID
+        const vendorQuery = `SELECT id FROM vendors WHERE user_id = $1`;
+        const vendorResult = await pool.query(vendorQuery, [userId]);
+        
+        if (vendorResult.rows.length === 0) {
+          return {
+            canDelete: true,
+            userType,
+            constraints: {},
+            message: 'Vendor user can be deleted (no vendor record found)'
+          };
+        }
+
+        const vendorId = vendorResult.rows[0].id;
+
+        // Check vendor constraints
+        const clientsResult = await pool.query(`
+          SELECT COUNT(*) as count 
+          FROM clients 
+          WHERE created_by_vendor_id = $1 AND status != 'inactive'
+        `, [vendorId]);
+
+        const equipmentResult = await pool.query(`
+          SELECT COUNT(*) as count 
+          FROM equipment_instance 
+          WHERE vendor_id = $1 AND deleted_at IS NULL
+        `, [vendorId]);
+
+        const assignmentsResult = await pool.query(`
+          SELECT COUNT(*) as count 
+          FROM equipment_assignment 
+          WHERE vendor_id = $1 AND status IN ('active', 'pending')
+        `, [vendorId]);
+
+        const ticketsResult = await pool.query(`
+          SELECT COUNT(*) as count 
+          FROM maintenance_ticket 
+          WHERE vendor_id = $1 AND ticket_status IN ('open', 'in_progress', 'pending')
+        `, [vendorId]);
+
+        const clientsCount = parseInt(clientsResult.rows[0].count);
+        const equipmentCount = parseInt(equipmentResult.rows[0].count);
+        const assignmentsCount = parseInt(assignmentsResult.rows[0].count);
+        const activeTicketsCount = parseInt(ticketsResult.rows[0].count);
+
+        const canDelete = clientsCount === 0 && equipmentCount === 0 && assignmentsCount === 0 && activeTicketsCount === 0;
+        
+        let message = '';
+        if (canDelete) {
+          message = `Vendor ${userName} can be deleted`;
+        } else {
+          const issues = [];
+          if (clientsCount > 0) issues.push(`${clientsCount} active clients`);
+          if (equipmentCount > 0) issues.push(`${equipmentCount} equipment instances`);
+          if (assignmentsCount > 0) issues.push(`${assignmentsCount} active assignments`);
+          if (activeTicketsCount > 0) issues.push(`${activeTicketsCount} active tickets`);
+          message = `Cannot delete vendor ${userName}: has ${issues.join(', ')}`;
+        }
+
+        return {
+          canDelete,
+          userType,
+          constraints: {
+            clientsCount,
+            equipmentCount,
+            assignmentsCount,
+            activeTicketsCount
+          },
+          message
+        };
+      } else if (userType === 'client') {
+        // Get client ID
+        const clientQuery = `SELECT id FROM clients WHERE user_id = $1`;
+        const clientResult = await pool.query(clientQuery, [userId]);
+        
+        if (clientResult.rows.length === 0) {
+          return {
+            canDelete: true,
+            userType,
+            constraints: {},
+            message: 'Client user can be deleted (no client record found)'
+          };
+        }
+
+        const clientId = clientResult.rows[0].id;
+
+        // Check client constraints
+        const equipmentResult = await pool.query(`
+          SELECT COUNT(*) as count 
+          FROM equipment_instance 
+          WHERE assigned_to = $1 AND deleted_at IS NULL
+        `, [clientId]);
+
+        const assignmentsResult = await pool.query(`
+          SELECT COUNT(*) as count 
+          FROM equipment_assignment 
+          WHERE client_id = $1 AND status IN ('active', 'pending')
+        `, [clientId]);
+
+        const ticketsResult = await pool.query(`
+          SELECT COUNT(*) as count 
+          FROM maintenance_ticket 
+          WHERE client_id = $1 AND ticket_status IN ('open', 'in_progress', 'pending')
+        `, [clientId]);
+
+        const equipmentCount = parseInt(equipmentResult.rows[0].count);
+        const assignmentsCount = parseInt(assignmentsResult.rows[0].count);
+        const activeTicketsCount = parseInt(ticketsResult.rows[0].count);
+
+        const canDelete = equipmentCount === 0 && assignmentsCount === 0 && activeTicketsCount === 0;
+        
+        let message = '';
+        if (canDelete) {
+          message = `Client ${userName} can be deleted`;
+        } else {
+          const issues = [];
+          if (equipmentCount > 0) issues.push(`${equipmentCount} assigned equipment units`);
+          if (assignmentsCount > 0) issues.push(`${assignmentsCount} active assignments`);
+          if (activeTicketsCount > 0) issues.push(`${activeTicketsCount} active tickets`);
+          message = `Cannot delete client ${userName}: has ${issues.join(', ')}`;
+        }
+
+        return {
+          canDelete,
+          userType,
+          constraints: {
+            equipmentCount,
+            assignmentsCount,
+            activeTicketsCount
+          },
+          message
+        };
+      } else {
+        // Admin users can always be deleted (unless we want to prevent deleting the last admin)
+        return {
+          canDelete: true,
+          userType,
+          constraints: {},
+          message: `Admin user ${userName} can be deleted`
+        };
+      }
+    } catch (error) {
+      console.error('Error checking user deletion constraints:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Soft delete user
+   */
+  static async deleteUser(userId: number): Promise<void> {
+    const query = `
+      UPDATE "user" 
+      SET 
+        deleted_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND deleted_at IS NULL
+    `;
+
+    try {
+      console.log('Soft deleting user:', userId);
+      const result = await pool.query(query, [userId]);
+      
+      if (result.rowCount === 0) {
+        throw new Error('User not found or already deleted');
+      }
+      
+      console.log('User soft deleted successfully:', userId);
+    } catch (error) {
+      console.error('Error deleting user:', error);
       throw error;
     }
   }

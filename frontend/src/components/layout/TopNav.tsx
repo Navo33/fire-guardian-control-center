@@ -11,6 +11,7 @@ import {
   ChevronDownIcon,
   Cog6ToothIcon
 } from '@heroicons/react/24/outline';
+import NotificationBell from './NotificationBell';
 
 interface TopNavProps {
   user: {
@@ -103,6 +104,9 @@ export default function TopNav({ user, onMenuToggle, isMobileMenuOpen }: TopNavP
           </div>
 
           <div className="flex items-center space-x-4">
+            {/* Notification Bell */}
+            <NotificationBell />
+            
             {/* User Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <button
