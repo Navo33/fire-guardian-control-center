@@ -13,20 +13,10 @@
     "@hookform/resolvers": "^5.2.2",
     "@react-pdf/renderer": "^4.3.1",
     "axios": "^1.12.0",
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-=======
-    "html2canvas": "^1.4.1",
-    "jspdf": "^3.0.3",
-    "jspdf-autotable": "^5.0.2",
->>>>>>> 7027d1f92f1dbb0209852ac3cc7d6ac4eea8b833
-    "next": "15.5.3",
-=======
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
     "jspdf-autotable": "^5.0.2",
     "next": "^16.0.10",
->>>>>>> Stashed changes
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.62.0",
