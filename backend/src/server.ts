@@ -35,10 +35,15 @@ import notificationRoutes from './routes/notifications';
 import emailRoutes from './routes/email';
 import pdfReportsRoutes from './routes/pdfReports';
 import emergencyWarningsRoutes from './routes/emergencyWarnings';
+import smsRoutes from './routes/sms';
 
 // Import email services
 import { verifyEmailConfig } from './config/email';
 import { emailScheduler } from './services/emailScheduler';
+
+// Import SMS services
+import NotificationScheduler from './services/NotificationScheduler';
+import { smsConfig } from './config/sms';
 
 // Load environment variables
 dotenv.config();
@@ -88,6 +93,16 @@ const initializeDatabase = async () => {
   } else {
     console.warn('⚠️  Email service not configured. Email features will be disabled.');
     console.log('ℹ️  To enable emails, set EMAIL_USER and EMAIL_PASSWORD in .env');
+  }
+  
+  // Verify SMS configuration and start scheduler
+  console.log('📱 Verifying SMS configuration...');
+  if (smsConfig.enabled && smsConfig.apiKey) {
+    NotificationScheduler.start();
+    console.log('✅ SMS notification scheduler started - Daily checks at 8:00 AM');
+  } else {
+    console.warn('⚠️  SMS service not configured. SMS notifications will be disabled.');
+    console.log('ℹ️  To enable SMS, set DIALOG_SMS_ENABLED=true and DIALOG_SMS_API_KEY in .env');
   }
   
   // Start periodic cleanup of expired sessions (every 1 hour)
@@ -227,6 +242,7 @@ app.use('/api/notifications', securityMiddleware, notificationRoutes);
 app.use('/api/email', securityMiddleware, emailRoutes);
 app.use('/api/pdf-reports', securityMiddleware, pdfReportsRoutes);
 app.use('/api/emergency-warnings', securityMiddleware, emergencyWarningsRoutes);
+app.use('/api/sms', securityMiddleware, smsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

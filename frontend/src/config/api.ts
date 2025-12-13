@@ -208,6 +208,16 @@ export const API_ENDPOINTS = {
     ALL: `${API_BASE_URL}/emergency-warnings`,
     LATEST: `${API_BASE_URL}/emergency-warnings/latest`,
   },
+  
+  // SMS
+  SMS: {
+    BALANCE: `${API_BASE_URL}/sms/balance`,
+    STATISTICS: `${API_BASE_URL}/sms/statistics`,
+    PREFERENCES: `${API_BASE_URL}/sms/preferences`,
+    SETTINGS: `${API_BASE_URL}/sms/settings`,
+    CHECK_NOW: `${API_BASE_URL}/sms/check-now`,
+    TEST: `${API_BASE_URL}/sms/test`,
+  },
 
   // Client Views (for client users)
   CLIENT: {

@@ -13,6 +13,8 @@ import { DashboardRepository } from '../models/DashboardRepository';
 import { emailService } from '../services/emailService';
 import { emailRepository } from '../models/EmailRepository';
 import { pool } from '../config/database';
+import SmsService from '../services/SmsService';
+import { SmsMessageType, SmsTemplates } from '../config/sms';
 
 export class MaintenanceTicketController extends BaseController {
 
@@ -31,6 +33,7 @@ export class MaintenanceTicketController extends BaseController {
     this.closeTicket = this.closeTicket.bind(this);
     this.getRelatedTickets = this.getRelatedTickets.bind(this);
     this.getEquipmentForClient = this.getEquipmentForClient.bind(this);
+    this.sendHighPriorityTicketSms = this.sendHighPriorityTicketSms.bind(this);
   }
 
   /**
@@ -245,6 +248,14 @@ export class MaintenanceTicketController extends BaseController {
         console.error('Failed to send ticket creation email:', err);
         // Don't fail the request if email fails
       });
+      
+      // Send SMS for high priority tickets
+      if (priority === 'high') {
+        this.sendHighPriorityTicketSms(result.id, vendorId, ticketData.client_id).catch((err: any) => {
+          console.error('Failed to send high priority SMS:', err);
+          // Don't fail the request if SMS fails
+        });
+      }
       
       ApiResponseUtil.created(res, result, 'Ticket created successfully');
     } catch (error) {
@@ -942,6 +953,109 @@ export class MaintenanceTicketController extends BaseController {
       console.log('===========================\n');
     } catch (error) {
       console.error('\n[ERROR IN TICKET COMPLETED EMAIL PROCESS]');
+      console.error('[Ticket ID]:', ticketId);
+      console.error('[Error]:', error);
+      console.error('===========================\n');
+      throw error;
+    }
+  }
+
+  /**
+   * Send SMS for high priority tickets
+   * Private helper method
+   */
+  private async sendHighPriorityTicketSms(ticketId: number, vendorId: number, clientId?: number): Promise<void> {
+    try {
+      console.log('\n===== SENDING HIGH PRIORITY TICKET SMS =====');
+      console.log('[Ticket ID]:', ticketId);
+      console.log('[Timestamp]:', new Date().toISOString());
+      
+      // Get ticket details with phone numbers
+      const query = `
+        SELECT 
+          mt.id,
+          mt.ticket_number,
+          eq.equipment_name,
+          c.company_name as client_name,
+          cu.id as client_user_id,
+          cu.phone as client_phone,
+          v.company_name as vendor_name,
+          vu.id as vendor_user_id,
+          vu.phone as vendor_phone
+        FROM maintenance_ticket mt
+        LEFT JOIN equipment_instance ei ON mt.equipment_instance_id = ei.id
+        LEFT JOIN equipment eq ON ei.equipment_id = eq.id
+        JOIN clients c ON mt.client_id = c.id
+        JOIN "user" cu ON c.user_id = cu.id
+        JOIN vendors v ON mt.vendor_id = v.id
+        JOIN "user" vu ON v.user_id = vu.id
+        WHERE mt.id = $1;
+      `;
+
+      const result = await pool.query(query, [ticketId]);
+      
+      if (result.rows.length === 0) {
+        console.warn(`⚠️ Ticket ${ticketId} not found for SMS notification`);
+        return;
+      }
+
+      const ticket = result.rows[0];
+      console.log('[Ticket Details Retrieved]');
+      console.log('   - Ticket #:', ticket.ticket_number);
+      console.log('   - Equipment:', ticket.equipment_name);
+      console.log('   - Client Phone:', ticket.client_phone || 'N/A');
+      console.log('   - Vendor Phone:', ticket.vendor_phone || 'N/A');
+      
+      // Prepare recipients
+      const recipients: any[] = [];
+      if (ticket.client_user_id && ticket.client_phone) {
+        recipients.push({
+          userId: ticket.client_user_id,
+          phoneNumber: ticket.client_phone,
+          userType: 'client',
+        });
+      }
+      if (ticket.vendor_user_id && ticket.vendor_phone) {
+        recipients.push({
+          userId: ticket.vendor_user_id,
+          phoneNumber: ticket.vendor_phone,
+          userType: 'vendor',
+        });
+      }
+
+      if (recipients.length === 0) {
+        console.log('[SKIPPED] No phone numbers available');
+        return;
+      }
+
+      // Generate message
+      const equipmentName = ticket.equipment_name || 'equipment';
+      const message = SmsTemplates[SmsMessageType.HIGH_PRIORITY_TICKET](
+        ticket.ticket_number,
+        equipmentName
+      );
+
+      console.log('[Message]:', message);
+      console.log('[Recipients]:', recipients.length);
+      
+      // Send SMS
+      const smsResult = await SmsService.sendSms(
+        recipients,
+        message,
+        SmsMessageType.HIGH_PRIORITY_TICKET,
+        'ticket',
+        ticketId
+      );
+      
+      if (smsResult.success) {
+        console.log('[SUCCESS] SMS sent to', smsResult.recipientCount, 'recipient(s)');
+      } else {
+        console.log('[FAILED] SMS sending failed:', smsResult.statusMessage);
+      }
+      
+      console.log('===========================\n');
+    } catch (error) {
+      console.error('\n[ERROR IN HIGH PRIORITY SMS PROCESS]');
       console.error('[Ticket ID]:', ticketId);
       console.error('[Error]:', error);
       console.error('===========================\n');
