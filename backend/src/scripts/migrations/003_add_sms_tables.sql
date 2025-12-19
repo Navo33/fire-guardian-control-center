@@ -1,5 +1,6 @@
--- SMS System Database Migration
+-- Migration 003: Add SMS System Tables
 -- Adds SMS logging and user preferences for Dialog eSMS integration
+-- Created: 2025-12-19
 
 -- Create SMS Logs Table
 CREATE TABLE IF NOT EXISTS public.sms_logs (
@@ -18,10 +19,10 @@ CREATE TABLE IF NOT EXISTS public.sms_logs (
     related_entity_id INT4
 );
 
-CREATE INDEX idx_sms_logs_user_id ON public.sms_logs USING btree (user_id);
-CREATE INDEX idx_sms_logs_status ON public.sms_logs USING btree (status);
-CREATE INDEX idx_sms_logs_created_at ON public.sms_logs USING btree (created_at);
-CREATE INDEX idx_sms_logs_message_type ON public.sms_logs USING btree (message_type);
+CREATE INDEX IF NOT EXISTS idx_sms_logs_user_id ON public.sms_logs USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_sms_logs_status ON public.sms_logs USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_sms_logs_created_at ON public.sms_logs USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_sms_logs_message_type ON public.sms_logs USING btree (message_type);
 
 -- Add SMS notification preferences to users table
 ALTER TABLE public.user 
@@ -56,7 +57,7 @@ CREATE TABLE IF NOT EXISTS public.sms_usage_stats (
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_sms_usage_stats_date ON public.sms_usage_stats USING btree (date);
+CREATE INDEX IF NOT EXISTS idx_sms_usage_stats_date ON public.sms_usage_stats USING btree (date);
 
 COMMENT ON TABLE public.sms_logs IS 'Logs all SMS messages sent via Dialog eSMS';
 COMMENT ON TABLE public.sms_usage_stats IS 'Daily statistics for SMS usage and quota tracking';

@@ -1,9 +1,6 @@
--- Enhanced compliance trigger that creates both notifications AND maintenance tickets
--- This replaces the existing create_notification() function
-
--- Drop existing trigger and function
-DROP TRIGGER IF EXISTS trigger_notify_compliance ON public.equipment_instance;
-DROP FUNCTION IF EXISTS create_notification();
+-- Migration 006: Enhanced Compliance Triggers
+-- Implements automatic maintenance ticket creation along with notifications for compliance issues
+-- Created: 2025-12-19
 
 -- Enhanced function that creates notifications and maintenance tickets
 CREATE OR REPLACE FUNCTION create_maintenance_notification_and_ticket()
@@ -68,7 +65,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create the enhanced trigger
+-- Create or replace the enhanced trigger
+DROP TRIGGER IF EXISTS trigger_notify_compliance_and_create_tickets ON public.equipment_instance;
 CREATE TRIGGER trigger_notify_compliance_and_create_tickets
     AFTER INSERT OR UPDATE OF compliance_status ON public.equipment_instance
     FOR EACH ROW

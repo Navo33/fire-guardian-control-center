@@ -1,4 +1,7 @@
--- Add token refresh threshold setting
+-- Migration 004: Add Token Refresh Setting
+-- Adds configuration for automatic token refresh threshold
+-- Created: 2025-12-19
+
 INSERT INTO public.system_settings (
   setting_key, 
   setting_value, 
@@ -12,7 +15,7 @@ INSERT INTO public.system_settings (
   'number', 
   'Refresh token automatically if expiring within this many minutes', 
   CURRENT_TIMESTAMP, 
-  1
+  NULL
 ) ON CONFLICT (setting_key) 
 DO UPDATE SET 
   setting_value = '5',

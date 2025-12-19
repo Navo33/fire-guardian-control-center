@@ -3,8 +3,23 @@
  * Handles environment-specific API endpoints and configuration
  */
 
-// Get the API base URL from environment variables
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+// Determine API base URL based on environment
+const getApiBaseUrl = (): string => {
+  // Explicit env variable takes priority
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  
+  // Production: use Render backend
+  if (typeof window !== 'undefined' && window.location.hostname === 'fire-guardian-control-center.vercel.app') {
+    return 'https://fire-guardian-control-center-backend.onrender.com/api';
+  }
+  
+  // Development: use localhost
+  return 'http://localhost:5000/api';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 // Debug flags
 export const DEBUG_CONFIG = {

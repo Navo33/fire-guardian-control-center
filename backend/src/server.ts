@@ -145,7 +145,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'https://fire-guardian-control-center.vercel.app',

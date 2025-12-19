@@ -1,6 +1,6 @@
--- Fix compliance status logic to correctly handle overdue vs due_soon
--- The issue: "due_soon" was showing for overdue maintenance because the condition
--- checked next_maintenance_date <= CURRENT_DATE + 30 days (which includes past dates)
+-- Migration 005: Fix Compliance Status Logic
+-- Corrects the compliance status calculation to properly differentiate between expired, overdue, and due_soon
+-- Created: 2025-12-19
 
 -- Update the compliance status function
 CREATE OR REPLACE FUNCTION update_compliance_status()
@@ -24,12 +24,3 @@ $$ LANGUAGE plpgsql;
 UPDATE equipment_instance 
 SET updated_at = CURRENT_TIMESTAMP
 WHERE deleted_at IS NULL;
-
--- Verify the update
-SELECT 
-    compliance_status,
-    COUNT(*) as count
-FROM equipment_instance
-WHERE deleted_at IS NULL
-GROUP BY compliance_status
-ORDER BY compliance_status;
