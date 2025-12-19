@@ -697,18 +697,10 @@ export default function VendorAnalyticsPage() {
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => setShowReportModal(true)}
-                className="btn-secondary flex items-center space-x-2"
+                className="btn-primary flex items-center space-x-2"
               >
                 <DocumentMagnifyingGlassIcon className="h-5 w-5" />
                 <span>Equipment Report</span>
-              </button>
-              <button
-                onClick={exportToPDF}
-                disabled={exportingPDF}
-                className="btn-primary flex items-center space-x-2"
-              >
-                <DocumentArrowDownIcon className="h-5 w-5" />
-                <span>{exportingPDF ? 'Generating...' : 'Export PDF'}</span>
               </button>
             </div>
           </div>
@@ -958,44 +950,6 @@ export default function VendorAnalyticsPage() {
                 <div className="text-center py-8 text-gray-500">No ticket trend data available</div>
               )}
             </div>
-
-            {/* Tickets by Type */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <FireIcon className="h-6 w-6 text-red-600 mr-2" />
-                Tickets by Type
-              </h2>
-              
-              {ticketsByType.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={ticketsByType.map((item, index) => ({
-                          name: item.support_type,
-                          value: item.count,
-                          fill: VENDOR_COLORS[index % VENDOR_COLORS.length]
-                        }))}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={(props: any) => `${props.name}: ${(props.percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {ticketsByType.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={VENDOR_COLORS[index % VENDOR_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">No ticket type data available</div>
-              )}
-            </div>
           </div>
 
           {/* Client Performance & Equipment */}
@@ -1041,47 +995,6 @@ export default function VendorAnalyticsPage() {
               </div>
             </div>
 
-            {/* Equipment Categories */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <WrenchScrewdriverIcon className="h-6 w-6 text-indigo-600 mr-2" />
-                Equipment Categories
-              </h2>
-              
-              {equipmentCategories.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={equipmentCategories.map((item, index) => ({
-                          name: item.equipment_type,
-                          value: item.instance_count,
-                          fill: VENDOR_COLORS[index % VENDOR_COLORS.length]
-                        }))}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={(props: any) => `${props.name}: ${(props.percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {equipmentCategories.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={VENDOR_COLORS[index % VENDOR_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">No equipment data available</div>
-              )}
-            </div>
-          </div>
-
-          {/* High-Risk Equipment & Technician Performance */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* High-Risk Equipment */}
             <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
@@ -1123,99 +1036,6 @@ export default function VendorAnalyticsPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
-
-            {/* Technician Performance */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <UserGroupIcon className="h-6 w-6 text-purple-600 mr-2" />
-                Technician Performance
-              </h2>
-              
-              {technicianPerformance.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={formatTechnicianPerformanceForChart(technicianPerformance)}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} fontSize={12} />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="Tickets Handled" fill="#1E40AF" />
-                      <Bar dataKey="Resolved" fill="#059669" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">No technician data available</div>
-              )}
-            </div>
-          </div>
-
-          {/* User & Security Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* User Login Trends */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <UserGroupIcon className="h-6 w-6 text-indigo-600 mr-2" />
-                Staff Login Trends
-              </h2>
-              
-              {userLoginTrends.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={formatUserLoginTrendsForChart(userLoginTrends)}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="week" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="Logins" stroke="#4F46E5" strokeWidth={2} />
-                      <Line type="monotone" dataKey="Failed Attempts" stroke="#DC2626" strokeWidth={2} strokeDasharray="5 5" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">No login trend data available</div>
-              )}
-            </div>
-
-            {/* Password Resets */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-sm transition-shadow">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                <LockClosedIcon className="h-6 w-6 text-amber-600 mr-2" />
-                Password Reset Reasons
-              </h2>
-              
-              {passwordResets.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={passwordResets.map((item, index) => ({
-                          name: item.reason,
-                          value: item.count,
-                          fill: VENDOR_COLORS[index % VENDOR_COLORS.length]
-                        }))}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={(props: any) => `${props.name}: ${(props.percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {passwordResets.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={VENDOR_COLORS[index % VENDOR_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">No password reset data available</div>
-              )}
             </div>
           </div>
 
@@ -1265,79 +1085,105 @@ export default function VendorAnalyticsPage() {
 
         {/* Equipment Report Modal */}
         {showReportModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-3">
-                  <DocumentMagnifyingGlassIcon className="h-6 w-6 text-indigo-600" />
-                  <h3 className="text-xl font-semibold text-gray-900">Generate Equipment Report</h3>
-                </div>
-                <button
-                  onClick={() => setShowReportModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Client <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={reportClientId || ''}
-                    onChange={(e) => setReportClientId(e.target.value ? Number(e.target.value) : null)}
-                    className="input-field w-full"
-                    required
-                  >
-                    <option value="">Choose a client...</option>
-                    {clients.map(client => (
-                      <option key={client.id} value={client.id}>
-                        {client.company_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Start Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={reportDateRange.startDate}
-                    onChange={(e) => setReportDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                    className="input-field w-full"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    End Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={reportDateRange.endDate}
-                    onChange={(e) => setReportDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                    className="input-field w-full"
-                    required
-                  />
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-800">
-                    <strong>Note:</strong> This will generate a comprehensive Fire Equipment Status & Maintenance Report in PDF format, including equipment inventory, maintenance history, and compliance summary for the selected client.
-                  </p>
-                </div>
-
-                <div className="flex space-x-3 pt-4">
+          <div className="modal-container">
+            {/* Backdrop */}
+            <div className="modal-backdrop" onClick={() => setShowReportModal(false)} />
+            
+            {/* Modal */}
+            <div className="flex min-h-full items-center justify-center p-4">
+              <div className="modal-content">
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-indigo-50 rounded-xl">
+                      <DocumentMagnifyingGlassIcon className="h-6 w-6 text-indigo-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold text-gray-900">Generate Equipment Report</h2>
+                      <p className="text-sm text-gray-600">Create a comprehensive equipment status report for your clients</p>
+                    </div>
+                  </div>
                   <button
                     onClick={() => setShowReportModal(false)}
-                    className="flex-1 btn-secondary"
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <svg className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Form Content */}
+                <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+                  <div className="p-6 space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Select Client <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={reportClientId || ''}
+                        onChange={(e) => setReportClientId(e.target.value ? Number(e.target.value) : null)}
+                        className="input-field w-full"
+                        required
+                      >
+                        <option value="">Choose a client...</option>
+                        {clients.map(client => (
+                          <option key={client.id} value={client.id}>
+                            {client.company_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Start Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={reportDateRange.startDate}
+                          onChange={(e) => setReportDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                          className="input-field w-full"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          End Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={reportDateRange.endDate}
+                          onChange={(e) => setReportDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                          className="input-field w-full"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start">
+                        <svg className="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zm-11-1a1 1 0 11-2 0 1 1 0 012 0z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <h4 className="text-sm font-medium text-blue-900">Report Information</h4>
+                          <p className="text-sm text-blue-700 mt-1">
+                            This will generate a comprehensive Fire Equipment Status & Maintenance Report in PDF format, including equipment inventory, maintenance history, and compliance summary for the selected client.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-4 p-6 border-t border-gray-100">
+                  <button
+                    onClick={() => setShowReportModal(false)}
+                    className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
                     disabled={generatingReport}
                   >
                     Cancel
@@ -1345,7 +1191,7 @@ export default function VendorAnalyticsPage() {
                   <button
                     onClick={generateEquipmentReport}
                     disabled={generatingReport || !reportClientId}
-                    className="flex-1 btn-primary flex items-center justify-center space-x-2"
+                    className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                   >
                     {generatingReport ? (
                       <>

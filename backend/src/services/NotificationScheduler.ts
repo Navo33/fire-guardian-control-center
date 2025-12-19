@@ -49,32 +49,33 @@ class NotificationScheduler {
       );
       const warningDays = parseInt(settingsResult.rows[0]?.setting_value || '7');
 
-      // Find equipment with compliance expiring in X days
+      // Find equipment instances with compliance expiring in X days
       const expiringResult = await pool.query(
         `SELECT 
-          e.id as equipment_id,
+          ei.id as equipment_instance_id,
           e.equipment_name,
-          e.compliance_expiry_date,
-          e.client_id,
-          c.vendor_id,
-          cu.id as client_user_id,
+          ei.expiry_date,
+          ei.assigned_to as client_id,
+          c.id as client_user_id,
           cu.phone as client_phone,
-          vu.id as vendor_user_id,
+          ei.vendor_id,
+          v.user_id as vendor_user_id,
           vu.phone as vendor_phone
-         FROM equipment e
-         JOIN clients c ON e.client_id = c.id
+         FROM equipment_instance ei
+         JOIN equipment e ON ei.equipment_id = e.id
+         JOIN vendors v ON ei.vendor_id = v.id
+         LEFT JOIN clients c ON ei.assigned_to = c.id
          LEFT JOIN "user" cu ON c.user_id = cu.id
-         LEFT JOIN vendors v ON c.vendor_id = v.id
          LEFT JOIN "user" vu ON v.user_id = vu.id
-         WHERE e.compliance_expiry_date IS NOT NULL
-           AND e.compliance_expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${warningDays} days'
-           AND e.deleted_at IS NULL
+         WHERE ei.expiry_date IS NOT NULL
+           AND ei.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${warningDays} days'
+           AND ei.deleted_at IS NULL
            AND (cu.phone IS NOT NULL OR vu.phone IS NOT NULL)`
       );
 
       for (const equipment of expiringResult.rows) {
         const daysUntilExpiry = Math.ceil(
-          (new Date(equipment.compliance_expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          (new Date(equipment.expiry_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
         );
 
         const messageType =
@@ -82,7 +83,7 @@ class NotificationScheduler {
             ? SmsMessageType.COMPLIANCE_EXPIRING_TODAY
             : SmsMessageType.COMPLIANCE_EXPIRING_7_DAYS;
 
-        const expiryDate = new Date(equipment.compliance_expiry_date).toLocaleDateString('en-LK');
+        const expiryDate = new Date(equipment.expiry_date).toLocaleDateString('en-LK');
         const message =
           messageType === SmsMessageType.COMPLIANCE_EXPIRING_TODAY
             ? SmsTemplates[SmsMessageType.COMPLIANCE_EXPIRING_TODAY](equipment.equipment_name)
@@ -113,8 +114,8 @@ class NotificationScheduler {
             recipients,
             message,
             messageType,
-            'equipment',
-            equipment.equipment_id
+            'equipment_instance',
+            equipment.equipment_instance_id
           );
         }
       }
@@ -139,30 +140,29 @@ class NotificationScheduler {
       );
       const warningDays = parseInt(settingsResult.rows[0]?.setting_value || '3');
 
-      // Find equipment with maintenance due in X days or overdue
+      // Find equipment instances with maintenance due in X days or overdue
       const maintenanceResult = await pool.query(
         `SELECT 
-          e.id as equipment_id,
+          ei.id as equipment_instance_id,
           e.equipment_name,
-          e.last_maintenance_date,
-          e.maintenance_interval_months,
-          e.client_id,
-          c.vendor_id,
-          cu.id as client_user_id,
+          ei.last_maintenance_date,
+          ei.maintenance_interval_days,
+          ei.next_maintenance_date,
+          ei.assigned_to as client_id,
+          c.id as client_user_id,
           cu.phone as client_phone,
-          vu.id as vendor_user_id,
-          vu.phone as vendor_phone,
-          (e.last_maintenance_date + (e.maintenance_interval_months || ' months')::interval) as next_maintenance_date
-         FROM equipment e
-         JOIN clients c ON e.client_id = c.id
+          ei.vendor_id,
+          v.user_id as vendor_user_id,
+          vu.phone as vendor_phone
+         FROM equipment_instance ei
+         JOIN equipment e ON ei.equipment_id = e.id
+         JOIN vendors v ON ei.vendor_id = v.id
+         LEFT JOIN clients c ON ei.assigned_to = c.id
          LEFT JOIN "user" cu ON c.user_id = cu.id
-         LEFT JOIN vendors v ON c.vendor_id = v.id
          LEFT JOIN "user" vu ON v.user_id = vu.id
-         WHERE e.last_maintenance_date IS NOT NULL
-           AND e.maintenance_interval_months IS NOT NULL
-           AND e.maintenance_interval_months > 0
-           AND (e.last_maintenance_date + (e.maintenance_interval_months || ' months')::interval) <= CURRENT_DATE + INTERVAL '${warningDays} days'
-           AND e.deleted_at IS NULL
+         WHERE ei.next_maintenance_date IS NOT NULL
+           AND ei.next_maintenance_date <= CURRENT_DATE + INTERVAL '${warningDays} days'
+           AND ei.deleted_at IS NULL
            AND (cu.phone IS NOT NULL OR vu.phone IS NOT NULL)`
       );
 
@@ -183,13 +183,16 @@ class NotificationScheduler {
             equipment.equipment_name,
             Math.abs(daysUntilDue)
           );
-        } else {
+        } else if (daysUntilDue <= warningDays) {
           // Due soon
           messageType = SmsMessageType.MAINTENANCE_DUE_3_DAYS;
           message = SmsTemplates[SmsMessageType.MAINTENANCE_DUE_3_DAYS](
             equipment.equipment_name,
             nextMaintenanceDate.toLocaleDateString('en-LK')
           );
+        } else {
+          // Not due yet
+          continue;
         }
 
         // Prepare recipients (both client and vendor)
@@ -214,8 +217,8 @@ class NotificationScheduler {
             recipients,
             message,
             messageType,
-            'equipment',
-            equipment.equipment_id
+            'equipment_instance',
+            equipment.equipment_instance_id
           );
         }
       }
@@ -239,4 +242,5 @@ class NotificationScheduler {
   }
 }
 
-export default new NotificationScheduler();
+const notificationScheduler: NotificationScheduler = new NotificationScheduler();
+export default notificationScheduler;

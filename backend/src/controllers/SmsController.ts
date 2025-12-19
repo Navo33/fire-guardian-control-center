@@ -256,7 +256,7 @@ export class SmsController extends BaseController {
       }
 
       // Run checks asynchronously
-      NotificationScheduler.runManualCheck().catch(err => {
+      NotificationScheduler.runManualCheck().catch((err: any) => {
         console.error('Manual check failed:', err);
       });
 
@@ -281,28 +281,29 @@ export class SmsController extends BaseController {
         return;
       }
 
-      // Get user's phone number
+      // Get user info
       const userResult = await pool.query(
-        `SELECT id, phone, user_type FROM "user" WHERE id = $1`,
+        `SELECT id, user_type FROM "user" WHERE id = $1`,
         [userId]
       );
 
-      if (userResult.rows.length === 0 || !userResult.rows[0].phone) {
-        ApiResponseUtil.badRequest(res, 'Phone number not found for user');
+      if (userResult.rows.length === 0) {
+        ApiResponseUtil.badRequest(res, 'User not found');
         return;
       }
 
       const user = userResult.rows[0];
+      const testPhoneNumber = '0702053903'; // Test SMS will be sent to this number
       const testMessage = 'Test message from Fire Guardian Control Center. Your SMS notifications are working!';
 
       const result = await SmsService.sendSms(
-        [{ userId: user.id, phoneNumber: user.phone, userType: user.user_type }],
+        [{ userId: user.id, phoneNumber: testPhoneNumber, userType: user.user_type }],
         testMessage,
         'TEST_MESSAGE' as any
       );
 
       if (result.success) {
-        ApiResponseUtil.success(res, result, 'Test SMS sent successfully');
+        ApiResponseUtil.success(res, result, `Test SMS sent successfully to ${testPhoneNumber}`);
       } else {
         ApiResponseUtil.badRequest(res, result.statusMessage);
       }

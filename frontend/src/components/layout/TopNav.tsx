@@ -129,18 +129,18 @@ export default function TopNav({ user, onMenuToggle, isMobileMenuOpen }: TopNavP
 
               {/* Dropdown Menu */}
               {isDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
+                <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden z-50">
                   {/* User Info */}
-                  <div className="px-4 py-3 border-b border-gray-100">
+                  <div className="px-6 py-5 border-b border-gray-100">
                     <p className="text-sm font-semibold text-gray-900">{user.display_name || 'User'}</p>
-                    <p className="text-xs text-gray-500 mt-1">{getRoleDisplay(user.user_type)}</p>
+                    <p className="text-xs text-gray-600 mt-1.5">{getRoleDisplay(user.user_type)}</p>
                   </div>
 
                   {/* Menu Items */}
                   <div className="py-2">
                     <button
                       onClick={handleProfileClick}
-                      className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                      className="w-full px-6 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors duration-150"
                     >
                       <UserCircleIcon className="h-5 w-5 text-gray-400" />
                       <span>My Profile</span>
@@ -149,20 +149,19 @@ export default function TopNav({ user, onMenuToggle, isMobileMenuOpen }: TopNavP
                     {user.user_type === 'admin' && (
                       <button
                         onClick={handleSettingsClick}
-                        className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+                        className="w-full px-6 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center space-x-3 transition-colors duration-150"
                       >
                         <Cog6ToothIcon className="h-5 w-5 text-gray-400" />
                         <span>System Settings</span>
                       </button>
                     )}
-                    
                   </div>
 
-                  {/* Logout */}
-                  <div className="border-t border-gray-100 py-2">
+                  {/* Logout Button Section */}
+                  <div className="border-t border-gray-100 p-4 flex items-center justify-center">
                     <button
                       onClick={handleLogout}
-                      className="w-full px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
+                      className="btn-primary flex items-center space-x-2 w-full justify-center"
                     >
                       <ArrowRightOnRectangleIcon className="h-5 w-5" />
                       <span>Logout</span>

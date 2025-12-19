@@ -4,12 +4,11 @@
  */
 
 export const smsConfig = {
-  apiUrl: 'https://e-sms.dialog.lk/api/v1/message-via-url',
-  balanceCheckUrl: 'https://e-sms.dialog.lk/api/v1/message-via-url/check/balance',
-  apiKey: process.env.DIALOG_SMS_API_KEY || '',
-  sourceAddress: process.env.DIALOG_SMS_SOURCE_ADDRESS || 'FireGuard',
+  user: process.env.DIALOG_SMS_USER || '',
+  digest: process.env.DIALOG_SMS_DIGEST || '',
+  mask: process.env.DIALOG_SMS_MASK || 'Pegasus',
+  campaignName: 'FireGuardian',
   enabled: process.env.DIALOG_SMS_ENABLED === 'true',
-  pushNotificationUrl: process.env.DIALOG_SMS_PUSH_URL || 'https://api.fireguardian.lk/sms/callback',
   timeout: 10000, // 10 seconds
 };
 
