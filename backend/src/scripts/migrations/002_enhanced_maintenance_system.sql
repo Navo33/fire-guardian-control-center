@@ -22,9 +22,11 @@ END $$;
 -- ENHANCED COMPLIANCE TRIGGERS
 -- =====================================
 
--- Drop existing trigger and function
+-- Drop existing trigger and function (with all variations)
 DROP TRIGGER IF EXISTS trigger_notify_compliance ON public.equipment_instance;
+DROP TRIGGER IF EXISTS trigger_notify_compliance_and_create_tickets ON public.equipment_instance;
 DROP FUNCTION IF EXISTS create_notification();
+DROP FUNCTION IF EXISTS create_maintenance_notification_and_ticket();
 
 -- Enhanced function that creates notifications and maintenance tickets
 CREATE OR REPLACE FUNCTION create_maintenance_notification_and_ticket()

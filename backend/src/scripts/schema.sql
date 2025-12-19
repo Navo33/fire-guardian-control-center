@@ -516,10 +516,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_notify_compliance
-    AFTER INSERT OR UPDATE OF compliance_status ON public.equipment_instance
-    FOR EACH ROW
-    EXECUTE FUNCTION create_notification();
+-- NOTE: Compliance trigger is created in migration 002_enhanced_maintenance_system
+-- This function is kept for backward compatibility but the trigger is managed by migrations
 
 -- View: Vendor Compliance (for admin and vendor dashboards)
 CREATE VIEW vendor_compliance AS
