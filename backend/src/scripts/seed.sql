@@ -137,6 +137,8 @@ ON CONFLICT (email) DO NOTHING;
 
 -- --------------------------------------------------------------
 -- 3. system_settings
+-- Note: token_refresh_threshold_minutes is added by migration 001_add_token_refresh_setting
+-- So we only insert other settings here to avoid conflicts
 -- --------------------------------------------------------------
 INSERT INTO public.system_settings (
   id, setting_key, setting_value, setting_type, description,
@@ -151,8 +153,7 @@ INSERT INTO public.system_settings (
   (7, 'maintenance_reminder_days',   '30',  'number',  'Days before maintenance to send reminders',    '2025-10-25 11:25:00+05:30', 1),
   (8, 'expiry_reminder_days',        '60',  'number',  'Days before expiry to send reminders',         '2025-10-25 11:25:00+05:30', 1),
   (9, 'vendor_equipment_limit',      '1000','number',  'Maximum equipment instances per vendor',       '2025-10-25 11:25:00+05:30', 1),
-  (10,'compliance_alert_threshold',  '90',  'number',  'Compliance alert threshold % for admin reports','2025-10-25 11:25:00+05:30', 1),
-  (11,'token_refresh_threshold_minutes','5','number',  'Refresh token automatically if expiring within this many minutes','2025-10-25 11:25:00+05:30', 1)
+  (10,'compliance_alert_threshold',  '90',  'number',  'Compliance alert threshold % for admin reports','2025-10-25 11:25:00+05:30', 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- --------------------------------------------------------------
