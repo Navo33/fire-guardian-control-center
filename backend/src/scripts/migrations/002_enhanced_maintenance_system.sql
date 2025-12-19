@@ -2,22 +2,6 @@
 -- This migration implements automatic maintenance ticket creation and enhanced compliance triggers
 -- Created: 2025-11-23
 
--- Start transaction
-BEGIN;
-
--- Record this migration
-INSERT INTO schema_migrations (migration_name, execution_time_ms, success) 
-VALUES ('002_enhanced_maintenance_system', 0, false);
-
--- Get the migration ID for rollback tracking
-DO $$ 
-DECLARE
-    migration_id INTEGER;
-BEGIN
-    SELECT id INTO migration_id FROM schema_migrations WHERE migration_name = '002_enhanced_maintenance_system';
-    RAISE NOTICE 'Starting migration 002_enhanced_maintenance_system (ID: %)', migration_id;
-END $$;
-
 -- =====================================
 -- ENHANCED COMPLIANCE TRIGGERS
 -- =====================================
@@ -188,9 +172,6 @@ SET
         (SELECT executed_at FROM schema_migrations WHERE migration_name = '002_enhanced_maintenance_system')
     )) * 1000
 WHERE migration_name = '002_enhanced_maintenance_system';
-
--- Commit transaction
-COMMIT;
 
 -- =====================================
 -- POST-MIGRATION INSTRUCTIONS
