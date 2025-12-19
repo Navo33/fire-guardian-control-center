@@ -214,7 +214,6 @@ export default function ClientAnalyticsPage() {
       setError(null);
 
       const token = localStorage.getItem('token');
-      console.log('Using token:', token);       
       if (!token) {
         throw new Error('No authentication token found');
       }

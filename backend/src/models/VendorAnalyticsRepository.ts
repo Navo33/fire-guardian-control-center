@@ -506,4 +506,37 @@ export class VendorAnalyticsRepository {
     const result = await this.pool.query(query, [vendorId]);
     return result.rows;
   }
+
+  /**
+   * Get list of clients for dropdown filter
+   */
+  async getClientsForDropdown(vendorId: number): Promise<any[]> {
+    const query = `
+      SELECT id, company_name 
+      FROM public.clients 
+      WHERE created_by_vendor_id = $1 
+        AND status = 'active'
+      ORDER BY company_name
+    `;
+    
+    const result = await this.pool.query(query, [vendorId]);
+    return result.rows;
+  }
+
+  /**
+   * Get list of equipment types for dropdown filter
+   */
+  async getEquipmentTypesForDropdown(vendorId: number): Promise<any[]> {
+    const query = `
+      SELECT DISTINCT e.equipment_type 
+      FROM public.equipment e
+      JOIN public.equipment_instance ei ON e.id = ei.equipment_id
+      WHERE ei.vendor_id = $1 
+        AND ei.deleted_at IS NULL
+      ORDER BY e.equipment_type
+    `;
+    
+    const result = await this.pool.query(query, [vendorId]);
+    return result.rows;
+  }
 }
