@@ -1,41 +1,27 @@
--- Fire Guardian Control Center - Unified Database Schema
--- Version: 1.0 - Complete with all migrations merged
--- Generated on 2025-12-19
--- 
--- This schema includes:
--- - Core tables for users, vendors, clients, equipment, and maintenance
--- - SMS logging and user preferences
--- - System settings and configurations
--- - Comprehensive notification system with triggers
--- - Automatic ticket number generation
--- - Enhanced compliance tracking
--- - Token refresh settings
--- - Audit logging
---
--- All migration scripts have been merged into this file for consistency
+-- Fire Guardian Control Center Database Schema
+-- Generated on 2025-10-25 11:21 AM +0530
+-- Drops all existing tables and creates a new schema to support admin and vendor needs, including system_settings.
 
 -- Drop all existing tables to ensure clean setup
-DROP TABLE IF EXISTS public.sms_usage_stats CASCADE;
-DROP TABLE IF EXISTS public.sms_logs CASCADE;
 DROP TABLE IF EXISTS public.schema_migrations CASCADE;
-DROP TABLE IF EXISTS public.user_sessions CASCADE;
-DROP TABLE IF EXISTS public.password_reset CASCADE;
-DROP TABLE IF EXISTS public.audit_log CASCADE;
-DROP TABLE IF EXISTS public.notification CASCADE;
-DROP TABLE IF EXISTS public.maintenance_ticket CASCADE;
-DROP TABLE IF EXISTS public.assignment_item CASCADE;
-DROP TABLE IF EXISTS public.equipment_assignment CASCADE;
-DROP TABLE IF EXISTS public.equipment_instance CASCADE;
-DROP TABLE IF EXISTS public.equipment CASCADE;
-DROP TABLE IF EXISTS public.vendor_specialization CASCADE;
-DROP TABLE IF EXISTS public.specialization CASCADE;
-DROP TABLE IF EXISTS public.clients CASCADE;
-DROP TABLE IF EXISTS public.vendors CASCADE;
+DROP TABLE IF EXISTS public.user CASCADE;
+DROP TABLE IF EXISTS public.system_settings CASCADE;
+DROP TABLE IF EXISTS public.role CASCADE;
 DROP TABLE IF EXISTS public.role_permission CASCADE;
 DROP TABLE IF EXISTS public.permission CASCADE;
-DROP TABLE IF EXISTS public.role CASCADE;
-DROP TABLE IF EXISTS public.system_settings CASCADE;
-DROP TABLE IF EXISTS public."user" CASCADE;
+DROP TABLE IF EXISTS public.vendors CASCADE;
+DROP TABLE IF EXISTS public.clients CASCADE;
+DROP TABLE IF EXISTS public.vendor_specialization CASCADE;
+DROP TABLE IF EXISTS public.specialization CASCADE;
+DROP TABLE IF EXISTS public.equipment CASCADE;
+DROP TABLE IF EXISTS public.equipment_instance CASCADE;
+DROP TABLE IF EXISTS public.equipment_assignment CASCADE;
+DROP TABLE IF EXISTS public.assignment_item CASCADE;
+DROP TABLE IF EXISTS public.maintenance_ticket CASCADE;
+DROP TABLE IF EXISTS public.notification CASCADE;
+DROP TABLE IF EXISTS public.audit_log CASCADE;
+DROP TABLE IF EXISTS public.password_reset CASCADE;
+DROP TABLE IF EXISTS public.user_sessions CASCADE;
 
 -- Sequence and Table: schema_migrations
 CREATE SEQUENCE IF NOT EXISTS schema_migrations_id_seq;
@@ -487,18 +473,13 @@ CREATE TRIGGER trigger_set_expiry_date
     EXECUTE FUNCTION set_default_expiry_date();
 
 -- Trigger: Auto-update compliance_status for equipment_instance
--- Fixed to properly differentiate between 'expired', 'overdue', and 'due_soon'
 CREATE OR REPLACE FUNCTION update_compliance_status()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.compliance_status := CASE 
-        -- Check expired first (expiry_date in the past)
         WHEN NEW.expiry_date IS NOT NULL AND NEW.expiry_date < CURRENT_DATE THEN 'expired'
-        -- Check overdue (maintenance date in the past)
         WHEN NEW.next_maintenance_date IS NOT NULL AND NEW.next_maintenance_date < CURRENT_DATE THEN 'overdue'
-        -- Check due soon (maintenance date between today and 30 days from now)
         WHEN NEW.next_maintenance_date IS NOT NULL AND NEW.next_maintenance_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' THEN 'due_soon'
-        -- Otherwise compliant
         ELSE 'compliant'
     END;
     RETURN NEW;
@@ -510,13 +491,11 @@ CREATE TRIGGER trigger_update_compliance
     FOR EACH ROW
     EXECUTE FUNCTION update_compliance_status();
 
--- Trigger: Auto-generate notifications and tickets for compliance issues
--- Enhanced version from migration 002 with automatic maintenance ticket creation
-CREATE OR REPLACE FUNCTION create_maintenance_notification_and_ticket()
+-- Trigger: Auto-generate notifications for compliance issues
+CREATE OR REPLACE FUNCTION create_notification()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.compliance_status IN ('expired', 'overdue', 'due_soon') THEN
-        -- Create notification for vendor
         INSERT INTO public.notification (user_id, title, message, type, priority, category, created_at)
         SELECT 
             v.user_id,
@@ -532,56 +511,15 @@ BEGIN
             CURRENT_TIMESTAMP
         FROM public.vendors v
         WHERE v.id = NEW.vendor_id;
-        
-        -- Auto-create maintenance ticket for overdue equipment
-        -- Only if no existing open/resolved ticket exists
-        IF NEW.compliance_status = 'overdue' AND NOT EXISTS (
-            SELECT 1 FROM maintenance_ticket 
-            WHERE equipment_instance_id = NEW.id 
-              AND ticket_status IN ('open', 'resolved')
-              AND support_type = 'maintenance'
-        ) THEN
-            INSERT INTO maintenance_ticket (
-                equipment_instance_id, 
-                client_id, 
-                vendor_id,
-                ticket_status, 
-                support_type, 
-                priority,
-                issue_description, 
-                category
-            )
-            SELECT 
-                NEW.id,
-                NEW.assigned_to,
-                NEW.vendor_id,
-                'open',
-                'maintenance',
-                'normal',
-                'Automated maintenance ticket for overdue equipment.' || E'\n' ||
-                'Equipment: ' || e.equipment_name || ' (' || e.equipment_type || ')' || E'\n' ||
-                'Serial Number: ' || NEW.serial_number || E'\n' ||
-                'Last Maintenance Due: ' || COALESCE(NEW.next_maintenance_date::text, 'Not scheduled') || E'\n' ||
-                'Client: ' || COALESCE(c.company_name, 'Unassigned') || E'\n' || E'\n' ||
-                'This ticket was automatically created by the system when equipment became overdue for maintenance.',
-                'Scheduled Maintenance'
-            FROM public.equipment e
-            LEFT JOIN public.clients c ON NEW.assigned_to = c.id
-            WHERE e.id = NEW.equipment_id;
-        END IF;
     END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Drop old trigger if it exists
-DROP TRIGGER IF EXISTS trigger_notify_compliance ON public.equipment_instance;
-
--- Create the enhanced trigger
-CREATE TRIGGER trigger_notify_compliance_and_create_tickets
+CREATE TRIGGER trigger_notify_compliance
     AFTER INSERT OR UPDATE OF compliance_status ON public.equipment_instance
     FOR EACH ROW
-    EXECUTE FUNCTION create_maintenance_notification_and_ticket();
+    EXECUTE FUNCTION create_notification();
 
 -- View: Vendor Compliance (for admin and vendor dashboards)
 CREATE VIEW vendor_compliance AS
@@ -641,7 +579,7 @@ DECLARE
 BEGIN
     -- Get current date in YYYYMMDD format
     date_str := TO_CHAR(CURRENT_DATE, 'YYYYMMDD');
-    
+
     -- Get the count of tickets created today + 1
     SELECT COALESCE(MAX(
         CASE 
@@ -653,19 +591,19 @@ BEGIN
     INTO daily_count
     FROM maintenance_ticket
     WHERE DATE(created_at) = CURRENT_DATE;
-    
+
     -- Generate ticket number
     ticket_num := 'TKT-' || date_str || '-' || LPAD(daily_count::TEXT, 3, '0');
-    
+
     -- Ensure uniqueness (in case of race condition)
     WHILE EXISTS (SELECT 1 FROM maintenance_ticket WHERE ticket_number = ticket_num) LOOP
         daily_count := daily_count + 1;
         ticket_num := 'TKT-' || date_str || '-' || LPAD(daily_count::TEXT, 3, '0');
     END LOOP;
-    
+
     -- Set the ticket number
     NEW.ticket_number := ticket_num;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -705,7 +643,7 @@ BEGIN
         CURRENT_TIMESTAMP
     FROM public.user u
     WHERE u.user_type = 'admin' AND u.deleted_at IS NULL;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -741,7 +679,7 @@ BEGIN
         FROM public.vendors v
         WHERE v.id = NEW.created_by_vendor_id;
     END IF;
-    
+
     -- Notify all admin users
     INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
     SELECT 
@@ -762,7 +700,7 @@ BEGIN
         CURRENT_TIMESTAMP
     FROM public.user u
     WHERE u.user_type = 'admin' AND u.deleted_at IS NULL;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -784,24 +722,24 @@ BEGIN
     IF TG_OP = 'UPDATE' AND OLD.ticket_status = NEW.ticket_status THEN
         RETURN NEW;
     END IF;
-    
+
     -- Get client user ID
     SELECT u.id INTO client_user_id
     FROM public.clients c
     JOIN public.user u ON c.user_id = u.id
     WHERE c.id = NEW.client_id;
-    
+
     -- Get vendor user ID
     SELECT u.id INTO vendor_user_id
     FROM public.vendors v
     JOIN public.user u ON v.user_id = u.id
     WHERE v.id = NEW.vendor_id;
-    
+
     -- Get equipment serial number
     SELECT ei.serial_number INTO equipment_serial
     FROM public.equipment_instance ei
     WHERE ei.id = NEW.equipment_instance_id;
-    
+
     -- Notify client about ticket status change
     IF client_user_id IS NOT NULL THEN
         INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
@@ -833,7 +771,7 @@ BEGIN
             CURRENT_TIMESTAMP
         );
     END IF;
-    
+
     -- Notify vendor about ticket status change (for technician assignments or client updates)
     IF vendor_user_id IS NOT NULL AND TG_OP = 'UPDATE' THEN
         INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
@@ -856,7 +794,7 @@ BEGIN
             CURRENT_TIMESTAMP
         );
     END IF;
-    
+
     -- Notify assigned technician
     IF NEW.assigned_technician IS NOT NULL AND NEW.assigned_technician != vendor_user_id THEN
         INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
@@ -882,7 +820,7 @@ BEGIN
             CURRENT_TIMESTAMP
         );
     END IF;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -905,13 +843,13 @@ BEGIN
     FROM public.clients c
     JOIN public.user u ON c.user_id = u.id
     WHERE c.id = NEW.client_id;
-    
+
     -- Get vendor user ID
     SELECT u.id INTO vendor_user_id
     FROM public.vendors v
     JOIN public.user u ON v.user_id = u.id
     WHERE v.id = NEW.vendor_id;
-    
+
     -- Notify client about new equipment assignment
     IF client_user_id IS NOT NULL THEN
         INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
@@ -938,7 +876,7 @@ BEGIN
             CURRENT_TIMESTAMP
         );
     END IF;
-    
+
     -- Notify vendor about assignment confirmation
     IF vendor_user_id IS NOT NULL THEN
         INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
@@ -961,7 +899,7 @@ BEGIN
             CURRENT_TIMESTAMP
         );
     END IF;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -982,13 +920,13 @@ BEGIN
     IF TG_OP = 'UPDATE' AND OLD.status = NEW.status THEN
         RETURN NEW;
     END IF;
-    
+
     -- Get vendor user ID
     SELECT u.id INTO vendor_user_id
     FROM public.vendors v
     JOIN public.user u ON v.user_id = u.id
     WHERE v.id = NEW.vendor_id;
-    
+
     -- Get client user ID if assigned
     IF NEW.assigned_to IS NOT NULL THEN
         SELECT u.id INTO client_user_id
@@ -996,7 +934,7 @@ BEGIN
         JOIN public.user u ON c.user_id = u.id
         WHERE c.id = NEW.assigned_to;
     END IF;
-    
+
     -- Notify vendor about equipment status change
     IF vendor_user_id IS NOT NULL THEN
         INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
@@ -1023,7 +961,7 @@ BEGIN
             CURRENT_TIMESTAMP
         );
     END IF;
-    
+
     -- Notify client if equipment is assigned to them
     IF client_user_id IS NOT NULL AND NEW.status IN ('maintenance', 'retired', 'recalled') THEN
         INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
@@ -1047,7 +985,7 @@ BEGIN
             CURRENT_TIMESTAMP
         );
     END IF;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -1065,7 +1003,7 @@ BEGIN
     IF TG_OP = 'UPDATE' AND OLD.status = NEW.status THEN
         RETURN NEW;
     END IF;
-    
+
     -- Notify the vendor about their status change
     INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
     SELECT 
@@ -1099,7 +1037,7 @@ BEGIN
         CURRENT_TIMESTAMP
     FROM public.vendors v
     WHERE v.id = NEW.id;
-    
+
     -- Notify all admin users about vendor status changes
     INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
     SELECT 
@@ -1119,7 +1057,7 @@ BEGIN
         CURRENT_TIMESTAMP
     FROM public.user u
     WHERE u.user_type = 'admin' AND u.deleted_at IS NULL;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -1139,7 +1077,7 @@ BEGIN
     IF TG_OP = 'UPDATE' AND OLD.status = NEW.status THEN
         RETURN NEW;
     END IF;
-    
+
     -- Notify the client about their status change
     INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
     SELECT 
@@ -1173,14 +1111,14 @@ BEGIN
         CURRENT_TIMESTAMP
     FROM public.clients c
     WHERE c.id = NEW.id;
-    
+
     -- Notify the vendor who created this client
     IF NEW.created_by_vendor_id IS NOT NULL THEN
         SELECT u.id INTO vendor_user_id
         FROM public.vendors v
         JOIN public.user u ON v.user_id = u.id
         WHERE v.id = NEW.created_by_vendor_id;
-        
+
         IF vendor_user_id IS NOT NULL THEN
             INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
             VALUES (
@@ -1202,7 +1140,7 @@ BEGIN
             );
         END IF;
     END IF;
-    
+
     -- Notify all admin users about client status changes
     INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
     SELECT 
@@ -1223,7 +1161,7 @@ BEGIN
         CURRENT_TIMESTAMP
     FROM public.user u
     WHERE u.user_type = 'admin' AND u.deleted_at IS NULL;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -1255,7 +1193,7 @@ BEGIN
             ),
             CURRENT_TIMESTAMP
         );
-        
+
         -- Notify admins about account lockouts
         INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
         SELECT 
@@ -1277,7 +1215,7 @@ BEGIN
         FROM public.user u
         WHERE u.user_type = 'admin' AND u.deleted_at IS NULL AND u.id != NEW.id;
     END IF;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -1299,10 +1237,10 @@ BEGIN
     IF TG_OP = 'UPDATE' AND OLD.warranty_expiry = NEW.warranty_expiry THEN
         RETURN NEW;
     END IF;
-    
+
     -- Calculate days until expiry
     days_until_expiry := (NEW.warranty_expiry - CURRENT_DATE);
-    
+
     -- Only notify if warranty expires within 60 days
     IF NEW.warranty_expiry IS NOT NULL AND days_until_expiry <= 60 AND days_until_expiry > 0 THEN
         -- Get vendor user ID
@@ -1310,7 +1248,7 @@ BEGIN
         FROM public.vendors v
         JOIN public.user u ON v.user_id = u.id
         WHERE v.id = NEW.vendor_id;
-        
+
         -- Get client user ID if assigned
         IF NEW.assigned_to IS NOT NULL THEN
             SELECT u.id INTO client_user_id
@@ -1318,7 +1256,7 @@ BEGIN
             JOIN public.user u ON c.user_id = u.id
             WHERE c.id = NEW.assigned_to;
         END IF;
-        
+
         -- Notify vendor about warranty expiration
         IF vendor_user_id IS NOT NULL THEN
             INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
@@ -1339,7 +1277,7 @@ BEGIN
                 CURRENT_TIMESTAMP
             );
         END IF;
-        
+
         -- Notify client about warranty expiration
         IF client_user_id IS NOT NULL THEN
             INSERT INTO public.notification (user_id, title, message, type, priority, category, action_url, metadata, created_at)
@@ -1361,7 +1299,7 @@ BEGIN
             );
         END IF;
     END IF;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -1409,7 +1347,7 @@ CREATE TABLE IF NOT EXISTS public.sms_usage_stats (
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
-
+CREATE INDEX idx_sms_usage_stats_date ON public.sms_usage_stats USING btree (date);
 
 -- Add SMS preferences to user table
 ALTER TABLE public.user 
@@ -1420,120 +1358,9 @@ ADD COLUMN IF NOT EXISTS sms_maintenance_reminders BOOLEAN DEFAULT true;
 
 CREATE INDEX IF NOT EXISTS idx_user_sms_enabled ON public.user USING btree (sms_notifications_enabled);
 
--- =====================================
--- SYSTEM SETTINGS (Migration: add-token-refresh-setting.sql)
--- =====================================
-
-INSERT INTO public.system_settings (
-  setting_key, 
-  setting_value, 
-  setting_type, 
-  description, 
-  updated_at, 
-  updated_by
-) VALUES 
-  ('token_refresh_threshold_minutes', '5', 'number', 'Refresh token automatically if expiring within this many minutes', CURRENT_TIMESTAMP, 1),
-  ('sms_enabled', 'true', 'boolean', 'Enable/disable SMS notifications globally', CURRENT_TIMESTAMP, 1),
-  ('sms_api_key', '', 'string', 'Dialog eSMS API Key (esmsqk)', CURRENT_TIMESTAMP, 1),
-  ('sms_source_address', '', 'string', 'SMS Sender ID/Mask', CURRENT_TIMESTAMP, 1),
-  ('sms_daily_limit', '1000', 'number', 'Maximum SMS messages per day', CURRENT_TIMESTAMP, 1),
-  ('sms_compliance_warning_days', '7', 'number', 'Days before compliance expiry to send SMS', CURRENT_TIMESTAMP, 1),
-  ('sms_maintenance_warning_days', '3', 'number', 'Days before maintenance due to send SMS', CURRENT_TIMESTAMP, 1)
-ON CONFLICT (setting_key) 
-DO UPDATE SET 
-  setting_value = EXCLUDED.setting_value,
-  description = EXCLUDED.description,
-  updated_at = CURRENT_TIMESTAMP;
-
--- =====================================
--- TABLE COMMENTS
--- =====================================
-
 COMMENT ON TABLE public.sms_logs IS 'Logs all SMS messages sent via Dialog eSMS';
 COMMENT ON TABLE public.sms_usage_stats IS 'Daily statistics for SMS usage and quota tracking';
 COMMENT ON COLUMN public.user.sms_notifications_enabled IS 'Master toggle for all SMS notifications';
 COMMENT ON COLUMN public.user.sms_high_priority_tickets IS 'Receive SMS for high priority service tickets';
 COMMENT ON COLUMN public.user.sms_compliance_alerts IS 'Receive SMS for compliance expiry alerts';
 COMMENT ON COLUMN public.user.sms_maintenance_reminders IS 'Receive SMS for maintenance due/overdue';
-
--- =====================================
--- DATA VALIDATION AND POST-DEPLOYMENT
--- =====================================
-
--- Ensure all equipment instances have maintenance_interval_days set
-UPDATE equipment_instance 
-SET maintenance_interval_days = 365 
-WHERE maintenance_interval_days IS NULL;
-
--- Update equipment instances that don't have next_maintenance_date based on last maintenance + interval
-UPDATE equipment_instance 
-SET next_maintenance_date = COALESCE(
-    last_maintenance_date + INTERVAL '1 day' * maintenance_interval_days,
-    created_at::date + INTERVAL '1 day' * maintenance_interval_days
-)
-WHERE next_maintenance_date IS NULL;
-
--- Fix sequence values
-SELECT setval('user_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.user), false);
-SELECT setval('system_settings_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.system_settings), false);
-SELECT setval('role_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.role), false);
-SELECT setval('vendors_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.vendors), false);
-SELECT setval('client_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.clients), false);
-SELECT setval('specialization_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.specialization), false);
-SELECT setval('equipment_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.equipment), false);
-SELECT setval('equipment_instance_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.equipment_instance), false);
-SELECT setval('equipment_assignment_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.equipment_assignment), false);
-SELECT setval('assignment_item_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.assignment_item), false);
-SELECT setval('maintenance_ticket_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.maintenance_ticket), false);
-SELECT setval('notification_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.notification), false);
-SELECT setval('audit_log_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.audit_log), false);
-SELECT setval('user_sessions_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.user_sessions), false);
-SELECT setval('password_reset_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.password_reset), false);
-SELECT setval('sms_logs_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.sms_logs), false);
-SELECT setval('sms_usage_stats_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.sms_usage_stats), false);
-SELECT setval('schema_migrations_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM public.schema_migrations), false);
-
--- =====================================
--- SCHEMA VERSION AND MIGRATION TRACKING
--- =====================================
-
--- Record this unified schema version
-INSERT INTO public.schema_migrations (migration_name, execution_time_ms, success) 
-VALUES 
-  ('001_add_ticket_number_trigger', 0, true),
-  ('002_enhanced_maintenance_system', 0, true),
-  ('003_add_token_refresh_setting', 0, true),
-  ('004_add_sms_tables', 0, true),
-  ('005_fix_compliance_status_logic', 0, true)
-ON CONFLICT (migration_name) DO NOTHING;
-
--- Log completion
-DO $$
-BEGIN
-    RAISE NOTICE '';
-    RAISE NOTICE '═══════════════════════════════════════════════════════════════';
-    RAISE NOTICE 'Fire Guardian Control Center Database Schema - FULLY MERGED';
-    RAISE NOTICE '═══════════════════════════════════════════════════════════════';
-    RAISE NOTICE '';
-    RAISE NOTICE '✅ Database Schema Version 1.0 initialized successfully';
-    RAISE NOTICE '';
-    RAISE NOTICE 'Merged Components:';
-    RAISE NOTICE '  1. Core database schema with all tables and indices';
-    RAISE NOTICE '  2. SMS logging and user preferences (add-sms-tables.sql)';
-    RAISE NOTICE '  3. Token refresh configuration (add-token-refresh-setting.sql)';
-    RAISE NOTICE '  4. Automatic ticket number generation (001_add_ticket_number_trigger.sql)';
-    RAISE NOTICE '  5. Enhanced maintenance system (002_enhanced_maintenance_system.sql)';
-    RAISE NOTICE '  6. Fixed compliance status logic (fix-compliance-status-logic.sql)';
-    RAISE NOTICE '';
-    RAISE NOTICE 'Key Features:';
-    RAISE NOTICE '  • Complete notification system with 9 trigger functions';
-    RAISE NOTICE '  • Automatic maintenance ticket creation for overdue equipment';
-    RAISE NOTICE '  • SMS integration with Dialog eSMS';
-    RAISE NOTICE '  • Comprehensive audit logging';
-    RAISE NOTICE '  • User session management';
-    RAISE NOTICE '  • Equipment compliance tracking';
-    RAISE NOTICE '';
-    RAISE NOTICE 'Database is ready for application deployment!';
-    RAISE NOTICE '═══════════════════════════════════════════════════════════════';
-    RAISE NOTICE '';
-END $$;
