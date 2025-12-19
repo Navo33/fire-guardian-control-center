@@ -1409,48 +1409,7 @@ CREATE TABLE IF NOT EXISTS public.sms_usage_stats (
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- =====================================
--- SMS TABLES (Migration: add-sms-tables.sql)
--- =====================================
 
--- SMS Logs Table
-CREATE SEQUENCE IF NOT EXISTS sms_logs_id_seq;
-CREATE TABLE public.sms_logs (
-    id SERIAL PRIMARY KEY,
-    user_id INT4 REFERENCES public.user(id) ON DELETE CASCADE,
-    phone_number VARCHAR(20) NOT NULL,
-    message TEXT NOT NULL,
-    message_type VARCHAR(50) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending',
-    dialog_response TEXT,
-    dialog_status_code VARCHAR(10),
-    sent_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    error_message TEXT,
-    related_entity_type VARCHAR(50),
-    related_entity_id INT4
-);
-
-CREATE INDEX idx_sms_logs_user_id ON public.sms_logs USING btree (user_id);
-CREATE INDEX idx_sms_logs_status ON public.sms_logs USING btree (status);
-CREATE INDEX idx_sms_logs_created_at ON public.sms_logs USING btree (created_at);
-CREATE INDEX idx_sms_logs_message_type ON public.sms_logs USING btree (message_type);
-
--- SMS Usage Statistics Table
-CREATE SEQUENCE IF NOT EXISTS sms_usage_stats_id_seq;
-CREATE TABLE public.sms_usage_stats (
-    id SERIAL PRIMARY KEY,
-    date DATE NOT NULL UNIQUE,
-    total_sent INT4 DEFAULT 0,
-    total_failed INT4 DEFAULT 0,
-    high_priority_tickets INT4 DEFAULT 0,
-    compliance_alerts INT4 DEFAULT 0,
-    maintenance_reminders INT4 DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_sms_usage_stats_date ON public.sms_usage_stats USING btree (date);
 
 -- Add SMS preferences to user table
 ALTER TABLE public.user 
