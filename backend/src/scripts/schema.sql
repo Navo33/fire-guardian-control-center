@@ -82,7 +82,7 @@ CREATE TABLE public.system_settings (
     description text,
     updated_at timestamptz DEFAULT CURRENT_TIMESTAMP,
     updated_by int4,
-    CONSTRAINT system_settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.user(id),
+    CONSTRAINT system_settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.user(id) ON DELETE SET NULL,
     PRIMARY KEY (id)
 );
 CREATE UNIQUE INDEX system_settings_setting_key_key ON public.system_settings USING btree (setting_key);
