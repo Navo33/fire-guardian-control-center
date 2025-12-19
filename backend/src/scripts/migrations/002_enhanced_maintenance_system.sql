@@ -157,7 +157,7 @@ BEGIN
             (SELECT COUNT(*) FROM equipment_instance 
              WHERE next_maintenance_date < CURRENT_DATE 
                AND deleted_at IS NULL
-               AND status NOT IN ('retired', 'recalled'))::TEXT);
+               AND status != 'retired')::TEXT);
 END;
 $$ LANGUAGE plpgsql;
 
