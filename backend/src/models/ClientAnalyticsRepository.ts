@@ -107,11 +107,11 @@ export class ClientAnalyticsRepository {
    */
   async getClientOverview(
     clientId: number,
-    startDate: string,
-    endDate: string,
+    startDate?: string,
+    endDate?: string,
     equipmentType?: string
   ): Promise<ClientOverview> {
-    DebugLogger.log('Fetching client overview', { clientId, startDate, endDate, equipmentType }, 'CLIENT_ANALYTICS');
+    DebugLogger.log('Fetching client overview', { clientId, equipmentType }, 'CLIENT_ANALYTICS');
 
     const query = `
       WITH client_data AS (
@@ -129,8 +129,8 @@ export class ClientAnalyticsRepository {
               COUNT(DISTINCT ei.id) AS total_assigned,
               COUNT(DISTINCT CASE WHEN ei.compliance_status = 'compliant' THEN ei.id END) AS compliant,
               COUNT(DISTINCT CASE WHEN mt.ticket_status = 'open' THEN mt.id END) AS open_requests,
-              COUNT(DISTINCT CASE WHEN ei.next_maintenance_date <= CURRENT_DATE + INTERVAL '30 days' THEN ei.id END) AS due_soon,
-              COUNT(DISTINCT CASE WHEN ei.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN ei.id END) AS expiring_soon,
+              COUNT(DISTINCT CASE WHEN ei.next_maintenance_date IS NOT NULL AND ei.next_maintenance_date <= CURRENT_DATE + INTERVAL '30 days' THEN ei.id END) AS due_soon,
+              COUNT(DISTINCT CASE WHEN ei.expiry_date IS NOT NULL AND ei.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN ei.id END) AS expiring_soon,
               COUNT(DISTINCT CASE WHEN n.is_read = false THEN n.id END) AS unread_notifications
           FROM client_data cd
           LEFT JOIN public.equipment_instance ei ON ei.assigned_to = cd.client_id
@@ -138,7 +138,7 @@ export class ClientAnalyticsRepository {
             AND ei.deleted_at IS NULL
           LEFT JOIN public.equipment e ON e.id = ei.equipment_id
             AND e.deleted_at IS NULL
-            AND ($4 IS NULL OR e.equipment_type = $4)
+            AND ($2 IS NULL OR e.equipment_type = $2)
           LEFT JOIN public.maintenance_ticket mt ON mt.equipment_instance_id = ei.id 
             AND mt.client_id = cd.client_id
             AND mt.deleted_at IS NULL
@@ -158,7 +158,7 @@ export class ClientAnalyticsRepository {
       FROM stats s;
     `;
 
-    const result = await this.pool.query(query, [clientId, startDate, endDate, equipmentType]);
+    const result = await this.pool.query(query, [clientId, equipmentType]);
     return result.rows[0];
   }
 
@@ -796,13 +796,16 @@ export class ClientAnalyticsRepository {
               e.equipment_name AS equipment,
               ei.serial_number,
               ei.next_maintenance_date AS event_date,
+              (ei.next_maintenance_date - CURRENT_DATE)::int AS days_until_int,
               (ei.next_maintenance_date - CURRENT_DATE)::text AS days_until
           FROM public.equipment_instance ei
           JOIN public.equipment e ON ei.equipment_id = e.id
           WHERE ei.assigned_to = (SELECT client_id FROM client_data)
             AND ei.status = 'assigned'
             AND ei.deleted_at IS NULL
-            AND ei.next_maintenance_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+            AND ei.next_maintenance_date IS NOT NULL
+            AND ei.next_maintenance_date >= CURRENT_DATE
+            AND ei.next_maintenance_date <= CURRENT_DATE + INTERVAL '30 days'
           
           UNION ALL
           
@@ -811,13 +814,16 @@ export class ClientAnalyticsRepository {
               e.equipment_name AS equipment,
               ei.serial_number,
               ei.expiry_date AS event_date,
+              (ei.expiry_date - CURRENT_DATE)::int AS days_until_int,
               (ei.expiry_date - CURRENT_DATE)::text AS days_until
           FROM public.equipment_instance ei
           JOIN public.equipment e ON ei.equipment_id = e.id
           WHERE ei.assigned_to = (SELECT client_id FROM client_data)
             AND ei.status = 'assigned'
             AND ei.deleted_at IS NULL
-            AND ei.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+            AND ei.expiry_date IS NOT NULL
+            AND ei.expiry_date >= CURRENT_DATE
+            AND ei.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
           
           UNION ALL
           
@@ -826,28 +832,30 @@ export class ClientAnalyticsRepository {
               e.equipment_name AS equipment,
               ei.serial_number,
               ei.warranty_expiry AS event_date,
+              (ei.warranty_expiry - CURRENT_DATE)::int AS days_until_int,
               (ei.warranty_expiry - CURRENT_DATE)::text AS days_until
           FROM public.equipment_instance ei
           JOIN public.equipment e ON ei.equipment_id = e.id
           WHERE ei.assigned_to = (SELECT client_id FROM client_data)
             AND ei.status = 'assigned'
             AND ei.deleted_at IS NULL
-            AND ei.warranty_expiry BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+            AND ei.warranty_expiry IS NOT NULL
+            AND ei.warranty_expiry >= CURRENT_DATE
+            AND ei.warranty_expiry <= CURRENT_DATE + INTERVAL '30 days'
       )
       SELECT
-          COUNT(*) FILTER (WHERE days_until::int <= 7)::text AS critical_next_7d,
-          COALESCE(jsonb_agg(jsonb_build_object(
+          jsonb_agg(jsonb_build_object(
               'type', type,
               'equipment', equipment,
               'serial_number', serial_number,
               'event_date', TO_CHAR(event_date, 'Mon DD, YYYY'),
               'days_until', days_until
-          ) ORDER BY days_until::int ASC) FILTER (WHERE event_date IS NOT NULL), '[]'::jsonb) AS upcoming_events
+          ) ORDER BY days_until_int ASC) AS upcoming_events
       FROM events;
     `;
 
     const result = await this.pool.query(query, [userId]);
-    return result.rows[0] || {};
+    return result.rows[0]?.upcoming_events || [];
   }
 
   /**
@@ -992,7 +1000,7 @@ export class ClientAnalyticsRepository {
           ei.serial_number,
           ei.compliance_status,
           TO_CHAR(ei.next_maintenance_date, 'Mon DD, YYYY') AS next_maintenance,
-          (ei.next_maintenance_date - CURRENT_DATE)::text AS days_until_maintenance,
+          COALESCE((ei.next_maintenance_date - CURRENT_DATE)::text, 'N/A') AS days_until_maintenance,
           ei.location
       FROM public.equipment_instance ei
       JOIN public.equipment e ON ei.equipment_id = e.id
@@ -1007,7 +1015,7 @@ export class ClientAnalyticsRepository {
           WHEN 'due_soon' THEN 3 
           ELSE 4 
         END,
-        days_until_maintenance::int ASC NULLS LAST;
+        COALESCE(ei.next_maintenance_date - CURRENT_DATE, 999999) ASC NULLS LAST;
     `;
 
     const result = await this.pool.query(query, [clientId]);

@@ -311,17 +311,8 @@ export class VendorAnalyticsController extends BaseController {
         return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      // Simple query to get client list for dropdown
-      const query = `
-        SELECT id, company_name 
-        FROM public.clients 
-        WHERE created_by_vendor_id = $1 
-          AND status = 'active'
-        ORDER BY company_name
-      `;
-      
-      const result = await this.vendorAnalyticsRepo['pool'].query(query, [vendorId]);
-      ApiResponseUtil.success(res, result.rows);
+      const clients = await this.vendorAnalyticsRepo.getClientsForDropdown(vendorId);
+      ApiResponseUtil.success(res, clients);
     } catch (error) {
       console.error('Error fetching clients for dropdown:', error);
       return ApiResponseUtil.internalError(res, 'Failed to fetch clients for dropdown');
@@ -339,18 +330,8 @@ export class VendorAnalyticsController extends BaseController {
         return ApiResponseUtil.unauthorized(res, 'Vendor access required');
       }
 
-      // Simple query to get equipment types for dropdown
-      const query = `
-        SELECT DISTINCT e.equipment_type 
-        FROM public.equipment e
-        JOIN public.equipment_instance ei ON e.id = ei.equipment_id
-        WHERE ei.vendor_id = $1 
-          AND ei.deleted_at IS NULL
-        ORDER BY e.equipment_type
-      `;
-      
-      const result = await this.vendorAnalyticsRepo['pool'].query(query, [vendorId]);
-      ApiResponseUtil.success(res, result.rows);
+      const equipmentTypes = await this.vendorAnalyticsRepo.getEquipmentTypesForDropdown(vendorId);
+      ApiResponseUtil.success(res, equipmentTypes);
     } catch (error) {
       console.error('Error fetching equipment types for dropdown:', error);
       return ApiResponseUtil.internalError(res, 'Failed to fetch equipment types for dropdown');
