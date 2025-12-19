@@ -1307,6 +1307,33 @@ CREATE TRIGGER trigger_notify_warranty_expiration
     FOR EACH ROW
     EXECUTE FUNCTION notify_warranty_expiration();
 -- =====================================================
+-- EMAIL SYSTEM TABLES
+-- =====================================================
+
+-- Email Logs Table
+CREATE TABLE IF NOT EXISTS public.email_logs (
+    id SERIAL PRIMARY KEY,
+    recipient_email VARCHAR(320) NOT NULL,
+    template_type VARCHAR(100) NOT NULL,
+    subject VARCHAR(500) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- 'pending', 'sent', 'failed'
+    message_id VARCHAR(255),
+    error_message TEXT,
+    sent_at TIMESTAMPTZ,
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_logs_recipient ON public.email_logs USING btree (recipient_email);
+CREATE INDEX IF NOT EXISTS idx_email_logs_status ON public.email_logs USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_email_logs_created_at ON public.email_logs USING btree (created_at);
+CREATE INDEX IF NOT EXISTS idx_email_logs_template_type ON public.email_logs USING btree (template_type);
+
+COMMENT ON TABLE public.email_logs IS 'Logs all email messages sent via email service';
+COMMENT ON COLUMN public.email_logs.template_type IS 'Type of email template used (e.g., password_reset, notification, etc.)';
+COMMENT ON COLUMN public.email_logs.status IS 'Status of email delivery attempt';
+
+-- =====================================================
 -- SMS SYSTEM TABLES (Dialog eSMS Integration)
 -- =====================================================
 
