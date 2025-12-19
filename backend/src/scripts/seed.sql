@@ -5,6 +5,12 @@
 
 -- Clear ALL existing data to ensure clean seed
 -- This prevents duplicate key errors when re-seeding
+
+-- First, clear foreign key references to users
+UPDATE system_settings SET updated_by = NULL WHERE updated_by IS NOT NULL;
+UPDATE audit_log SET changed_by = NULL WHERE changed_by IS NOT NULL;
+
+-- Then delete data in correct order (respecting foreign keys)
 DELETE FROM audit_log;
 DELETE FROM notification;
 DELETE FROM maintenance_ticket;
