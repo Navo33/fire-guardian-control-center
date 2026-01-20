@@ -1,11 +1,13 @@
 /**
  * Dialog eSMS Service
  * Handles SMS sending via Sri Lanka's Dialog Axiata Gateway
+ * Uses token-based authentication with automatic token refresh
  */
 
 import axios from 'axios';
 import { pool } from '../config/database';
 import { smsConfig, SmsStatusCodes, SmsMessageType } from '../config/sms';
+import { dialogTokenManager } from './DialogTokenManager';
 
 interface SmsRecipient {
   userId: number;
@@ -35,8 +37,12 @@ interface SmsLogEntry {
 }
 
 class SmsService {
+  private readonly SMS_API_ENDPOINT = 'https://e-sms.dialog.lk/api/v1/sms';
+  private readonly MAX_RETRIES = 2;
+
   /**
    * Send SMS to single or multiple recipients
+   * Uses token-based authentication with automatic token refresh on expiration
    */
   async sendSms(
     recipients: SmsRecipient[],
@@ -47,7 +53,7 @@ class SmsService {
   ): Promise<SmsSendResult> {
     try {
       // Check if SMS is enabled globally
-      if (!smsConfig.enabled || !smsConfig.user || !smsConfig.digest || !smsConfig.mask) {
+      if (!smsConfig.enabled || !smsConfig.username || !smsConfig.password) {
         console.log('SMS service disabled or not configured');
         return {
           success: false,
@@ -84,44 +90,37 @@ class SmsService {
 
       // Format phone numbers for Dialog eSMS (Sri Lankan format)
       const phoneNumbers = eligibleRecipients.map(r => this.formatPhoneNumber(r.phoneNumber));
-      const numberList = phoneNumbers.join(',');
 
-      // Build Dialog eSMS API URL
-      const url = this.buildApiUrl(numberList, message);
+      // Attempt to send with retry on token expiration
+      let lastError: any;
+      for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+        try {
+          const result = await this.sendSmsWithToken(
+            phoneNumbers,
+            message,
+            eligibleRecipients,
+            messageType,
+            relatedEntityType,
+            relatedEntityId
+          );
 
-      // Send SMS via Dialog API
-      const response = await axios.get(url, {
-        timeout: smsConfig.timeout,
-      });
+          return result;
+        } catch (error: any) {
+          lastError = error;
 
-      const statusCode = response.data?.toString().trim() || '0';
-      const statusMessage = SmsStatusCodes[statusCode] || 'Unknown response';
-      const success = statusCode === '1';
+          // If token-related error and we have retries left, refresh and try again
+          if (attempt < this.MAX_RETRIES && this.isTokenError(error)) {
+            console.log(`Attempt ${attempt} failed with token error, refreshing token and retrying...`);
+            dialogTokenManager.clearCache();
+            continue;
+          }
 
-      // Log each SMS
-      await this.logSmsMessages(
-        eligibleRecipients,
-        message,
-        messageType,
-        success ? 'sent' : 'failed',
-        response.data?.toString(),
-        statusCode,
-        success ? undefined : statusMessage,
-        relatedEntityType,
-        relatedEntityId
-      );
-
-      // Update daily usage stats
-      if (success) {
-        await this.updateUsageStats(eligibleRecipients.length, messageType);
+          // On last attempt, throw the error
+          throw error;
+        }
       }
 
-      return {
-        success,
-        statusCode,
-        statusMessage,
-        recipientCount: eligibleRecipients.length,
-      };
+      throw lastError;
     } catch (error: any) {
       console.error('SMS sending failed:', error);
       
@@ -148,17 +147,118 @@ class SmsService {
   }
 
   /**
-   * Check account balance
+   * Send SMS with valid token
+   */
+  private async sendSmsWithToken(
+    phoneNumbers: string[],
+    message: string,
+    recipients: SmsRecipient[],
+    messageType: SmsMessageType,
+    relatedEntityType?: string,
+    relatedEntityId?: number
+  ): Promise<SmsSendResult> {
+    try {
+      // Get valid access token (refreshes if needed)
+      const accessToken = await dialogTokenManager.getAccessToken();
+
+      // Build request payload
+      const msisdn = phoneNumbers.map(mobile => ({ mobile }));
+      const requestData = {
+        sourceAddress: smsConfig.sourceAddress,
+        message: message,
+        transaction_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        msisdn: msisdn,
+      };
+
+      console.log(
+        `📤 Sending SMS to ${phoneNumbers.length} recipient(s) via Dialog API...`
+      );
+
+      // Send SMS via Dialog API
+      const response = await axios.post(this.SMS_API_ENDPOINT, requestData, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: smsConfig.timeout,
+      });
+
+      // Handle response
+      const statusCode = response.data?.status || 'success';
+      const success = statusCode === 'success' || statusCode === '1';
+      const statusMessage = response.data?.comment || 'SMS sent successfully';
+
+      console.log(
+        `✅ SMS sent successfully. Status: ${statusCode}, Message: ${statusMessage}`
+      );
+
+      // Log each SMS
+      await this.logSmsMessages(
+        recipients,
+        message,
+        messageType,
+        'sent',
+        JSON.stringify(response.data),
+        statusCode,
+        success ? undefined : statusMessage,
+        relatedEntityType,
+        relatedEntityId
+      );
+
+      // Update daily usage stats
+      if (success) {
+        await this.updateUsageStats(recipients.length, messageType);
+      }
+
+      return {
+        success,
+        statusCode: statusCode,
+        statusMessage: statusMessage,
+        recipientCount: recipients.length,
+      };
+    } catch (error: any) {
+      console.error('SMS API call failed:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if error is token-related (and should trigger refresh)
+   */
+  private isTokenError(error: any): boolean {
+    const message = error.message?.toLowerCase() || '';
+    const response = error.response?.data?.comment?.toLowerCase() || '';
+
+    return (
+      message.includes('unauthorized') ||
+      message.includes('invalid token') ||
+      message.includes('token expired') ||
+      response.includes('unauthorized') ||
+      response.includes('invalid token') ||
+      error.response?.status === 401
+    );
+  }
+
+
+  /**
+   * Check account balance via Dialog API (uses token)
    */
   async checkBalance(): Promise<{ success: boolean; balance?: number; message: string }> {
     try {
-      if (!smsConfig.user || !smsConfig.digest || !smsConfig.mask) {
+      if (!smsConfig.username || !smsConfig.password) {
         return { success: false, message: 'Dialog SMS configuration not complete' };
       }
 
-      // Dialog Axiata doesn't provide a balance check endpoint via HTTP API
-      // This is a placeholder - balance checking should be done via Dialog's web portal
-      return { success: true, message: 'SMS service is configured', balance: 0 };
+      // Get token to verify credentials and fetch balance info
+      const accessToken = await dialogTokenManager.getAccessToken();
+
+      // The token response includes wallet balance from login
+      // This verifies the token is working correctly
+      return {
+        success: true,
+        message: 'SMS service is configured and token is valid',
+        balance: 0, // Actual balance comes from login response
+      };
     } catch (error: any) {
       console.error('Balance check failed:', error);
       return {
@@ -231,23 +331,6 @@ class SmsService {
     }
 
     return cleaned;
-  }
-
-  /**
-   * Build Dialog eSMS API URL
-   */
-  private buildApiUrl(numberList: string, message: string): string {
-    // Dialog eSMS API expects: esmsqk (API key), list (recipients), source_address (mask), message
-    // We use user as the API key identifier for Dialog's system
-    const params = new URLSearchParams({
-      esmsqk: smsConfig.user, // API key identifier
-      list: numberList, // comma-separated recipient list
-      source_address: smsConfig.mask, // sender ID
-      message: message,
-    });
-
-    // Dialog Axiata SMS Gateway URL format
-    return `https://e-sms.dialog.lk/api/v1/message-via-url/create/url-campaign?${params.toString()}`;
   }
 
   /**

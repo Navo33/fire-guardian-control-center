@@ -97,12 +97,12 @@ const initializeDatabase = async () => {
   
   // Verify SMS configuration and start scheduler
   console.log('📱 Verifying SMS configuration...');
-  if (smsConfig.enabled && smsConfig.user && smsConfig.digest && smsConfig.mask) {
+  if (smsConfig.enabled && smsConfig.username && smsConfig.password && smsConfig.sourceAddress) {
     NotificationScheduler.start();
     console.log('✅ SMS notification scheduler started - Daily checks at 8:00 AM');
   } else {
     console.warn('⚠️  SMS service not configured. SMS notifications will be disabled.');
-    console.log('ℹ️  To enable SMS, set DIALOG_SMS_ENABLED=true and DIALOG_SMS_USER, DIALOG_SMS_DIGEST, DIALOG_SMS_MASK in .env');
+    console.log('ℹ️  To enable SMS, set DIALOG_SMS_ENABLED=true and DIALOG_SMS_USERNAME, DIALOG_SMS_PASSWORD, DIALOG_SMS_SOURCE_ADDRESS in .env');
   }
   
   // Start periodic cleanup of expired sessions (every 1 hour)

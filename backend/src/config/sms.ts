@@ -1,15 +1,19 @@
 /**
  * Dialog eSMS Configuration
  * Sri Lanka's Dialog Axiata SMS Gateway
+ * 
+ * Uses token-based authentication:
+ * 1. Get token via POST to /api/v1/login with username/password
+ * 2. Use token in Bearer header for SMS API calls
+ * 3. Refresh token when expired (12 hour expiration)
  */
 
 export const smsConfig = {
-  user: process.env.DIALOG_SMS_USER || '',
-  digest: process.env.DIALOG_SMS_DIGEST || '',
-  mask: process.env.DIALOG_SMS_MASK || 'Pegasus',
-  campaignName: 'FireGuardian',
+  username: process.env.DIALOG_SMS_USERNAME || '',
+  password: process.env.DIALOG_SMS_PASSWORD || '',
+  sourceAddress: process.env.DIALOG_SMS_SOURCE_ADDRESS || 'Pegasus', // Default sender mask
   enabled: process.env.DIALOG_SMS_ENABLED === 'true',
-  timeout: 10000, // 10 seconds
+  timeout: 10000, // 10 seconds for API calls
 };
 
 // SMS Message Types
