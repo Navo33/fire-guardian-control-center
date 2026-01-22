@@ -163,10 +163,16 @@ class SmsService {
 
       // Build request payload
       const msisdn = phoneNumbers.map(mobile => ({ mobile }));
+      
+      // Generate unique numeric transaction ID (16-19 digits as per Dialog API)
+      const timestamp = Date.now().toString();
+      const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+      const transactionId = timestamp + random;
+      
       const requestData = {
         sourceAddress: smsConfig.sourceAddress,
         message: message,
-        transaction_id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        transaction_id: transactionId,
         msisdn: msisdn,
       };
 
@@ -180,7 +186,9 @@ class SmsService {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        timeout: smsConfig.timeout,
+        timeout: 30000, // 30 seconds - Dialog API can be slow
+        httpAgent: null,
+        httpsAgent: null,
       });
 
       // Handle response
@@ -320,14 +328,20 @@ class SmsService {
     // Remove all non-digit characters
     let cleaned = phone.replace(/\D/g, '');
 
-    // If starts with 0, replace with 94
-    if (cleaned.startsWith('0')) {
-      cleaned = '94' + cleaned.substring(1);
+    // Dialog API requires 9-digit mobile numbers without country code
+    // Remove country code 94 if present
+    if (cleaned.startsWith('94')) {
+      cleaned = cleaned.substring(2);
     }
 
-    // If doesn't start with country code, add it
-    if (!cleaned.startsWith('94')) {
-      cleaned = '94' + cleaned;
+    // Remove leading 0 if present
+    if (cleaned.startsWith('0')) {
+      cleaned = cleaned.substring(1);
+    }
+
+    // Ensure we have 9 digits
+    if (cleaned.length !== 9) {
+      console.warn(`Phone number ${phone} formatted to ${cleaned} - expected 9 digits`);
     }
 
     return cleaned;

@@ -86,7 +86,9 @@ class DialogTokenManager {
             headers: {
               'Content-Type': 'application/json',
             },
-            timeout: 10000,
+            timeout: 30000, // 30 seconds - Dialog API can be slow
+            httpAgent: null,
+            httpsAgent: null,
           }
         );
 
