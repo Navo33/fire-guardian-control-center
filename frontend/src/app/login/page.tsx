@@ -195,7 +195,7 @@ export default function LoginPage() {
                 </a>
               </div>
 
-              {/* Demo Credentials */}
+              {/* Demo Credentials 
               <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h3 className="text-sm font-medium text-primary-text mb-2">Demo Credentials:</h3>
                 <div className="text-xs text-gray-600 space-y-1">
@@ -203,7 +203,7 @@ export default function LoginPage() {
                   <p><strong className="text-primary-text">Vendors:</strong> lakmal@safefire.lk / VendorPass2025!</p>
                   <p><strong className="text-primary-text">Clients:</strong> kasun@royalhotels.lk  / ClientPass2025!</p>
                 </div>
-              </div>
+              </div>*/}
             </form>
           </div>
         </div>
